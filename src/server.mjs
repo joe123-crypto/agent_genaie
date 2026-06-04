@@ -201,6 +201,10 @@ function credentialRefId(userId, service, purpose) {
   return `${String(service).replace(/[^A-Za-z0-9_.-]/g, "_")}_${String(purpose).replace(/[^A-Za-z0-9_.-]/g, "_")}_${validateFirebaseUid(userId)}`;
 }
 
+function webetuCredentialRefId(userId) {
+  return credentialRefId(userId, "webetu", "username_password");
+}
+
 function jobApplicationId(userId, company, role) {
   const key = [validateFirebaseUid(userId), String(company ?? "").trim().toLowerCase(), String(role ?? "").trim().toLowerCase()].join("\n");
   return crypto.createHash("sha256").update(key).digest("hex");
@@ -244,6 +248,21 @@ function normalizeCvFileRef(value) {
   if (text.length > 500) throw httpError(400, "cvFileRef is too long.");
   if (text.includes("\0")) throw httpError(400, "cvFileRef is invalid.");
   return text;
+}
+
+function normalizeWebetuCredentials(input = {}) {
+  const username = rejectHeaderInjection(input.username, "username");
+  const password = String(input.password ?? "");
+  if (!username) throw httpError(400, "username is required.");
+  if (username.length > 120) throw httpError(400, "username is too long.");
+  if (!password) throw httpError(400, "password is required.");
+  if (password.length > 256) throw httpError(400, "password is too long.");
+  if (password.includes("\0")) throw httpError(400, "password is invalid.");
+  return { username, password };
+}
+
+function usernameHash(username) {
+  return crypto.createHash("sha256").update(`webetu:${String(username ?? "").trim()}`).digest("hex").slice(0, 16);
 }
 
 function centralEncryptionKey() {
@@ -458,6 +477,193 @@ async function mirrorGmailConnectionToCentralData(uid, tokens, options = {}) {
 
   await batch.commit();
   return { userId, publicUserId: user.publicUserId ?? null, senderEmail: user.email ?? null, credentialRefId: credId, connected };
+}
+
+async function getWebetuCredentialStatus(uid) {
+  const user = await syncUserToCentralData(uid);
+  const credId = webetuCredentialRefId(user.uid);
+  const snap = await getFirestoreDb().collection("credentialRefs").doc(credId).get();
+  if (!snap.exists) {
+    return {
+      configured: false,
+      status: "not_saved",
+      updatedAt: null,
+      provider: null,
+    };
+  }
+
+  const data = snap.data();
+  return {
+    configured: data?.status === "ready" && Boolean(data?.encryptedSecret),
+    status: data?.status ?? "not_saved",
+    updatedAt: firestoreTimestampToIso(data?.updatedAt),
+    provider: data?.provider?.type ?? null,
+  };
+}
+
+async function saveWebetuCredentials(uid, body) {
+  const credentials = normalizeWebetuCredentials(body);
+  const user = await syncUserToCentralData(uid);
+  const db = getFirestoreDb();
+  const userId = user.uid;
+  const credId = webetuCredentialRefId(userId);
+  const subId = serviceSubscriptionId(userId, "webetu");
+  const now = FieldValue.serverTimestamp();
+  const [credSnap, subSnap] = await Promise.all([
+    db.collection("credentialRefs").doc(credId).get(),
+    db.collection("serviceSubscriptions").doc(subId).get(),
+  ]);
+  const existingCred = credSnap.exists ? credSnap.data() : {};
+  const existingSub = subSnap.exists ? subSnap.data() : {};
+  const encryptedSecret = encryptCentralSecret(credentials, `credentialRefs/${credId}`);
+  const batch = db.batch();
+
+  batch.set(
+    db.collection("users").doc(userId),
+    {
+      updatedAt: now,
+      serviceStatus: {
+        webetu: "active",
+      },
+    },
+    { merge: true },
+  );
+
+  batch.set(
+    db.collection("serviceSubscriptions").doc(subId),
+    {
+      subscriptionId: subId,
+      userId,
+      service: "webetu",
+      status: "active",
+      createdAt: existingSub?.createdAt ?? now,
+      updatedAt: now,
+      preferences: existingSub?.preferences && typeof existingSub.preferences === "object" ? existingSub.preferences : {},
+      metadata: {
+        ...(existingSub?.metadata && typeof existingSub.metadata === "object" ? existingSub.metadata : {}),
+        credentialRefId: credId,
+        setupSource: "dashboard",
+      },
+    },
+    { merge: true },
+  );
+
+  batch.set(
+    db.collection("credentialRefs").doc(credId),
+    {
+      credentialRefId: credId,
+      userId,
+      service: "webetu",
+      purpose: "username_password",
+      provider: {
+        type: "firestore_encrypted",
+        ref: `credentialRefs/${credId}`,
+        project: config.firebaseProjectId || null,
+        environment: "prod",
+      },
+      status: "ready",
+      encryptedSecret,
+      metadata: {
+        ...(existingCred?.metadata && typeof existingCred.metadata === "object" ? existingCred.metadata : {}),
+        usernameHash: usernameHash(credentials.username),
+        source: "dashboard",
+      },
+      createdAt: existingCred?.createdAt ?? now,
+      updatedAt: now,
+      lastVerifiedAt: null,
+      revokedAt: null,
+    },
+    { merge: true },
+  );
+
+  await batch.commit();
+  return {
+    configured: true,
+    status: "ready",
+    updatedAt: new Date().toISOString(),
+    provider: "firestore_encrypted",
+  };
+}
+
+async function revokeWebetuCredentials(uid) {
+  const user = await syncUserToCentralData(uid);
+  const db = getFirestoreDb();
+  const userId = user.uid;
+  const credId = webetuCredentialRefId(userId);
+  const subId = serviceSubscriptionId(userId, "webetu");
+  const now = FieldValue.serverTimestamp();
+  const [credSnap, subSnap] = await Promise.all([
+    db.collection("credentialRefs").doc(credId).get(),
+    db.collection("serviceSubscriptions").doc(subId).get(),
+  ]);
+  const existingCred = credSnap.exists ? credSnap.data() : {};
+  const existingSub = subSnap.exists ? subSnap.data() : {};
+  const batch = db.batch();
+
+  batch.set(
+    db.collection("users").doc(userId),
+    {
+      updatedAt: now,
+      serviceStatus: {
+        webetu: "disabled",
+      },
+    },
+    { merge: true },
+  );
+
+  batch.set(
+    db.collection("serviceSubscriptions").doc(subId),
+    {
+      subscriptionId: subId,
+      userId,
+      service: "webetu",
+      status: "disabled",
+      createdAt: existingSub?.createdAt ?? now,
+      updatedAt: now,
+      preferences: existingSub?.preferences && typeof existingSub.preferences === "object" ? existingSub.preferences : {},
+      metadata: {
+        ...(existingSub?.metadata && typeof existingSub.metadata === "object" ? existingSub.metadata : {}),
+        credentialRefId: credId,
+        setupSource: "dashboard",
+      },
+    },
+    { merge: true },
+  );
+
+  batch.set(
+    db.collection("credentialRefs").doc(credId),
+    {
+      credentialRefId: credId,
+      userId,
+      service: "webetu",
+      purpose: "username_password",
+      provider: existingCred?.provider ?? {
+        type: "firestore_encrypted",
+        ref: `credentialRefs/${credId}`,
+        project: config.firebaseProjectId || null,
+        environment: "prod",
+      },
+      status: "revoked",
+      encryptedSecret: null,
+      metadata: {
+        ...(existingCred?.metadata && typeof existingCred.metadata === "object" ? existingCred.metadata : {}),
+        source: "dashboard",
+      },
+      createdAt: existingCred?.createdAt ?? now,
+      updatedAt: now,
+      lastVerifiedAt: existingCred?.lastVerifiedAt ?? null,
+      revokedAt: now,
+    },
+    { merge: true },
+  );
+
+  await batch.commit();
+  return {
+    configured: false,
+    status: "revoked",
+    updatedAt: new Date().toISOString(),
+    provider: "firestore_encrypted",
+  };
 }
 
 async function tryCentralData(label, fn) {
@@ -1359,10 +1565,20 @@ async function serveFile(res, filePath) {
   }
 }
 
+function scopedReturnPath(value, publicUserId) {
+  const basePath = `/${validatePublicUserId(publicUserId)}`;
+  const text = String(value ?? "");
+  if (text === basePath || text === `${basePath}/connect-gmail`) return text;
+  return null;
+}
+
 async function handleStart(req, res) {
   const firebaseUser = await verifyFirebaseRequest(req);
+  const body = await readJsonBody(req);
+  const centralUser = await syncUserToCentralData(firebaseUser.uid);
   requireConfig(["clientId", "oauthStateSecret"]);
-  const state = signState({ uid: firebaseUser.uid, nonce: crypto.randomUUID(), ts: Date.now() });
+  const returnPath = scopedReturnPath(body.returnPath, centralUser.publicUserId) ?? `/${centralUser.publicUserId}/connect-gmail`;
+  const state = signState({ uid: firebaseUser.uid, nonce: crypto.randomUUID(), ts: Date.now(), returnPath });
   const authUrl = new URL(AUTH_URL);
   authUrl.searchParams.set("client_id", config.clientId);
   authUrl.searchParams.set("redirect_uri", config.redirectUri);
@@ -1396,7 +1612,10 @@ async function handleCallback(req, res, url) {
   const centralConnection = await tryCentralData("gmail connection mirror", () =>
     mirrorGmailConnectionToCentralData(state.uid, merged, { connected: true }),
   );
-  const returnPath = centralConnection?.publicUserId ? `/${centralConnection.publicUserId}/connect-gmail` : "/connect-gmail";
+  const fallbackReturnPath = centralConnection?.publicUserId ? `/${centralConnection.publicUserId}/connect-gmail` : "/connect-gmail";
+  const returnPath = typeof state.returnPath === "string" && state.returnPath.startsWith("/") && !state.returnPath.startsWith("//")
+    ? state.returnPath
+    : fallbackReturnPath;
   htmlResponse(
     res,
     200,
@@ -1433,6 +1652,26 @@ async function handleRevoke(req, res) {
     mirrorGmailConnectionToCentralData(firebaseUser.uid, null, { connected: false, revoked: true }),
   );
   jsonResponse(res, 200, { ok: true });
+}
+
+async function handleWebetuCredentialStatus(req, res) {
+  const firebaseUser = await verifyFirebaseRequest(req);
+  const status = await getWebetuCredentialStatus(firebaseUser.uid);
+  jsonResponse(res, 200, status);
+}
+
+async function handleSaveWebetuCredentials(req, res) {
+  const firebaseUser = await verifyFirebaseRequest(req);
+  const body = await readJsonBody(req);
+  const status = await saveWebetuCredentials(firebaseUser.uid, body);
+  jsonResponse(res, 200, { ok: true, ...status });
+}
+
+async function handleRevokeWebetuCredentials(req, res) {
+  const firebaseUser = await verifyFirebaseRequest(req);
+  await readJsonBody(req);
+  const status = await revokeWebetuCredentials(firebaseUser.uid);
+  jsonResponse(res, 200, { ok: true, ...status });
 }
 
 async function sendGmailForTokenStoreKey(tokenStoreKey, body) {
@@ -2207,31 +2446,315 @@ function rootPage(publicUserId) {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Genaie Service Desk</title>
+    <title>Genaie Dashboard</title>
     <style>
-      body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f6f7f9;color:#15171a}
-      main{min-height:100vh;display:grid;place-items:center;padding:32px}
-      section{width:min(720px,100%);background:#fff;border:1px solid #d8dee7;border-radius:8px;padding:28px;box-shadow:0 18px 45px rgba(22,28,36,.11)}
-      h1{margin:0 0 10px;font-size:clamp(2rem,5vw,3.6rem);line-height:1.05;letter-spacing:0}
-      p{margin:0 0 22px;color:#5f6875;font-size:1.05rem}
-      .actions{display:flex;flex-wrap:wrap;gap:10px}
-      a{display:inline-flex;min-height:44px;align-items:center;justify-content:center;padding:0 18px;border-radius:7px;background:#2f74d0;color:#fff;font-weight:750;text-decoration:none}
-      a.secondary{background:#eef2f7;color:#263142;border:1px solid #cbd5e1}
-      a:focus-visible,a:hover{background:#1f5ead}
-      a.secondary:focus-visible,a.secondary:hover{background:#e2e8f0}
+      :root{color-scheme:light;--bg:#f6f7f9;--panel:#fff;--border:#d8dee7;--text:#15171a;--muted:#5f6875;--blue:#2f74d0;--blue-strong:#1f5ead;--green:#11603a;--red:#b42318}
+      *{box-sizing:border-box}
+      body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+      main{min-height:100vh;padding:28px}
+      .shell{width:min(1120px,100%);margin:0 auto;display:grid;gap:18px}
+      header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:6px 0 8px}
+      h1{margin:0;font-size:1.85rem;line-height:1.15;letter-spacing:0}
+      h2{margin:0;font-size:1.12rem;line-height:1.25;letter-spacing:0}
+      p{margin:0;color:var(--muted);line-height:1.5}
+      .account{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+      .email{font-weight:750;color:#303846}
+      .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+      .panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px;box-shadow:0 14px 36px rgba(22,28,36,.08);display:grid;gap:16px}
+      .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+      .status-pill{display:inline-flex;align-items:center;min-height:30px;border-radius:999px;border:1px solid #cbd5e1;background:#f8fafc;color:#303846;padding:0 10px;font-size:.88rem;font-weight:800;white-space:nowrap}
+      .status-pill[data-tone="success"]{border-color:#7fc9a2;background:#eefaf3;color:var(--green)}
+      .status-pill[data-tone="error"]{border-color:#f1a7a1;background:#fff1f0;color:#9f2419}
+      form{display:grid;gap:12px}
+      label{display:grid;gap:7px;font-weight:750;color:#303846}
+      input{width:100%;min-height:44px;border:1px solid #b9c3d1;border-radius:7px;padding:0 12px;font:inherit;background:#fff;color:var(--text)}
+      input:focus{outline:3px solid rgba(47,116,208,.18);border-color:var(--blue)}
+      .actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+      button,a.button{display:inline-flex;min-height:42px;align-items:center;justify-content:center;border:0;border-radius:7px;background:var(--blue);color:#fff;font:inherit;font-weight:750;text-decoration:none;padding:0 14px;cursor:pointer}
+      button.secondary,a.secondary{background:#eef2f7;color:#263142;border:1px solid #cbd5e1}
+      button.danger{background:var(--red)}
+      button:disabled{opacity:.55;cursor:not-allowed}
+      button:hover:not(:disabled),a.button:hover{filter:brightness(.94)}
+      button:focus-visible,a.button:focus-visible,input:focus-visible{outline:3px solid rgba(47,116,208,.28);outline-offset:2px}
+      .message{min-height:22px;color:var(--muted);font-size:.95rem;line-height:1.45}
+      .message[data-tone="success"]{color:var(--green)}
+      .message[data-tone="error"]{color:#9f2419}
+      @media (max-width:760px){main{padding:18px}.grid{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}.account{justify-content:flex-start}.panel-head{flex-direction:column}}
     </style>
   </head>
   <body>
     <main>
-      <section>
-        <h1>Genaie Service Desk</h1>
-        <p>This app is being prepared for the next public service surfaces. The Webetu guide and Gmail connection live on their own routes.</p>
-        <div class="actions">
-          <a href="${homePath}/connect-gmail">Connect Gmail</a>
-          <a class="secondary" href="${homePath}/onboarding">Open Webetu onboarding</a>
+      <div class="shell">
+        <header>
+          <div>
+            <h1>Genaie Dashboard</h1>
+            <p>Manage the services connected to your account.</p>
+          </div>
+          <div class="account">
+            <span class="email" data-user-email>Checking session...</span>
+            <button class="secondary" data-sign-out type="button">Sign out</button>
+          </div>
+        </header>
+
+        <div class="grid">
+          <section class="panel" aria-labelledby="webetu-title">
+            <div class="panel-head">
+              <div>
+                <h2 id="webetu-title">Webetu Credentials Vault</h2>
+                <p>Save the Webetu account used for meal reservations.</p>
+              </div>
+              <span class="status-pill" data-webetu-status>Checking...</span>
+            </div>
+            <form data-webetu-form>
+              <label>
+                Webetu username
+                <input data-webetu-username name="username" autocomplete="username" maxlength="120" required>
+              </label>
+              <label>
+                Webetu password
+                <input data-webetu-password name="password" type="password" autocomplete="current-password" maxlength="256" required>
+              </label>
+              <div class="actions">
+                <button data-webetu-save type="submit">Save credentials</button>
+                <button class="danger" data-webetu-revoke type="button" hidden>Revoke</button>
+                <a class="button secondary" href="${homePath}/onboarding">Passbolt guide</a>
+              </div>
+            </form>
+            <div class="message" data-webetu-message></div>
+          </section>
+
+          <section class="panel" aria-labelledby="gmail-title">
+            <div class="panel-head">
+              <div>
+                <h2 id="gmail-title">Connect Gmail</h2>
+                <p>Approve Gmail send access for application emails.</p>
+              </div>
+              <span class="status-pill" data-gmail-status>Checking...</span>
+            </div>
+            <div class="actions">
+              <button data-gmail-connect type="button">Connect Gmail</button>
+              <button class="danger" data-gmail-disconnect type="button" hidden>Disconnect</button>
+              <a class="button secondary" href="${homePath}/connect-gmail">Open Gmail page</a>
+            </div>
+            <div class="message" data-gmail-message></div>
+          </section>
         </div>
-      </section>
+      </div>
     </main>
+    <script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+const homePath = ${JSON.stringify(homePath)};
+const emailEl = document.querySelector("[data-user-email]");
+const signOutButton = document.querySelector("[data-sign-out]");
+const webetuForm = document.querySelector("[data-webetu-form]");
+const webetuUsername = document.querySelector("[data-webetu-username]");
+const webetuPassword = document.querySelector("[data-webetu-password]");
+const webetuSaveButton = document.querySelector("[data-webetu-save]");
+const webetuRevokeButton = document.querySelector("[data-webetu-revoke]");
+const webetuStatus = document.querySelector("[data-webetu-status]");
+const webetuMessage = document.querySelector("[data-webetu-message]");
+const gmailStatus = document.querySelector("[data-gmail-status]");
+const gmailConnectButton = document.querySelector("[data-gmail-connect]");
+const gmailDisconnectButton = document.querySelector("[data-gmail-disconnect]");
+const gmailMessage = document.querySelector("[data-gmail-message]");
+let auth;
+let currentUser;
+let sessionUser;
+
+function setMessage(el, message, tone) {
+  el.textContent = message || "";
+  el.dataset.tone = tone || "info";
+}
+
+function setPill(el, label, tone) {
+  el.textContent = label;
+  el.dataset.tone = tone || "info";
+}
+
+function setBusy(value) {
+  signOutButton.disabled = value;
+  webetuSaveButton.disabled = value;
+  webetuRevokeButton.disabled = value;
+  gmailConnectButton.disabled = value;
+  gmailDisconnectButton.disabled = value;
+}
+
+async function readJson(response) {
+  const body = await response.json().catch(function() { return {}; });
+  if (!response.ok) throw new Error(body.error || "Request failed with " + response.status);
+  return body;
+}
+
+async function authedFetch(url, options) {
+  const headers = Object.assign({}, options && options.headers ? options.headers : {});
+  if (currentUser) headers.authorization = "Bearer " + await currentUser.getIdToken();
+  return fetch(url, Object.assign({}, options || {}, { credentials: "same-origin", headers: headers }));
+}
+
+function webetuLabel(status) {
+  if (status && status.configured) return "Saved";
+  if (status && status.status === "revoked") return "Revoked";
+  if (status && status.status === "not_saved") return "Not saved";
+  return "Unavailable";
+}
+
+async function loadSession() {
+  return readJson(await fetch("/auth/session", { credentials: "same-origin" }));
+}
+
+async function loadWebetuStatus() {
+  setPill(webetuStatus, "Checking...");
+  const status = await readJson(await authedFetch("/webetu/credentials/status", { method: "GET" }));
+  const label = webetuLabel(status);
+  setPill(webetuStatus, label, status.configured ? "success" : status.status === "revoked" ? "error" : "info");
+  webetuSaveButton.textContent = status.configured ? "Update credentials" : "Save credentials";
+  webetuRevokeButton.hidden = !status.configured;
+}
+
+async function loadGmailStatus() {
+  setPill(gmailStatus, "Checking...");
+  const status = await readJson(await authedFetch("/auth/google/status", { method: "GET" }));
+  if (status.connected) {
+    setPill(gmailStatus, "Connected", "success");
+    gmailConnectButton.textContent = "Reconnect Gmail";
+    gmailDisconnectButton.hidden = false;
+  } else {
+    setPill(gmailStatus, "Not connected");
+    gmailConnectButton.textContent = "Connect Gmail";
+    gmailDisconnectButton.hidden = true;
+  }
+}
+
+async function loadDashboard() {
+  const response = await fetch("/config/firebase");
+  const settings = await response.json();
+  if (!settings.configured) {
+    setPill(webetuStatus, "Unavailable", "error");
+    setPill(gmailStatus, "Unavailable", "error");
+    setMessage(gmailMessage, "Firebase email login is not configured yet. Missing: " + settings.missing.join(", "), "error");
+    return;
+  }
+
+  const app = initializeApp(settings.firebase);
+  auth = getAuth(app);
+
+  onAuthStateChanged(auth, async function(user) {
+    currentUser = user;
+    sessionUser = null;
+    let session = { authenticated: false };
+    try {
+      session = await loadSession();
+    } catch (err) {
+      setMessage(gmailMessage, err.message || "Could not check session.", "error");
+    }
+    sessionUser = session.authenticated ? session : null;
+    emailEl.textContent = user?.email || sessionUser?.email || "Signed in";
+    try {
+      await Promise.all([loadWebetuStatus(), loadGmailStatus()]);
+    } catch (err) {
+      setPill(webetuStatus, "Unavailable", "error");
+      setPill(gmailStatus, "Unavailable", "error");
+      setMessage(gmailMessage, err.message || "Could not load dashboard status.", "error");
+    }
+  });
+}
+
+webetuForm.addEventListener("submit", async function(event) {
+  event.preventDefault();
+  setBusy(true);
+  setMessage(webetuMessage, "");
+  try {
+    await readJson(await authedFetch("/webetu/credentials", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        username: webetuUsername.value,
+        password: webetuPassword.value
+      })
+    }));
+    webetuPassword.value = "";
+    setMessage(webetuMessage, "Webetu credentials saved.", "success");
+    await loadWebetuStatus();
+  } catch (err) {
+    setMessage(webetuMessage, err.message || "Could not save Webetu credentials.", "error");
+  } finally {
+    setBusy(false);
+  }
+});
+
+webetuRevokeButton.addEventListener("click", async function() {
+  setBusy(true);
+  setMessage(webetuMessage, "");
+  try {
+    await readJson(await authedFetch("/webetu/credentials/revoke", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}"
+    }));
+    webetuPassword.value = "";
+    setMessage(webetuMessage, "Webetu credentials revoked.", "success");
+    await loadWebetuStatus();
+  } catch (err) {
+    setMessage(webetuMessage, err.message || "Could not revoke Webetu credentials.", "error");
+  } finally {
+    setBusy(false);
+  }
+});
+
+gmailConnectButton.addEventListener("click", async function() {
+  setBusy(true);
+  setMessage(gmailMessage, "");
+  try {
+    const payload = await readJson(await authedFetch("/auth/google/start", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ returnPath: homePath })
+    }));
+    window.location.href = payload.url;
+  } catch (err) {
+    setMessage(gmailMessage, err.message || "Could not start Gmail connection.", "error");
+    setBusy(false);
+  }
+});
+
+gmailDisconnectButton.addEventListener("click", async function() {
+  setBusy(true);
+  setMessage(gmailMessage, "");
+  try {
+    await readJson(await authedFetch("/auth/google/revoke", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}"
+    }));
+    setMessage(gmailMessage, "Gmail disconnected.", "success");
+    await loadGmailStatus();
+  } catch (err) {
+    setMessage(gmailMessage, err.message || "Could not disconnect Gmail.", "error");
+  } finally {
+    setBusy(false);
+  }
+});
+
+signOutButton.addEventListener("click", async function() {
+  setBusy(true);
+  await fetch("/auth/session/logout", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+    credentials: "same-origin"
+  }).catch(function() { return undefined; });
+  if (auth) await signOut(auth).catch(function() { return undefined; });
+  window.location.assign("/login");
+});
+
+loadDashboard().catch(function(err) {
+  setPill(webetuStatus, "Unavailable", "error");
+  setPill(gmailStatus, "Unavailable", "error");
+  setMessage(gmailMessage, err.message || "Could not load dashboard.", "error");
+});
+</script>
   </body>
 </html>`;
 }
@@ -2271,6 +2794,9 @@ async function route(req, res) {
   if (req.method === "GET" && pathname === "/auth/google/callback") return handleCallback(req, res, url);
   if (req.method === "GET" && pathname === "/auth/google/status") return handleStatus(req, res);
   if (req.method === "POST" && pathname === "/auth/google/revoke") return handleRevoke(req, res);
+  if (req.method === "GET" && pathname === "/webetu/credentials/status") return handleWebetuCredentialStatus(req, res);
+  if (req.method === "POST" && pathname === "/webetu/credentials") return handleSaveWebetuCredentials(req, res);
+  if (req.method === "POST" && pathname === "/webetu/credentials/revoke") return handleRevokeWebetuCredentials(req, res);
   if (req.method === "POST" && pathname === "/gmail/send") return handleSend(req, res);
   if (req.method === "POST" && pathname === "/internal/gmail/send") return handleInternalSend(req, res);
   if (req.method === "GET" && pathname === "/internal/gmail/senders") return handleInternalSenders(req, res);

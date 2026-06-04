@@ -16,13 +16,16 @@ Public routes:
 
 Protected routes require the `agent_genaie_session` cookie or a Firebase bearer token:
 
-- `/{publicUserId}` reserved app index for future landing or dashboard work.
+- `/{publicUserId}` signed-in dashboard with Webetu credential vault and Gmail connection controls.
 - `/{publicUserId}/onboarding` Webetu credential onboarding guide.
 - `/{publicUserId}/connect-gmail` authenticated Gmail connect/disconnect page.
 - `/`, `/onboarding`, and `/connect-gmail` redirect signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail OAuth for the signed-in Firebase user.
 - `/auth/google/status` checks Gmail connection for the signed-in Firebase user.
 - `/auth/google/revoke` revokes and removes stored Gmail tokens for the signed-in Firebase user.
+- `GET /webetu/credentials/status` checks whether the signed-in user has saved Webetu credentials.
+- `POST /webetu/credentials` encrypts and saves the signed-in user's Webetu username/password.
+- `POST /webetu/credentials/revoke` revokes the signed-in user's stored Webetu credentials.
 - `/gmail/send` sends Gmail for the signed-in Firebase user only when `confirm` is `true`.
 
 Internal routes require `Authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY`:
@@ -75,7 +78,7 @@ Enable Firestore for the same Firebase project. Agent Genaie writes central reco
 - `credentialRefs`
 - `gmailConnections`
 
-Gmail OAuth tokens remain in the local encrypted token store for the live send path and are mirrored into Firestore as encrypted `credentialRefs` records. Firestore encrypted blobs use `CENTRAL_DATA_ENCRYPTION_SECRET`, which must be treated as a production secret and kept stable.
+Gmail OAuth tokens remain in the local encrypted token store for the live send path and are mirrored into Firestore as encrypted `credentialRefs` records. Webetu credentials saved through the dashboard are stored only as encrypted `credentialRefs` records. Firestore encrypted blobs use `CENTRAL_DATA_ENCRYPTION_SECRET`, which must be treated as a production secret and kept stable.
 
 ## Environment
 
