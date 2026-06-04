@@ -1,0 +1,26 @@
+.env
+.env.*
+!.env.example
+data/
+logs/
+archives/
+node_modules/
+
+# Runtime and local tooling output
+*.log
+*.pid
+coverage/
+dist/
+build/
+.next/
+.cache/
+tmp/
+.DS_Store
+
+# Secret material that should never be committed
+firebase-service-account*.json
+service-account*.json
+*.pem
+*.key
+*.p12
+*.secret
