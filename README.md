@@ -29,6 +29,11 @@ Internal routes require `Authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY`:
 
 - `POST /internal/gmail/send` sends through the configured owner Gmail connection by default, or through a Gmail-connected registered user when `fromEmail` is provided.
 - `GET /internal/gmail/senders` lists registered users who have connected Gmail, without returning token data.
+- `POST /internal/job-scout/invite` creates a short-lived WhatsApp-to-login setup link.
+- `POST /internal/job-scout/profile` saves WhatsApp-collected Job Scout preferences and a CV file reference.
+- `GET /internal/job-scout/subscribers` lists Job Scout subscribers who are ready for application dispatch.
+- `GET /internal/job-scout/applications` lists recorded Job Scout applications for one user.
+- `POST /internal/job-scout/applications` records an applied, skipped, physical-submission, or failed Job Scout outcome.
 - `GET /internal/central-data/status` checks the Firestore central database connection.
 - `POST /internal/central-data/backfill` syncs existing Firebase users and connected Gmail records into Firestore.
 
@@ -83,6 +88,7 @@ export GOOGLE_CLIENT_SECRET="..."
 export GOOGLE_REDIRECT_URI="https://your-agent-genaie-domain.example/auth/google/callback"
 export TOKEN_ENCRYPTION_SECRET="$(openssl rand -base64 32)"
 export OAUTH_STATE_SECRET="$(openssl rand -base64 32)"
+export JOB_SCOUT_SETUP_SECRET="$(openssl rand -base64 32)"
 export CENTRAL_DATA_ENCRYPTION_SECRET="$(openssl rand -base64 32)"
 export CENTRAL_DATA_KEY_VERSION="v1"
 export PASSBOLT_PUBLIC_URL="https://your-passbolt-domain.example"
@@ -100,6 +106,7 @@ export PORT=3010
 
 `TOKEN_ENCRYPTION_SECRET` must stay stable. If it changes, existing stored token records cannot be decrypted.
 `CENTRAL_DATA_ENCRYPTION_SECRET` must also stay stable. If it changes, encrypted Firestore credential blobs cannot be decrypted without migration.
+`JOB_SCOUT_SETUP_SECRET` signs short-lived Job Scout setup links. If it is omitted, the app falls back to `OAUTH_STATE_SECRET`, then `TOKEN_ENCRYPTION_SECRET`.
 `OWNER_FIREBASE_UID` must be the Firebase UID of the fallback owner account whose Gmail is connected at `/{publicUserId}/connect-gmail`.
 
 After login, the app sets an HttpOnly `agent_genaie_session` cookie that protects app pages server-side.

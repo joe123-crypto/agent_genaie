@@ -20,6 +20,7 @@ const DEFAULT_PUBLIC_BASE_URL = "http://localhost:3010";
 const DEFAULT_PASSBOLT_PUBLIC_URL = "https://your-passbolt-domain.example";
 const SESSION_COOKIE_NAME = "agent_genaie_session";
 const SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
+const JOB_SCOUT_SETUP_TTL_SECONDS = 24 * 60 * 60;
 
 function loadDotEnv() {
   const envPath = path.join(rootDir, ".env");
@@ -60,6 +61,11 @@ const config = {
   centralDataEncryptionSecret: process.env.CENTRAL_DATA_ENCRYPTION_SECRET ?? process.env.TOKEN_ENCRYPTION_SECRET ?? "",
   centralDataKeyVersion: process.env.CENTRAL_DATA_KEY_VERSION ?? "v1",
   passboltPublicUrl: process.env.PASSBOLT_PUBLIC_URL ?? DEFAULT_PASSBOLT_PUBLIC_URL,
+  jobScoutSetupSecret:
+    process.env.JOB_SCOUT_SETUP_SECRET ??
+    process.env.OAUTH_STATE_SECRET ??
+    process.env.TOKEN_ENCRYPTION_SECRET ??
+    "",
 };
 
 const contentTypes = new Map([
@@ -105,6 +111,13 @@ function escapeHtmlAttribute(value) {
     .replaceAll(">", "&gt;");
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 function redirectResponse(res, location) {
   res.writeHead(302, {
     location,
@@ -133,6 +146,7 @@ function requireConfig(keys) {
       if (key === "internalApiKey") return "AGENT_GENAI_INTERNAL_API_KEY";
       if (key === "ownerFirebaseUid") return "OWNER_FIREBASE_UID";
       if (key === "centralDataEncryptionSecret") return "CENTRAL_DATA_ENCRYPTION_SECRET";
+      if (key === "jobScoutSetupSecret") return "JOB_SCOUT_SETUP_SECRET";
       return key;
     })
     .join(", ");
@@ -145,6 +159,19 @@ function validateFirebaseUid(uid) {
     throw httpError(401, "A valid Firebase user is required.");
   }
   return value;
+}
+
+function normalizePhone(value) {
+  const text = String(value ?? "").trim();
+  const digits = text.replace(/\D/g, "");
+  if (!digits) throw httpError(400, "phone is required.");
+  const phone = `+${digits}`;
+  if (phone.length < 9 || phone.length > 16) throw httpError(400, "phone must normalize to 9-16 digits.");
+  return phone;
+}
+
+function whatsappPhoneHash(phone) {
+  return crypto.createHash("sha256").update(`whatsapp:${normalizePhone(phone)}`).digest("hex").slice(0, 12);
 }
 
 function isPublicUserId(value) {
@@ -172,6 +199,51 @@ function serviceSubscriptionId(userId, service) {
 
 function credentialRefId(userId, service, purpose) {
   return `${String(service).replace(/[^A-Za-z0-9_.-]/g, "_")}_${String(purpose).replace(/[^A-Za-z0-9_.-]/g, "_")}_${validateFirebaseUid(userId)}`;
+}
+
+function jobApplicationId(userId, company, role) {
+  const key = [validateFirebaseUid(userId), String(company ?? "").trim().toLowerCase(), String(role ?? "").trim().toLowerCase()].join("\n");
+  return crypto.createHash("sha256").update(key).digest("hex");
+}
+
+function normalizeStringList(value, maxItems = 24) {
+  const values = Array.isArray(value) ? value : value == null ? [] : [value];
+  const output = [];
+  const seen = new Set();
+  for (const item of values) {
+    const text = String(item ?? "").replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(text.slice(0, 240));
+    if (output.length >= maxItems) break;
+  }
+  return output;
+}
+
+function normalizeJobPreferences(input = {}) {
+  const source = input && typeof input === "object" ? input : {};
+  const maxApplications = Number.parseInt(source.maxApplicationsPerRun ?? "2", 10);
+  return {
+    targetRoles: normalizeStringList(source.targetRoles ?? source.roles),
+    locations: normalizeStringList(source.locations),
+    qualifications: normalizeStringList(source.qualifications),
+    experience: normalizeStringList(source.experience),
+    skills: normalizeStringList(source.skills),
+    exclusions: normalizeStringList(source.exclusions),
+    promptNotes: normalizeStringList(source.promptNotes ?? source.notes, 12),
+    autoApply: source.autoApply === false ? false : true,
+    maxApplicationsPerRun: Number.isFinite(maxApplications) ? Math.min(Math.max(maxApplications, 0), 5) : 2,
+  };
+}
+
+function normalizeCvFileRef(value) {
+  const text = String(value ?? "").trim();
+  if (!text) throw httpError(400, "cvFileRef is required.");
+  if (text.length > 500) throw httpError(400, "cvFileRef is too long.");
+  if (text.includes("\0")) throw httpError(400, "cvFileRef is invalid.");
+  return text;
 }
 
 function centralEncryptionKey() {
@@ -435,6 +507,304 @@ async function listLocalGmailSenders() {
     pageToken = page.pageToken;
   } while (pageToken);
   return connected.sort((a, b) => String(a.email ?? "").localeCompare(String(b.email ?? "")));
+}
+
+function jobScoutTokenHash(token) {
+  requireConfig(["jobScoutSetupSecret"]);
+  return crypto.createHmac("sha256", config.jobScoutSetupSecret).update(String(token ?? "")).digest("hex");
+}
+
+function firestoreTimestampToIso(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return null;
+}
+
+async function createJobScoutInvite(phoneInput, ttlSecondsInput) {
+  const phone = normalizePhone(phoneInput);
+  const phoneHash = whatsappPhoneHash(phone);
+  const parsedTtl = Number.parseInt(ttlSecondsInput ?? `${JOB_SCOUT_SETUP_TTL_SECONDS}`, 10);
+  const ttlSeconds = Number.isFinite(parsedTtl)
+    ? Math.min(Math.max(parsedTtl, 300), 7 * 24 * 60 * 60)
+    : JOB_SCOUT_SETUP_TTL_SECONDS;
+  const token = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = jobScoutTokenHash(token);
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+
+  await getFirestoreDb().collection("jobSetupLinks").doc(tokenHash).set({
+    tokenHash,
+    service: "jobs",
+    channel: "whatsapp",
+    phone,
+    phoneHash,
+    status: "created",
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+    expiresAt,
+    usedAt: null,
+    usedBy: null,
+  });
+
+  const setupUrl = new URL("/job-scout/setup", config.publicBaseUrl);
+  setupUrl.searchParams.set("token", token);
+  return { setupUrl: setupUrl.toString(), phoneHash, expiresAt: expiresAt.toISOString(), ttlSeconds };
+}
+
+async function getJobScoutInvite(token) {
+  const text = String(token ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{32,256}$/.test(text)) throw httpError(400, "Invalid Job Scout setup token.");
+  const tokenHash = jobScoutTokenHash(text);
+  const ref = getFirestoreDb().collection("jobSetupLinks").doc(tokenHash);
+  const snap = await ref.get();
+  if (!snap.exists) throw httpError(404, "Job Scout setup link was not found.");
+  const data = snap.data();
+  const expiresAt = data?.expiresAt?.toDate?.() ?? null;
+  if (!expiresAt || expiresAt.getTime() < Date.now()) throw httpError(410, "Job Scout setup link expired.");
+  return { ref, data };
+}
+
+async function bindJobScoutInviteToUser(token, firebaseUser) {
+  const { ref, data } = await getJobScoutInvite(token);
+  const phone = normalizePhone(data.phone);
+  const phoneHash = data.phoneHash || whatsappPhoneHash(phone);
+  const user = await syncUserToCentralData(firebaseUser.uid);
+  const db = getFirestoreDb();
+  const now = FieldValue.serverTimestamp();
+  const subId = serviceSubscriptionId(user.uid, "jobs");
+  const subRef = db.collection("serviceSubscriptions").doc(subId);
+  const existingSub = await subRef.get();
+  const existing = existingSub.exists ? existingSub.data() : {};
+  const existingMetadata = existing?.metadata && typeof existing.metadata === "object" ? existing.metadata : {};
+  const existingPreferences = existing?.preferences && typeof existing.preferences === "object" ? existing.preferences : {};
+  const setupStatus = existingMetadata.cvFileRef ? "profile_saved" : "linked";
+  const batch = db.batch();
+
+  batch.set(
+    db.collection("users").doc(user.uid),
+    {
+      updatedAt: now,
+      identities: {
+        whatsappPhone: phone,
+        whatsappPhoneHash: phoneHash,
+      },
+    },
+    { merge: true },
+  );
+
+  batch.set(
+    subRef,
+    {
+      subscriptionId: subId,
+      userId: user.uid,
+      service: "jobs",
+      status: existing?.status === "active" ? "active" : "pending",
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      preferences: existingPreferences,
+      metadata: {
+        ...existingMetadata,
+        whatsappPhone: phone,
+        whatsappPhoneHash: phoneHash,
+        setupStatus,
+        linkedAt: now,
+      },
+    },
+    { merge: true },
+  );
+
+  batch.set(
+    ref,
+    {
+      status: "used",
+      usedAt: now,
+      usedBy: user.uid,
+      updatedAt: now,
+    },
+    { merge: true },
+  );
+
+  await batch.commit();
+  return { userId: user.uid, publicUserId: user.publicUserId ?? null, email: user.email ?? null, phoneHash, status: setupStatus };
+}
+
+async function findJobScoutUserByPhone(phoneInput) {
+  const phone = normalizePhone(phoneInput);
+  const phoneHash = whatsappPhoneHash(phone);
+  const snapshot = await getFirestoreDb()
+    .collection("users")
+    .where("identities.whatsappPhoneHash", "==", phoneHash)
+    .limit(2)
+    .get();
+  if (snapshot.empty) throw httpError(404, "No app user is linked to this WhatsApp phone yet.");
+  if (snapshot.size > 1) throw httpError(409, "More than one app user is linked to this WhatsApp phone.");
+  const doc = snapshot.docs[0];
+  return { userId: doc.id, user: doc.data(), phone, phoneHash };
+}
+
+async function saveJobScoutProfile(body) {
+  const { userId, user, phone, phoneHash } = await findJobScoutUserByPhone(body.phone);
+  const preferences = normalizeJobPreferences(body.preferences ?? body.profile ?? {});
+  const cvFileRef = normalizeCvFileRef(body.cvFileRef);
+  const db = getFirestoreDb();
+  const subId = serviceSubscriptionId(userId, "jobs");
+  const subRef = db.collection("serviceSubscriptions").doc(subId);
+  const subSnap = await subRef.get();
+  const existing = subSnap.exists ? subSnap.data() : {};
+  const existingMetadata = existing?.metadata && typeof existing.metadata === "object" ? existing.metadata : {};
+  const gmailSnap = await db.collection("gmailConnections").doc(userId).get();
+  const gmail = gmailSnap.exists ? gmailSnap.data() : {};
+  const senderEmail = gmail?.senderEmail ?? user?.profile?.email ?? null;
+  const now = FieldValue.serverTimestamp();
+  const batch = db.batch();
+
+  batch.set(
+    db.collection("users").doc(userId),
+    {
+      updatedAt: now,
+      serviceStatus: {
+        jobs: "active",
+      },
+      identities: {
+        whatsappPhone: phone,
+        whatsappPhoneHash: phoneHash,
+      },
+    },
+    { merge: true },
+  );
+
+  batch.set(
+    subRef,
+    {
+      subscriptionId: subId,
+      userId,
+      service: "jobs",
+      status: "active",
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      preferences,
+      metadata: {
+        ...existingMetadata,
+        whatsappPhone: phone,
+        whatsappPhoneHash: phoneHash,
+        cvFileRef,
+        senderEmail,
+        setupStatus: "profile_saved",
+        profileSource: "whatsapp",
+        profileUpdatedAt: now,
+      },
+    },
+    { merge: true },
+  );
+
+  await batch.commit();
+  return { userId, publicUserId: user.publicUserId ?? null, phoneHash, status: "active", senderEmail, cvFileRef };
+}
+
+async function listJobScoutSubscribers(limitInput = 10) {
+  const parsedLimit = Number.parseInt(limitInput ?? "10", 10);
+  const limit = Math.min(Math.max(Number.isFinite(parsedLimit) ? parsedLimit : 10, 1), 100);
+  const db = getFirestoreDb();
+  const snapshot = await db.collection("serviceSubscriptions").where("service", "==", "jobs").get();
+  const subscribers = [];
+  const skipped = [];
+
+  for (const doc of snapshot.docs) {
+    if (subscribers.length >= limit) break;
+    const sub = doc.data();
+    if (sub.status !== "active") continue;
+    const metadata = sub.metadata && typeof sub.metadata === "object" ? sub.metadata : {};
+    const userSnap = await db.collection("users").doc(sub.userId).get();
+    const gmailSnap = await db.collection("gmailConnections").doc(sub.userId).get();
+    const user = userSnap.exists ? userSnap.data() : null;
+    const gmail = gmailSnap.exists ? gmailSnap.data() : null;
+    const missing = [];
+    if (!user) missing.push("user");
+    if (!metadata.whatsappPhone) missing.push("whatsapp");
+    if (!metadata.cvFileRef) missing.push("cv");
+    if (!gmail?.connected) missing.push("gmail");
+    if (!gmail?.senderEmail) missing.push("senderEmail");
+    if (missing.length > 0) {
+      skipped.push({ userId: sub.userId, reason: missing.join(",") });
+      continue;
+    }
+    subscribers.push({
+      userId: sub.userId,
+      subscriptionId: sub.subscriptionId ?? doc.id,
+      publicUserId: user?.publicUserId ?? null,
+      profile: user?.profile ?? {},
+      whatsappPhone: metadata.whatsappPhone,
+      whatsappPhoneHash: metadata.whatsappPhoneHash ?? whatsappPhoneHash(metadata.whatsappPhone),
+      senderEmail: gmail.senderEmail,
+      cvFileRef: metadata.cvFileRef,
+      preferences: normalizeJobPreferences(sub.preferences),
+      metadata: {
+        setupStatus: metadata.setupStatus ?? null,
+        profileUpdatedAt: firestoreTimestampToIso(metadata.profileUpdatedAt),
+      },
+    });
+  }
+
+  return { subscribers, skipped, totalSubscriptions: snapshot.size };
+}
+
+async function listJobApplications(userIdInput) {
+  const userId = validateFirebaseUid(userIdInput);
+  const snapshot = await getFirestoreDb().collection("jobApplications").where("userId", "==", userId).get();
+  return snapshot.docs.map((doc) => ({ applicationId: doc.id, ...doc.data() }));
+}
+
+async function recordJobApplication(body) {
+  const userId = validateFirebaseUid(body.userId);
+  const company = String(body.company ?? "").replace(/\s+/g, " ").trim();
+  const role = String(body.role ?? "").replace(/\s+/g, " ").trim();
+  if (!company) throw httpError(400, "company is required.");
+  if (!role) throw httpError(400, "role is required.");
+  const status = String(body.status ?? "skipped");
+  const allowedStatuses = new Set(["applied", "skipped", "physical_submission", "failed"]);
+  if (!allowedStatuses.has(status)) throw httpError(400, "status is invalid.");
+
+  const db = getFirestoreDb();
+  const applicationId = jobApplicationId(userId, company, role);
+  const ref = db.collection("jobApplications").doc(applicationId);
+  const existing = await ref.get();
+  if (existing.exists && body.replace !== true) {
+    return { duplicate: true, applicationId, existing: existing.data() };
+  }
+
+  const userSnap = await db.collection("users").doc(userId).get();
+  const gmailSnap = await db.collection("gmailConnections").doc(userId).get();
+  const user = userSnap.exists ? userSnap.data() : {};
+  const gmail = gmailSnap.exists ? gmailSnap.data() : {};
+  const now = FieldValue.serverTimestamp();
+  const record = {
+    applicationId,
+    userId,
+    subscriptionId: serviceSubscriptionId(userId, "jobs"),
+    applicant: {
+      email: user?.profile?.email ?? null,
+      displayName: user?.profile?.displayName ?? null,
+    },
+    sender: {
+      email: gmail?.senderEmail ?? body.senderEmail ?? null,
+      gmailConnectionId: gmailSnap.exists ? userId : null,
+    },
+    company,
+    role,
+    applicationEmail: body.applicationEmail ? rejectHeaderInjection(body.applicationEmail, "applicationEmail") : null,
+    source: String(body.source ?? "").slice(0, 240),
+    sourceUrl: String(body.sourceUrl ?? "").slice(0, 1000) || null,
+    status,
+    appliedAt: status === "applied" ? now : null,
+    createdAt: existing.exists ? existing.data()?.createdAt ?? now : now,
+    updatedAt: now,
+    notes: body.notes ? String(body.notes).slice(0, 2000) : null,
+    messageId: body.messageId ? String(body.messageId).slice(0, 240) : null,
+    closing: body.closing ? String(body.closing).slice(0, 120) : null,
+    matchReason: body.matchReason ? String(body.matchReason).slice(0, 1000) : null,
+  };
+  await ref.set(record, { merge: true });
+  return { duplicate: false, applicationId, status };
 }
 
 async function backfillCentralData() {
@@ -1146,6 +1516,46 @@ async function handleInternalCentralDataBackfill(req, res) {
   jsonResponse(res, 200, { ok: true, ...result });
 }
 
+async function handleInternalJobScoutInvite(req, res) {
+  verifyInternalApiKey(req);
+  const body = await readJsonBody(req);
+  const invite = await createJobScoutInvite(body.phone, body.ttlSeconds);
+  jsonResponse(res, 200, { ok: true, ...invite });
+}
+
+async function handleInternalJobScoutProfile(req, res) {
+  verifyInternalApiKey(req);
+  const body = await readJsonBody(req);
+  const result = await saveJobScoutProfile(body);
+  jsonResponse(res, 200, { ok: true, ...result });
+}
+
+async function handleInternalJobScoutSubscribers(req, res, url) {
+  verifyInternalApiKey(req);
+  const result = await listJobScoutSubscribers(url.searchParams.get("limit") ?? "10");
+  jsonResponse(res, 200, { ok: true, ...result });
+}
+
+async function handleInternalJobScoutApplications(req, res, url) {
+  verifyInternalApiKey(req);
+  if (req.method === "GET") {
+    const userId = url.searchParams.get("userId");
+    if (!userId) throw httpError(400, "userId is required.");
+    const applications = await listJobApplications(userId);
+    return jsonResponse(res, 200, { ok: true, applications });
+  }
+  const body = await readJsonBody(req);
+  const result = await recordJobApplication(body);
+  return jsonResponse(res, 200, { ok: true, ...result });
+}
+
+async function handleJobScoutSetup(req, res, url) {
+  const firebaseUser = req.firebaseUser ?? (await verifyFirebaseRequest(req));
+  const token = url.searchParams.get("token");
+  const result = await bindJobScoutInviteToUser(token, firebaseUser);
+  return htmlResponse(res, 200, jobScoutSetupPage(result));
+}
+
 async function handleCreateSession(req, res) {
   const body = await readJsonBody(req);
   const idToken = typeof body.idToken === "string" ? body.idToken.trim() : "";
@@ -1246,6 +1656,25 @@ function authPage(title, body, script) {
     ${script}
   </body>
 </html>`;
+}
+
+function jobScoutSetupPage(result) {
+  const connectPath = result.publicUserId ? `/${validatePublicUserId(result.publicUserId)}/connect-gmail` : "/connect-gmail";
+  const email = result.email ? escapeHtml(result.email) : "your signed-in account";
+  return authPage(
+    "Job Scout setup",
+    `<a class="toplink" href="/">Back to app</a>
+        <h1>Job Scout setup linked</h1>
+        <p>This WhatsApp chat is now linked to ${email} for Job Scout.</p>
+        <div class="meta">
+          <div><strong>Status:</strong> ${escapeHtml(result.status)}</div>
+        </div>
+        <p style="margin-top:18px">Next, connect Gmail so applications can be sent from your approved sender account. Then return to WhatsApp and send your job preferences plus CV.</p>
+        <div class="actions">
+          <a class="button" href="${escapeHtmlAttribute(connectPath)}">Connect Gmail</a>
+        </div>`,
+    "",
+  );
 }
 
 function loginPage() {
@@ -1742,6 +2171,10 @@ function isPublicRoute(method, pathname) {
   if (method === "GET" && pathname === "/internal/gmail/senders") return true;
   if (method === "GET" && pathname === "/internal/central-data/status") return true;
   if (method === "POST" && pathname === "/internal/central-data/backfill") return true;
+  if (method === "POST" && pathname === "/internal/job-scout/invite") return true;
+  if (method === "POST" && pathname === "/internal/job-scout/profile") return true;
+  if (method === "GET" && pathname === "/internal/job-scout/subscribers") return true;
+  if ((method === "GET" || method === "POST") && pathname === "/internal/job-scout/applications") return true;
   return false;
 }
 
@@ -1815,6 +2248,7 @@ async function route(req, res) {
   if (isRead && pathname === "/") return redirectToScopedPath(req, res);
   if (isRead && pathname === "/login") return htmlResponse(res, 200, loginPage());
   if (isRead && pathname === "/auth/firebase/finish") return htmlResponse(res, 200, firebaseFinishPage());
+  if (isRead && pathname === "/job-scout/setup") return handleJobScoutSetup(req, res, url);
   if (isRead && pathname === "/connect-gmail") return redirectToScopedPath(req, res, "/connect-gmail");
   if (isRead && pathname === "/config/firebase") return jsonResponse(res, 200, firebaseWebConfig());
   if (req.method === "POST" && pathname === "/auth/session") return handleCreateSession(req, res);
@@ -1845,6 +2279,14 @@ async function route(req, res) {
   }
   if (req.method === "POST" && pathname === "/internal/central-data/backfill") {
     return handleInternalCentralDataBackfill(req, res);
+  }
+  if (req.method === "POST" && pathname === "/internal/job-scout/invite") return handleInternalJobScoutInvite(req, res);
+  if (req.method === "POST" && pathname === "/internal/job-scout/profile") return handleInternalJobScoutProfile(req, res);
+  if (req.method === "GET" && pathname === "/internal/job-scout/subscribers") {
+    return handleInternalJobScoutSubscribers(req, res, url);
+  }
+  if ((req.method === "GET" || req.method === "POST") && pathname === "/internal/job-scout/applications") {
+    return handleInternalJobScoutApplications(req, res, url);
   }
   throw httpError(404, "Not found.");
 }
