@@ -12,14 +12,17 @@ Public routes:
 - `/auth/session/logout` clears the server session cookie.
 - `/config/firebase` exposes the non-secret Firebase browser config.
 - `/auth/google/callback` receives the Google OAuth callback.
+- `/onboarding` shows the public Webetu onboarding guide.
+- `/privacy-policy` explains Webetu credential and Gmail permission usage.
 - `/health` checks service health.
 
 Protected routes require the `agent_genaie_session` cookie or a Firebase bearer token:
 
-- `/{publicUserId}` signed-in dashboard with Webetu credential vault and Gmail connection controls.
-- `/{publicUserId}/onboarding` Webetu credential onboarding guide.
+- `/{publicUserId}` signed-in dashboard launcher with service tabs.
+- `/{publicUserId}/vault` signed-in Webetu credential vault.
+- `/{publicUserId}/onboarding` scoped compatibility route for the Webetu onboarding guide.
 - `/{publicUserId}/connect-gmail` authenticated Gmail connect/disconnect page.
-- `/`, `/onboarding`, and `/connect-gmail` redirect signed-in users to their scoped `/{publicUserId}` route.
+- `/` and `/connect-gmail` redirect signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail OAuth for the signed-in Firebase user.
 - `/auth/google/status` checks Gmail connection for the signed-in Firebase user.
 - `/auth/google/revoke` revokes and removes stored Gmail tokens for the signed-in Firebase user.

@@ -2382,17 +2382,86 @@ async function serveScopedOnboardingPage(res, publicUserId) {
   htmlResponse(res, 200, scoped);
 }
 
+async function servePublicOnboardingPage(res) {
+  const html = await fs.readFile(path.join(rootDir, "index.html"), "utf8");
+  const publicHtml = html.replaceAll("https://your-passbolt-domain.example", escapeHtmlAttribute(config.passboltPublicUrl));
+  htmlResponse(res, 200, publicHtml);
+}
+
+function onboardingAssetPath(assetName) {
+  const text = String(assetName ?? "");
+  if (!text || text.includes("/") || text.includes("\\") || text.includes("..")) throw httpError(404, "Not found.");
+  return path.join(rootDir, "assets", text);
+}
+
+function privacyPolicyPage() {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Privacy & Policy</title>
+    <style>
+      :root{color-scheme:light;--bg:#f6f7f9;--panel:#fff;--border:#d8dee7;--text:#15171a;--muted:#5f6875;--blue:#2f74d0}
+      *{box-sizing:border-box}
+      body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+      main{min-height:100vh;padding:28px}
+      .shell{width:min(860px,100%);margin:0 auto;display:grid;gap:16px}
+      header,section{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:22px;box-shadow:0 12px 32px rgba(22,28,36,.07)}
+      h1,h2{margin:0 0 10px;letter-spacing:0;line-height:1.2}
+      h1{font-size:2rem}
+      h2{font-size:1.18rem}
+      p{margin:0 0 12px;color:var(--muted);line-height:1.58}
+      p:last-child{margin-bottom:0}
+      a{color:var(--blue);font-weight:750;text-decoration:none}
+      a:hover{text-decoration:underline}
+      .actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:14px}
+      .button{display:inline-flex;min-height:42px;align-items:center;justify-content:center;border-radius:7px;background:var(--blue);color:#fff;padding:0 14px;text-decoration:none}
+      .button.secondary{background:#eef2f7;color:#263142;border:1px solid #cbd5e1}
+      @media (max-width:680px){main{padding:18px}header,section{padding:18px}}
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="shell">
+        <header>
+          <h1>Privacy & Policy</h1>
+          <p>This page explains how Genaie uses Webetu credentials and Gmail permissions.</p>
+          <div class="actions">
+            <a class="button" href="/login">Sign in</a>
+            <a class="button secondary" href="/onboarding">Webetu onboarding</a>
+          </div>
+        </header>
+        <section>
+          <h2>Webetu Credentials</h2>
+          <p>Your Webetu username and password are used only to sign in to Webetu for the meal reservation service.</p>
+          <p>They are encrypted before storage. The application is designed so secret credentials are not shown to the agent or developers in the user interface, logs, or API responses.</p>
+          <p>If you no longer need the service, or if you no longer trust the service, you can remove your saved credentials from the Credentials Vault. You are encouraged to remove credentials that you no longer need.</p>
+        </section>
+        <section>
+          <h2>Gmail Permissions</h2>
+          <p>The Gmail permission requested by this application is send-only. It allows the application to send emails on your behalf so it can complete job applications.</p>
+          <p>This permission is not used to read your emails. It is not used for anything other than sending job application emails for services you have enabled.</p>
+          <p>If you no longer need the service, or if you do not trust the service, you can revoke Gmail permission from the app. You are encouraged to revoke permissions that you no longer need.</p>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>`;
+}
+
 async function handleScopedPage(req, res, scoped) {
   await requireMatchingScopedUser(req, scoped.publicUserId);
   if (!scoped.rest) return htmlResponse(res, 200, rootPage(scoped.publicUserId));
   if (scoped.rest === "connect-gmail") return htmlResponse(res, 200, connectGmailPage(scoped.publicUserId));
+  if (scoped.rest === "vault") return htmlResponse(res, 200, vaultPage(scoped.publicUserId));
   if (scoped.rest === "onboarding") return serveScopedOnboardingPage(res, scoped.publicUserId);
   if (scoped.rest === "onboarding/styles.css") {
     return serveFile(res, path.join(rootDir, "styles.css"));
   }
   if (scoped.rest.startsWith("onboarding/assets/")) {
     const assetName = scoped.rest.slice("onboarding/assets/".length);
-    return serveFile(res, path.join(rootDir, "assets", assetName));
+    return serveFile(res, onboardingAssetPath(assetName));
   }
   throw httpError(404, "Not found.");
 }
@@ -2403,6 +2472,10 @@ function isPublicRoute(method, pathname) {
   if (isRead && pathname === "/auth/firebase/finish") return true;
   if (isRead && pathname === "/config/firebase") return true;
   if (isRead && pathname === "/health") return true;
+  if (isRead && (pathname === "/onboarding" || pathname === "/onboarding/")) return true;
+  if (isRead && pathname === "/onboarding/styles.css") return true;
+  if (isRead && pathname.startsWith("/onboarding/assets/")) return true;
+  if (isRead && pathname === "/privacy-policy") return true;
   if (method === "GET" && pathname === "/auth/google/callback") return true;
   if ((method === "GET" || method === "POST") && pathname === "/auth/session") return true;
   if (method === "POST" && pathname === "/auth/session/logout") return true;
@@ -2421,6 +2494,9 @@ function shouldRedirectToLogin(req, pathname) {
   if (req.method !== "GET" && req.method !== "HEAD") return false;
   if (pathname.startsWith("/auth/") || pathname.startsWith("/gmail/")) return false;
   if (pathname === "/config/firebase" || pathname === "/health") return false;
+  if (pathname === "/privacy-policy") return false;
+  if (pathname === "/onboarding" || pathname === "/onboarding/" || pathname === "/onboarding/styles.css") return false;
+  if (pathname.startsWith("/onboarding/assets/")) return false;
   return true;
 }
 
@@ -2448,7 +2524,7 @@ function rootPage(publicUserId) {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Genaie Dashboard</title>
     <style>
-      :root{color-scheme:light;--bg:#f6f7f9;--panel:#fff;--border:#d8dee7;--text:#15171a;--muted:#5f6875;--blue:#2f74d0;--blue-strong:#1f5ead;--green:#11603a;--red:#b42318}
+      :root{color-scheme:light;--bg:#f6f7f9;--panel:#fff;--border:#d8dee7;--text:#15171a;--muted:#5f6875;--blue:#2f74d0}
       *{box-sizing:border-box}
       body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
       main{min-height:100vh;padding:28px}
@@ -2457,18 +2533,76 @@ function rootPage(publicUserId) {
       h1{margin:0;font-size:1.85rem;line-height:1.15;letter-spacing:0}
       h2{margin:0;font-size:1.12rem;line-height:1.25;letter-spacing:0}
       p{margin:0;color:var(--muted);line-height:1.5}
-      .account{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
-      .email{font-weight:750;color:#303846}
-      .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
-      .panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px;box-shadow:0 14px 36px rgba(22,28,36,.08);display:grid;gap:16px}
+      .tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+      .tab{display:grid;gap:8px;min-height:132px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px;text-decoration:none;color:var(--text);box-shadow:0 14px 36px rgba(22,28,36,.08)}
+      .tab:hover{border-color:#9eb6d6;box-shadow:0 18px 42px rgba(22,28,36,.12)}
+      .tab:focus-visible{outline:3px solid rgba(47,116,208,.28);outline-offset:2px}
+      .tab strong{font-size:1.08rem}
+      .tab span{color:var(--muted);line-height:1.45}
+      .toplink{display:inline-flex;color:var(--blue);font-weight:750;text-decoration:none}
+      .toplink:hover{text-decoration:underline}
+      @media (max-width:760px){main{padding:18px}.tabs{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}}
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="shell">
+        <header>
+          <div>
+            <h1>Genaie Dashboard</h1>
+            <p>Choose the service area you want to manage.</p>
+          </div>
+          <a class="toplink" href="/privacy-policy">Privacy & Policy</a>
+        </header>
+        <div class="tabs" aria-label="Dashboard tabs">
+          <a class="tab" href="${homePath}/connect-gmail">
+            <strong>Connect Gmail</strong>
+            <span>Approve or revoke Gmail send access for job application emails.</span>
+          </a>
+          <a class="tab" href="${homePath}/vault">
+            <strong>Credentials Vault</strong>
+            <span>Save, update, or remove encrypted Webetu credentials.</span>
+          </a>
+          <a class="tab" href="/onboarding">
+            <strong>Webetu Onboarding</strong>
+            <span>Open the public setup guide for Webetu meal reservations.</span>
+          </a>
+          <a class="tab" href="/privacy-policy">
+            <strong>Privacy & Policy</strong>
+            <span>Read how credentials and Gmail permissions are used.</span>
+          </a>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>`;
+}
+
+function vaultPage(publicUserId) {
+  const homePath = `/${validatePublicUserId(publicUserId)}`;
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Credentials Vault</title>
+    <style>
+      :root{color-scheme:light;--bg:#f6f7f9;--panel:#fff;--border:#d8dee7;--text:#15171a;--muted:#5f6875;--blue:#2f74d0;--green:#11603a;--red:#b42318}
+      *{box-sizing:border-box}
+      body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+      main{min-height:100vh;padding:28px}
+      .shell{width:min(760px,100%);margin:0 auto;display:grid;gap:18px}
+      .panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:22px;box-shadow:0 14px 36px rgba(22,28,36,.08);display:grid;gap:16px}
       .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+      h1{margin:0;font-size:1.85rem;line-height:1.15;letter-spacing:0}
+      p{margin:0;color:var(--muted);line-height:1.5}
+      label{display:grid;gap:7px;font-weight:750;color:#303846}
+      form{display:grid;gap:12px}
+      input{width:100%;min-height:44px;border:1px solid #b9c3d1;border-radius:7px;padding:0 12px;font:inherit;background:#fff;color:var(--text)}
+      input:focus{outline:3px solid rgba(47,116,208,.18);border-color:var(--blue)}
       .status-pill{display:inline-flex;align-items:center;min-height:30px;border-radius:999px;border:1px solid #cbd5e1;background:#f8fafc;color:#303846;padding:0 10px;font-size:.88rem;font-weight:800;white-space:nowrap}
       .status-pill[data-tone="success"]{border-color:#7fc9a2;background:#eefaf3;color:var(--green)}
       .status-pill[data-tone="error"]{border-color:#f1a7a1;background:#fff1f0;color:#9f2419}
-      form{display:grid;gap:12px}
-      label{display:grid;gap:7px;font-weight:750;color:#303846}
-      input{width:100%;min-height:44px;border:1px solid #b9c3d1;border-radius:7px;padding:0 12px;font:inherit;background:#fff;color:var(--text)}
-      input:focus{outline:3px solid rgba(47,116,208,.18);border-color:var(--blue)}
       .actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
       button,a.button{display:inline-flex;min-height:42px;align-items:center;justify-content:center;border:0;border-radius:7px;background:var(--blue);color:#fff;font:inherit;font-weight:750;text-decoration:none;padding:0 14px;cursor:pointer}
       button.secondary,a.secondary{background:#eef2f7;color:#263142;border:1px solid #cbd5e1}
@@ -2479,75 +2613,42 @@ function rootPage(publicUserId) {
       .message{min-height:22px;color:var(--muted);font-size:.95rem;line-height:1.45}
       .message[data-tone="success"]{color:var(--green)}
       .message[data-tone="error"]{color:#9f2419}
-      @media (max-width:760px){main{padding:18px}.grid{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}.account{justify-content:flex-start}.panel-head{flex-direction:column}}
+      @media (max-width:680px){main{padding:18px}.panel{padding:18px}.panel-head{flex-direction:column}}
     </style>
   </head>
   <body>
     <main>
       <div class="shell">
-        <header>
-          <div>
-            <h1>Genaie Dashboard</h1>
-            <p>Manage the services connected to your account.</p>
-          </div>
-          <div class="account">
-            <span class="email" data-user-email>Checking session...</span>
-            <button class="secondary" data-sign-out type="button">Sign out</button>
-          </div>
-        </header>
-
-        <div class="grid">
-          <section class="panel" aria-labelledby="webetu-title">
-            <div class="panel-head">
-              <div>
-                <h2 id="webetu-title">Webetu Credentials Vault</h2>
-                <p>Save the Webetu account used for meal reservations.</p>
-              </div>
-              <span class="status-pill" data-webetu-status>Checking...</span>
+        <a class="button secondary" href="${homePath}">Back to dashboard</a>
+        <section class="panel" aria-labelledby="vault-title">
+          <div class="panel-head">
+            <div>
+              <h1 id="vault-title">Credentials Vault</h1>
+              <p>Save the Webetu account used for meal reservations.</p>
             </div>
-            <form data-webetu-form>
-              <label>
-                Webetu username
-                <input data-webetu-username name="username" autocomplete="username" maxlength="120" required>
-              </label>
-              <label>
-                Webetu password
-                <input data-webetu-password name="password" type="password" autocomplete="current-password" maxlength="256" required>
-              </label>
-              <div class="actions">
-                <button data-webetu-save type="submit">Save credentials</button>
-                <button class="danger" data-webetu-revoke type="button" hidden>Revoke</button>
-                <a class="button secondary" href="${homePath}/onboarding">Passbolt guide</a>
-              </div>
-            </form>
-            <div class="message" data-webetu-message></div>
-          </section>
-
-          <section class="panel" aria-labelledby="gmail-title">
-            <div class="panel-head">
-              <div>
-                <h2 id="gmail-title">Connect Gmail</h2>
-                <p>Approve Gmail send access for application emails.</p>
-              </div>
-              <span class="status-pill" data-gmail-status>Checking...</span>
-            </div>
+            <span class="status-pill" data-webetu-status>Checking...</span>
+          </div>
+          <form data-webetu-form>
+            <label>
+              Webetu username
+              <input data-webetu-username name="username" autocomplete="username" maxlength="120" required>
+            </label>
+            <label>
+              Webetu password
+              <input data-webetu-password name="password" type="password" autocomplete="current-password" maxlength="256" required>
+            </label>
             <div class="actions">
-              <button data-gmail-connect type="button">Connect Gmail</button>
-              <button class="danger" data-gmail-disconnect type="button" hidden>Disconnect</button>
-              <a class="button secondary" href="${homePath}/connect-gmail">Open Gmail page</a>
+              <button data-webetu-save type="submit">Save credentials</button>
+              <button class="danger" data-webetu-revoke type="button" hidden>Revoke</button>
+              <a class="button secondary" href="/onboarding">Webetu onboarding</a>
+              <a class="button secondary" href="/privacy-policy">Privacy & Policy</a>
             </div>
-            <div class="message" data-gmail-message></div>
-          </section>
-        </div>
+          </form>
+          <div class="message" data-webetu-message></div>
+        </section>
       </div>
     </main>
-    <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-
-const homePath = ${JSON.stringify(homePath)};
-const emailEl = document.querySelector("[data-user-email]");
-const signOutButton = document.querySelector("[data-sign-out]");
+    <script>
 const webetuForm = document.querySelector("[data-webetu-form]");
 const webetuUsername = document.querySelector("[data-webetu-username]");
 const webetuPassword = document.querySelector("[data-webetu-password]");
@@ -2555,13 +2656,6 @@ const webetuSaveButton = document.querySelector("[data-webetu-save]");
 const webetuRevokeButton = document.querySelector("[data-webetu-revoke]");
 const webetuStatus = document.querySelector("[data-webetu-status]");
 const webetuMessage = document.querySelector("[data-webetu-message]");
-const gmailStatus = document.querySelector("[data-gmail-status]");
-const gmailConnectButton = document.querySelector("[data-gmail-connect]");
-const gmailDisconnectButton = document.querySelector("[data-gmail-disconnect]");
-const gmailMessage = document.querySelector("[data-gmail-message]");
-let auth;
-let currentUser;
-let sessionUser;
 
 function setMessage(el, message, tone) {
   el.textContent = message || "";
@@ -2574,23 +2668,14 @@ function setPill(el, label, tone) {
 }
 
 function setBusy(value) {
-  signOutButton.disabled = value;
   webetuSaveButton.disabled = value;
   webetuRevokeButton.disabled = value;
-  gmailConnectButton.disabled = value;
-  gmailDisconnectButton.disabled = value;
 }
 
 async function readJson(response) {
   const body = await response.json().catch(function() { return {}; });
   if (!response.ok) throw new Error(body.error || "Request failed with " + response.status);
   return body;
-}
-
-async function authedFetch(url, options) {
-  const headers = Object.assign({}, options && options.headers ? options.headers : {});
-  if (currentUser) headers.authorization = "Bearer " + await currentUser.getIdToken();
-  return fetch(url, Object.assign({}, options || {}, { credentials: "same-origin", headers: headers }));
 }
 
 function webetuLabel(status) {
@@ -2600,65 +2685,16 @@ function webetuLabel(status) {
   return "Unavailable";
 }
 
-async function loadSession() {
-  return readJson(await fetch("/auth/session", { credentials: "same-origin" }));
-}
-
 async function loadWebetuStatus() {
   setPill(webetuStatus, "Checking...");
-  const status = await readJson(await authedFetch("/webetu/credentials/status", { method: "GET" }));
+  const status = await readJson(await fetch("/webetu/credentials/status", {
+    method: "GET",
+    credentials: "same-origin"
+  }));
   const label = webetuLabel(status);
   setPill(webetuStatus, label, status.configured ? "success" : status.status === "revoked" ? "error" : "info");
   webetuSaveButton.textContent = status.configured ? "Update credentials" : "Save credentials";
   webetuRevokeButton.hidden = !status.configured;
-}
-
-async function loadGmailStatus() {
-  setPill(gmailStatus, "Checking...");
-  const status = await readJson(await authedFetch("/auth/google/status", { method: "GET" }));
-  if (status.connected) {
-    setPill(gmailStatus, "Connected", "success");
-    gmailConnectButton.textContent = "Reconnect Gmail";
-    gmailDisconnectButton.hidden = false;
-  } else {
-    setPill(gmailStatus, "Not connected");
-    gmailConnectButton.textContent = "Connect Gmail";
-    gmailDisconnectButton.hidden = true;
-  }
-}
-
-async function loadDashboard() {
-  const response = await fetch("/config/firebase");
-  const settings = await response.json();
-  if (!settings.configured) {
-    setPill(webetuStatus, "Unavailable", "error");
-    setPill(gmailStatus, "Unavailable", "error");
-    setMessage(gmailMessage, "Firebase email login is not configured yet. Missing: " + settings.missing.join(", "), "error");
-    return;
-  }
-
-  const app = initializeApp(settings.firebase);
-  auth = getAuth(app);
-
-  onAuthStateChanged(auth, async function(user) {
-    currentUser = user;
-    sessionUser = null;
-    let session = { authenticated: false };
-    try {
-      session = await loadSession();
-    } catch (err) {
-      setMessage(gmailMessage, err.message || "Could not check session.", "error");
-    }
-    sessionUser = session.authenticated ? session : null;
-    emailEl.textContent = user?.email || sessionUser?.email || "Signed in";
-    try {
-      await Promise.all([loadWebetuStatus(), loadGmailStatus()]);
-    } catch (err) {
-      setPill(webetuStatus, "Unavailable", "error");
-      setPill(gmailStatus, "Unavailable", "error");
-      setMessage(gmailMessage, err.message || "Could not load dashboard status.", "error");
-    }
-  });
 }
 
 webetuForm.addEventListener("submit", async function(event) {
@@ -2666,9 +2702,10 @@ webetuForm.addEventListener("submit", async function(event) {
   setBusy(true);
   setMessage(webetuMessage, "");
   try {
-    await readJson(await authedFetch("/webetu/credentials", {
+    await readJson(await fetch("/webetu/credentials", {
       method: "POST",
       headers: { "content-type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({
         username: webetuUsername.value,
         password: webetuPassword.value
@@ -2688,9 +2725,10 @@ webetuRevokeButton.addEventListener("click", async function() {
   setBusy(true);
   setMessage(webetuMessage, "");
   try {
-    await readJson(await authedFetch("/webetu/credentials/revoke", {
+    await readJson(await fetch("/webetu/credentials/revoke", {
       method: "POST",
       headers: { "content-type": "application/json" },
+      credentials: "same-origin",
       body: "{}"
     }));
     webetuPassword.value = "";
@@ -2703,56 +2741,9 @@ webetuRevokeButton.addEventListener("click", async function() {
   }
 });
 
-gmailConnectButton.addEventListener("click", async function() {
-  setBusy(true);
-  setMessage(gmailMessage, "");
-  try {
-    const payload = await readJson(await authedFetch("/auth/google/start", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ returnPath: homePath })
-    }));
-    window.location.href = payload.url;
-  } catch (err) {
-    setMessage(gmailMessage, err.message || "Could not start Gmail connection.", "error");
-    setBusy(false);
-  }
-});
-
-gmailDisconnectButton.addEventListener("click", async function() {
-  setBusy(true);
-  setMessage(gmailMessage, "");
-  try {
-    await readJson(await authedFetch("/auth/google/revoke", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}"
-    }));
-    setMessage(gmailMessage, "Gmail disconnected.", "success");
-    await loadGmailStatus();
-  } catch (err) {
-    setMessage(gmailMessage, err.message || "Could not disconnect Gmail.", "error");
-  } finally {
-    setBusy(false);
-  }
-});
-
-signOutButton.addEventListener("click", async function() {
-  setBusy(true);
-  await fetch("/auth/session/logout", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: "{}",
-    credentials: "same-origin"
-  }).catch(function() { return undefined; });
-  if (auth) await signOut(auth).catch(function() { return undefined; });
-  window.location.assign("/login");
-});
-
-loadDashboard().catch(function(err) {
+loadWebetuStatus().catch(function(err) {
   setPill(webetuStatus, "Unavailable", "error");
-  setPill(gmailStatus, "Unavailable", "error");
-  setMessage(gmailMessage, err.message || "Could not load dashboard.", "error");
+  setMessage(webetuMessage, err.message || "Could not load credential status.", "error");
 });
 </script>
   </body>
@@ -2772,19 +2763,21 @@ async function route(req, res) {
   if (isRead && pathname === "/login") return htmlResponse(res, 200, loginPage());
   if (isRead && pathname === "/auth/firebase/finish") return htmlResponse(res, 200, firebaseFinishPage());
   if (isRead && pathname === "/job-scout/setup") return handleJobScoutSetup(req, res, url);
+  if (isRead && pathname === "/privacy-policy") return htmlResponse(res, 200, privacyPolicyPage());
   if (isRead && pathname === "/connect-gmail") return redirectToScopedPath(req, res, "/connect-gmail");
   if (isRead && pathname === "/config/firebase") return jsonResponse(res, 200, firebaseWebConfig());
   if (req.method === "POST" && pathname === "/auth/session") return handleCreateSession(req, res);
   if (req.method === "GET" && pathname === "/auth/session") return handleSessionStatus(req, res);
   if (req.method === "POST" && pathname === "/auth/session/logout") return handleLogoutSession(req, res);
   if (isRead && (pathname === "/onboarding" || pathname === "/onboarding/")) {
-    return redirectToScopedPath(req, res, "/onboarding");
+    return servePublicOnboardingPage(res);
   }
   if (isRead && pathname === "/onboarding/styles.css") {
-    return redirectToScopedPath(req, res, "/onboarding/styles.css");
+    return serveFile(res, path.join(rootDir, "styles.css"));
   }
   if (isRead && pathname.startsWith("/onboarding/assets/")) {
-    return redirectToScopedPath(req, res, pathname);
+    const assetName = pathname.slice("/onboarding/assets/".length);
+    return serveFile(res, onboardingAssetPath(assetName));
   }
   if (isRead && pathname === "/health") return jsonResponse(res, 200, { ok: true });
   if (req.method === "POST" && pathname === "/auth/google/start") return handleStart(req, res);
