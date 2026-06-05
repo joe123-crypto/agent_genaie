@@ -21,6 +21,7 @@ const DEFAULT_PASSBOLT_PUBLIC_URL = "https://your-passbolt-domain.example";
 const SESSION_COOKIE_NAME = "agent_genaie_session";
 const SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
 const JOB_SCOUT_SETUP_TTL_SECONDS = 24 * 60 * 60;
+const ACCOUNT_LINK_SETUP_TTL_SECONDS = 24 * 60 * 60;
 
 function loadDotEnv() {
   const envPath = path.join(rootDir, ".env");
@@ -62,6 +63,12 @@ const config = {
   centralDataKeyVersion: process.env.CENTRAL_DATA_KEY_VERSION ?? "v1",
   passboltPublicUrl: process.env.PASSBOLT_PUBLIC_URL ?? DEFAULT_PASSBOLT_PUBLIC_URL,
   jobScoutSetupSecret:
+    process.env.JOB_SCOUT_SETUP_SECRET ??
+    process.env.OAUTH_STATE_SECRET ??
+    process.env.TOKEN_ENCRYPTION_SECRET ??
+    "",
+  accountLinkSetupSecret:
+    process.env.ACCOUNT_LINK_SETUP_SECRET ??
     process.env.JOB_SCOUT_SETUP_SECRET ??
     process.env.OAUTH_STATE_SECRET ??
     process.env.TOKEN_ENCRYPTION_SECRET ??
@@ -147,6 +154,7 @@ function requireConfig(keys) {
       if (key === "ownerFirebaseUid") return "OWNER_FIREBASE_UID";
       if (key === "centralDataEncryptionSecret") return "CENTRAL_DATA_ENCRYPTION_SECRET";
       if (key === "jobScoutSetupSecret") return "JOB_SCOUT_SETUP_SECRET";
+      if (key === "accountLinkSetupSecret") return "ACCOUNT_LINK_SETUP_SECRET";
       return key;
     })
     .join(", ");
@@ -172,6 +180,12 @@ function normalizePhone(value) {
 
 function whatsappPhoneHash(phone) {
   return crypto.createHash("sha256").update(`whatsapp:${normalizePhone(phone)}`).digest("hex").slice(0, 12);
+}
+
+function maskPhone(phoneInput) {
+  const phone = normalizePhone(phoneInput);
+  if (phone.length <= 7) return phone;
+  return `${phone.slice(0, 4)}...${phone.slice(-4)}`;
 }
 
 function isPublicUserId(value) {
@@ -482,13 +496,30 @@ async function mirrorGmailConnectionToCentralData(uid, tokens, options = {}) {
 async function getWebetuCredentialStatus(uid) {
   const user = await syncUserToCentralData(uid);
   const credId = webetuCredentialRefId(user.uid);
-  const snap = await getFirestoreDb().collection("credentialRefs").doc(credId).get();
+  const db = getFirestoreDb();
+  const [snap, userSnap, webetuSnap] = await Promise.all([
+    db.collection("credentialRefs").doc(credId).get(),
+    db.collection("users").doc(user.uid).get(),
+    db.collection("webetuUsers").doc(user.uid).get(),
+  ]);
+  const userData = userSnap.exists ? userSnap.data() : {};
+  const identities = userData?.identities && typeof userData.identities === "object" ? userData.identities : {};
+  const phone = identities.whatsappPhone ? normalizePhone(identities.whatsappPhone) : null;
+  const phoneHash = identities.whatsappPhoneHash || (phone ? whatsappPhoneHash(phone) : null);
+  const webetuData = webetuSnap.exists ? webetuSnap.data() : {};
+  const account = {
+    whatsappLinked: Boolean(phone && phoneHash),
+    maskedPhone: phone ? maskPhone(phone) : null,
+    phoneHash: phoneHash ? String(phoneHash).slice(0, 12) : null,
+    webetuStatus: webetuData?.status ?? null,
+  };
   if (!snap.exists) {
     return {
       configured: false,
       status: "not_saved",
       updatedAt: null,
       provider: null,
+      ...account,
     };
   }
 
@@ -498,6 +529,7 @@ async function getWebetuCredentialStatus(uid) {
     status: data?.status ?? "not_saved",
     updatedAt: firestoreTimestampToIso(data?.updatedAt),
     provider: data?.provider?.type ?? null,
+    ...account,
   };
 }
 
@@ -509,12 +541,20 @@ async function saveWebetuCredentials(uid, body) {
   const credId = webetuCredentialRefId(userId);
   const subId = serviceSubscriptionId(userId, "webetu");
   const now = FieldValue.serverTimestamp();
-  const [credSnap, subSnap] = await Promise.all([
+  const [credSnap, subSnap, userSnap, webetuSnap] = await Promise.all([
     db.collection("credentialRefs").doc(credId).get(),
     db.collection("serviceSubscriptions").doc(subId).get(),
+    db.collection("users").doc(userId).get(),
+    db.collection("webetuUsers").doc(userId).get(),
   ]);
   const existingCred = credSnap.exists ? credSnap.data() : {};
   const existingSub = subSnap.exists ? subSnap.data() : {};
+  const existingWebetu = webetuSnap.exists ? webetuSnap.data() : {};
+  const userData = userSnap.exists ? userSnap.data() : {};
+  const identities = userData?.identities && typeof userData.identities === "object" ? userData.identities : {};
+  const phone = identities.whatsappPhone ? normalizePhone(identities.whatsappPhone) : null;
+  const phoneHash = identities.whatsappPhoneHash || (phone ? whatsappPhoneHash(phone) : null);
+  const webetuStatus = phone && phoneHash ? "active" : "credential_ready";
   const encryptedSecret = encryptCentralSecret(credentials, `credentialRefs/${credId}`);
   const batch = db.batch();
 
@@ -523,7 +563,7 @@ async function saveWebetuCredentials(uid, body) {
     {
       updatedAt: now,
       serviceStatus: {
-        webetu: "active",
+        webetu: webetuStatus,
       },
     },
     { merge: true },
@@ -535,13 +575,15 @@ async function saveWebetuCredentials(uid, body) {
       subscriptionId: subId,
       userId,
       service: "webetu",
-      status: "active",
+      status: webetuStatus === "active" ? "active" : "pending",
       createdAt: existingSub?.createdAt ?? now,
       updatedAt: now,
       preferences: existingSub?.preferences && typeof existingSub.preferences === "object" ? existingSub.preferences : {},
       metadata: {
         ...(existingSub?.metadata && typeof existingSub.metadata === "object" ? existingSub.metadata : {}),
         credentialRefId: credId,
+        setupStatus: webetuStatus,
+        phoneLinkRef: phoneHash ? `phoneLinks/${phoneHash}` : null,
         setupSource: "dashboard",
       },
     },
@@ -576,12 +618,39 @@ async function saveWebetuCredentials(uid, body) {
     { merge: true },
   );
 
+  batch.set(
+    db.collection("webetuUsers").doc(userId),
+    {
+      webetuUserId: userId,
+      userId,
+      firebaseUid: userId,
+      publicUserId: user.publicUserId ?? userData?.publicUserId ?? null,
+      profileRef: `users/${userId}`,
+      credentialRefId: credId,
+      credentialProvider: "firestore_encrypted",
+      status: webetuStatus,
+      delivery: {
+        channel: "whatsapp",
+        phoneLinkRef: phoneHash ? `phoneLinks/${phoneHash}` : null,
+        phoneHash: phoneHash ? String(phoneHash).slice(0, 12) : null,
+      },
+      createdAt: existingWebetu?.createdAt ?? now,
+      updatedAt: now,
+      disabledAt: null,
+    },
+    { merge: true },
+  );
+
   await batch.commit();
   return {
     configured: true,
     status: "ready",
     updatedAt: new Date().toISOString(),
     provider: "firestore_encrypted",
+    whatsappLinked: Boolean(phone && phoneHash),
+    maskedPhone: phone ? maskPhone(phone) : null,
+    phoneHash: phoneHash ? String(phoneHash).slice(0, 12) : null,
+    webetuStatus,
   };
 }
 
@@ -592,12 +661,17 @@ async function revokeWebetuCredentials(uid) {
   const credId = webetuCredentialRefId(userId);
   const subId = serviceSubscriptionId(userId, "webetu");
   const now = FieldValue.serverTimestamp();
-  const [credSnap, subSnap] = await Promise.all([
+  const [credSnap, subSnap, userSnap] = await Promise.all([
     db.collection("credentialRefs").doc(credId).get(),
     db.collection("serviceSubscriptions").doc(subId).get(),
+    db.collection("users").doc(userId).get(),
   ]);
   const existingCred = credSnap.exists ? credSnap.data() : {};
   const existingSub = subSnap.exists ? subSnap.data() : {};
+  const userData = userSnap.exists ? userSnap.data() : {};
+  const identities = userData?.identities && typeof userData.identities === "object" ? userData.identities : {};
+  const phone = identities.whatsappPhone ? normalizePhone(identities.whatsappPhone) : null;
+  const phoneHash = identities.whatsappPhoneHash || (phone ? whatsappPhoneHash(phone) : null);
   const batch = db.batch();
 
   batch.set(
@@ -657,12 +731,33 @@ async function revokeWebetuCredentials(uid) {
     { merge: true },
   );
 
+  batch.set(
+    db.collection("webetuUsers").doc(userId),
+    {
+      webetuUserId: userId,
+      userId,
+      firebaseUid: userId,
+      publicUserId: user.publicUserId ?? null,
+      profileRef: `users/${userId}`,
+      credentialRefId: credId,
+      credentialProvider: "firestore_encrypted",
+      status: "disabled",
+      updatedAt: now,
+      disabledAt: now,
+    },
+    { merge: true },
+  );
+
   await batch.commit();
   return {
     configured: false,
     status: "revoked",
     updatedAt: new Date().toISOString(),
     provider: "firestore_encrypted",
+    whatsappLinked: Boolean(phone && phoneHash),
+    maskedPhone: phone ? maskPhone(phone) : null,
+    phoneHash: phoneHash ? String(phoneHash).slice(0, 12) : null,
+    webetuStatus: "disabled",
   };
 }
 
@@ -720,11 +815,281 @@ function jobScoutTokenHash(token) {
   return crypto.createHmac("sha256", config.jobScoutSetupSecret).update(String(token ?? "")).digest("hex");
 }
 
+function accountLinkTokenHash(token) {
+  requireConfig(["accountLinkSetupSecret"]);
+  return crypto.createHmac("sha256", config.accountLinkSetupSecret).update(String(token ?? "")).digest("hex");
+}
+
 function firestoreTimestampToIso(value) {
   if (!value) return null;
   if (typeof value.toDate === "function") return value.toDate().toISOString();
   if (value instanceof Date) return value.toISOString();
   return null;
+}
+
+function normalizeAccountLinkPurpose(value) {
+  const purpose = String(value ?? "account").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_").slice(0, 40);
+  if (!purpose) return "account";
+  return purpose;
+}
+
+function normalizeAccountLinkNextPath(value) {
+  const text = String(value ?? "/").trim();
+  if (!text || !text.startsWith("/") || text.startsWith("//")) return "/";
+  if (text === "/" || text === "/connect-gmail" || text === "/vault" || text === "/onboarding") return text;
+  const match = text.match(/^\/(connect-gmail|vault|onboarding)\/?(\?.*)?$/);
+  if (match) return `/${match[1]}${match[2] ?? ""}`;
+  return "/";
+}
+
+function scopedPathForAccountLink(nextPath, publicUserId) {
+  const id = validatePublicUserId(publicUserId);
+  const normalized = normalizeAccountLinkNextPath(nextPath);
+  if (normalized === "/") return `/${id}`;
+  if (normalized === "/connect-gmail") return `/${id}/connect-gmail`;
+  if (normalized === "/vault") return `/${id}/vault`;
+  if (normalized === "/onboarding") return "/onboarding";
+  return `/${id}`;
+}
+
+async function writePhoneLinkForUser(db, user, phoneInput, options = {}) {
+  const phone = normalizePhone(phoneInput);
+  const phoneHash = whatsappPhoneHash(phone);
+  const ref = db.collection("phoneLinks").doc(phoneHash);
+  const existing = await ref.get();
+  if (existing.exists) {
+    const data = existing.data();
+    if (data?.userId && data.userId !== user.uid && !data?.revokedAt) {
+      throw httpError(409, "This WhatsApp phone is already linked to another app account.");
+    }
+  }
+
+  return {
+    ref,
+    phone,
+    phoneHash,
+    data: {
+      phoneHash,
+      phone,
+      userId: user.uid,
+      firebaseUid: user.uid,
+      publicUserId: user.publicUserId ?? null,
+      channel: "whatsapp",
+      source: options.source ?? "account_link",
+      purpose: normalizeAccountLinkPurpose(options.purpose),
+      status: "linked",
+      createdAt: existing.exists ? existing.data()?.createdAt ?? FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      linkedAt: FieldValue.serverTimestamp(),
+      revokedAt: null,
+    },
+  };
+}
+
+async function createAccountLinkInvite(body) {
+  const phone = normalizePhone(body.phone);
+  const phoneHash = whatsappPhoneHash(phone);
+  const parsedTtl = Number.parseInt(body.ttlSeconds ?? `${ACCOUNT_LINK_SETUP_TTL_SECONDS}`, 10);
+  const ttlSeconds = Number.isFinite(parsedTtl)
+    ? Math.min(Math.max(parsedTtl, 300), 7 * 24 * 60 * 60)
+    : ACCOUNT_LINK_SETUP_TTL_SECONDS;
+  const token = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = accountLinkTokenHash(token);
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+  const purpose = normalizeAccountLinkPurpose(body.purpose);
+  const nextPath = normalizeAccountLinkNextPath(body.nextPath);
+
+  await getFirestoreDb().collection("accountLinkInvites").doc(tokenHash).set({
+    tokenHash,
+    channel: "whatsapp",
+    phone,
+    phoneHash,
+    purpose,
+    nextPath,
+    status: "created",
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+    expiresAt,
+    usedAt: null,
+    usedBy: null,
+  });
+
+  const setupUrl = new URL("/account-link/setup", config.publicBaseUrl);
+  setupUrl.searchParams.set("token", token);
+  return { setupUrl: setupUrl.toString(), phoneHash, purpose, nextPath, expiresAt: expiresAt.toISOString(), ttlSeconds };
+}
+
+async function getAccountLinkInvite(token) {
+  const text = String(token ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{32,256}$/.test(text)) throw httpError(400, "Invalid account link token.");
+  const tokenHash = accountLinkTokenHash(text);
+  const ref = getFirestoreDb().collection("accountLinkInvites").doc(tokenHash);
+  const snap = await ref.get();
+  if (!snap.exists) throw httpError(404, "Account link was not found.");
+  const data = snap.data();
+  const expiresAt = data?.expiresAt?.toDate?.() ?? null;
+  if (!expiresAt || expiresAt.getTime() < Date.now()) throw httpError(410, "Account link expired.");
+  return { ref, data };
+}
+
+async function bindAccountLinkInviteToUser(token, firebaseUser) {
+  const { ref, data } = await getAccountLinkInvite(token);
+  const db = getFirestoreDb();
+  const user = await syncUserToCentralData(firebaseUser.uid);
+  const now = FieldValue.serverTimestamp();
+  const purpose = normalizeAccountLinkPurpose(data.purpose);
+  const phoneLink = await writePhoneLinkForUser(db, user, data.phone, {
+    purpose,
+    source: "account_link_invite",
+  });
+  const webetuCredId = webetuCredentialRefId(user.uid);
+  const webetuCredSnap = await db.collection("credentialRefs").doc(webetuCredId).get();
+  const hasReadyWebetuCredential = webetuCredSnap.exists && webetuCredSnap.data()?.status === "ready" && Boolean(webetuCredSnap.data()?.encryptedSecret);
+  const batch = db.batch();
+
+  batch.set(phoneLink.ref, phoneLink.data, { merge: true });
+  batch.set(
+    db.collection("users").doc(user.uid),
+    {
+      updatedAt: now,
+      identities: {
+        whatsappPhone: phoneLink.phone,
+        whatsappPhoneHash: phoneLink.phoneHash,
+        whatsappPhoneLinkedAt: now,
+      },
+    },
+    { merge: true },
+  );
+  batch.set(
+    ref,
+    {
+      status: "used",
+      usedAt: now,
+      usedBy: user.uid,
+      updatedAt: now,
+    },
+    { merge: true },
+  );
+  if (purpose === "webetu" || hasReadyWebetuCredential) {
+    const webetuStatus = hasReadyWebetuCredential ? "active" : "pending_credentials";
+    batch.set(
+      db.collection("webetuUsers").doc(user.uid),
+      {
+        webetuUserId: user.uid,
+        userId: user.uid,
+        firebaseUid: user.uid,
+        publicUserId: user.publicUserId ?? null,
+        profileRef: `users/${user.uid}`,
+        credentialRefId: webetuCredId,
+        credentialProvider: "firestore_encrypted",
+        status: webetuStatus,
+        delivery: {
+          channel: "whatsapp",
+          phoneLinkRef: `phoneLinks/${phoneLink.phoneHash}`,
+          phoneHash: phoneLink.phoneHash,
+        },
+        updatedAt: now,
+        disabledAt: null,
+      },
+      { merge: true },
+    );
+    batch.set(
+      db.collection("users").doc(user.uid),
+      {
+        updatedAt: now,
+        serviceStatus: {
+          webetu: webetuStatus,
+        },
+      },
+      { merge: true },
+    );
+  }
+
+  await batch.commit();
+  return {
+    userId: user.uid,
+    publicUserId: user.publicUserId ?? null,
+    email: user.email ?? null,
+    phoneHash: phoneLink.phoneHash,
+    maskedPhone: maskPhone(phoneLink.phone),
+    purpose,
+    nextPath: normalizeAccountLinkNextPath(data.nextPath),
+  };
+}
+
+async function getAccountLinkStatusForPhone(phoneInput) {
+  const phone = normalizePhone(phoneInput);
+  const phoneHash = whatsappPhoneHash(phone);
+  const db = getFirestoreDb();
+  const linkSnap = await db.collection("phoneLinks").doc(phoneHash).get();
+  if (linkSnap.exists && linkSnap.data()?.userId && !linkSnap.data()?.revokedAt) {
+    const link = linkSnap.data();
+    const userSnap = await db.collection("users").doc(link.userId).get();
+    const user = userSnap.exists ? userSnap.data() : {};
+    return {
+      linked: true,
+      phoneHash,
+      maskedPhone: maskPhone(phone),
+      userId: link.userId,
+      publicUserId: link.publicUserId ?? user?.publicUserId ?? null,
+      email: user?.profile?.email ?? null,
+      status: link.status ?? "linked",
+    };
+  }
+
+  const snapshot = await db.collection("users").where("identities.whatsappPhoneHash", "==", phoneHash).limit(2).get();
+  if (snapshot.size > 1) throw httpError(409, "More than one app user is linked to this WhatsApp phone.");
+  if (snapshot.empty) {
+    return { linked: false, phoneHash, maskedPhone: maskPhone(phone), userId: null, publicUserId: null, email: null, status: "not_linked" };
+  }
+
+  const doc = snapshot.docs[0];
+  const user = doc.data();
+  await db.collection("phoneLinks").doc(phoneHash).set(
+    {
+      phoneHash,
+      phone,
+      userId: doc.id,
+      firebaseUid: doc.id,
+      publicUserId: user?.publicUserId ?? null,
+      channel: "whatsapp",
+      source: "users_identity_backfill",
+      purpose: "account",
+      status: "linked",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      linkedAt: FieldValue.serverTimestamp(),
+      revokedAt: null,
+    },
+    { merge: true },
+  );
+  return {
+    linked: true,
+    phoneHash,
+    maskedPhone: maskPhone(phone),
+    userId: doc.id,
+    publicUserId: user?.publicUserId ?? null,
+    email: user?.profile?.email ?? null,
+    status: "linked",
+  };
+}
+
+async function getSignedInAccountStatus(uid) {
+  const user = await syncUserToCentralData(uid);
+  const snap = await getFirestoreDb().collection("users").doc(user.uid).get();
+  const data = snap.exists ? snap.data() : {};
+  const identities = data?.identities && typeof data.identities === "object" ? data.identities : {};
+  const phone = identities.whatsappPhone ? normalizePhone(identities.whatsappPhone) : null;
+  const phoneHash = identities.whatsappPhoneHash || (phone ? whatsappPhoneHash(phone) : null);
+  return {
+    userId: user.uid,
+    publicUserId: user.publicUserId ?? data?.publicUserId ?? null,
+    email: user.email ?? data?.profile?.email ?? null,
+    profile: data?.profile ?? {},
+    whatsappLinked: Boolean(phone && phoneHash),
+    maskedPhone: phone ? maskPhone(phone) : null,
+    phoneHash: phoneHash ? String(phoneHash).slice(0, 12) : null,
+  };
 }
 
 async function createJobScoutInvite(phoneInput, ttlSecondsInput) {
@@ -784,7 +1149,13 @@ async function bindJobScoutInviteToUser(token, firebaseUser) {
   const existingMetadata = existing?.metadata && typeof existing.metadata === "object" ? existing.metadata : {};
   const existingPreferences = existing?.preferences && typeof existing.preferences === "object" ? existing.preferences : {};
   const setupStatus = existingMetadata.cvFileRef ? "profile_saved" : "linked";
+  const phoneLink = await writePhoneLinkForUser(db, user, phone, {
+    purpose: "jobs",
+    source: "job_scout_invite",
+  });
   const batch = db.batch();
+
+  batch.set(phoneLink.ref, phoneLink.data, { merge: true });
 
   batch.set(
     db.collection("users").doc(user.uid),
@@ -1568,7 +1939,7 @@ async function serveFile(res, filePath) {
 function scopedReturnPath(value, publicUserId) {
   const basePath = `/${validatePublicUserId(publicUserId)}`;
   const text = String(value ?? "");
-  if (text === basePath || text === `${basePath}/connect-gmail`) return text;
+  if (text === basePath || text === `${basePath}/connect-gmail` || text === `${basePath}/vault`) return text;
   return null;
 }
 
@@ -1762,6 +2133,21 @@ async function handleInternalJobScoutInvite(req, res) {
   jsonResponse(res, 200, { ok: true, ...invite });
 }
 
+async function handleInternalAccountLinkInvite(req, res) {
+  verifyInternalApiKey(req);
+  const body = await readJsonBody(req);
+  const invite = await createAccountLinkInvite(body);
+  jsonResponse(res, 200, { ok: true, ...invite });
+}
+
+async function handleInternalAccountLinkStatus(req, res, url) {
+  verifyInternalApiKey(req);
+  const phone = url.searchParams.get("phone");
+  if (!phone) throw httpError(400, "phone is required.");
+  const status = await getAccountLinkStatusForPhone(phone);
+  jsonResponse(res, 200, { ok: true, ...status });
+}
+
 async function handleInternalJobScoutProfile(req, res) {
   verifyInternalApiKey(req);
   const body = await readJsonBody(req);
@@ -1796,6 +2182,22 @@ async function handleJobScoutSetup(req, res, url) {
     return redirectResponse(res, `/${validatePublicUserId(result.publicUserId)}/connect-gmail`);
   }
   return htmlResponse(res, 200, jobScoutSetupPage(result));
+}
+
+async function handleAccountLinkSetup(req, res, url) {
+  const firebaseUser = req.firebaseUser ?? (await verifyFirebaseRequest(req));
+  const token = url.searchParams.get("token");
+  const result = await bindAccountLinkInviteToUser(token, firebaseUser);
+  if (result.publicUserId) {
+    return redirectResponse(res, scopedPathForAccountLink(result.nextPath, result.publicUserId));
+  }
+  return htmlResponse(res, 200, accountLinkSetupPage(result));
+}
+
+async function handleAccountStatus(req, res) {
+  const firebaseUser = await verifyFirebaseRequest(req);
+  const status = await getSignedInAccountStatus(firebaseUser.uid);
+  jsonResponse(res, 200, status);
 }
 
 async function handleCreateSession(req, res) {
@@ -1919,6 +2321,25 @@ function jobScoutSetupPage(result) {
   );
 }
 
+function accountLinkSetupPage(result) {
+  const destination = result.publicUserId ? scopedPathForAccountLink(result.nextPath, result.publicUserId) : "/";
+  const email = result.email ? escapeHtml(result.email) : "your signed-in account";
+  return authPage(
+    "Account linked",
+    `<a class="toplink" href="/">Back to app</a>
+        <h1>Account linked</h1>
+        <p>This WhatsApp chat is now linked to ${email}.</p>
+        <div class="meta">
+          <div><strong>WhatsApp:</strong> ${escapeHtml(result.maskedPhone ?? "linked")}</div>
+          <div><strong>Purpose:</strong> ${escapeHtml(result.purpose ?? "account")}</div>
+        </div>
+        <div class="actions">
+          <a class="button" href="${escapeHtmlAttribute(destination)}">Continue</a>
+        </div>`,
+    "",
+  );
+}
+
 function loginRedirectHelpersScript() {
   return `const params = new URLSearchParams(window.location.search);
 
@@ -1946,7 +2367,7 @@ function loginPage() {
     "Sign in",
     `<a class="toplink" href="/">Back to app</a>
         <h1>Sign in</h1>
-        <p>Enter your email address. The app will send a sign-in link that opens this same server.</p>
+        <p>Enter your email address. The app will send a sign-in link that opens this same server. If you do not see the email, check your Spam or Junk folder.</p>
         <form data-login-form>
           <label for="email">Email address</label>
           <input id="email" data-email type="email" autocomplete="email" required>
@@ -2030,7 +2451,7 @@ async function start() {
         handleCodeInApp: true
       });
       window.localStorage.setItem(emailStorageKey, email);
-      setStatus("Check your email for the sign-in link.", "success");
+      setStatus("Check your email for the sign-in link. If you do not see it, check your Spam or Junk folder.", "success");
     } catch (err) {
       setStatus(err.message || "Could not send the sign-in link.", "error");
     } finally {
@@ -2478,6 +2899,8 @@ function isPublicRoute(method, pathname) {
   if (method === "GET" && pathname === "/internal/gmail/senders") return true;
   if (method === "GET" && pathname === "/internal/central-data/status") return true;
   if (method === "POST" && pathname === "/internal/central-data/backfill") return true;
+  if (method === "POST" && pathname === "/internal/account-link/invite") return true;
+  if (method === "GET" && pathname === "/internal/account-link/status") return true;
   if (method === "POST" && pathname === "/internal/job-scout/invite") return true;
   if (method === "POST" && pathname === "/internal/job-scout/profile") return true;
   if (method === "GET" && pathname === "/internal/job-scout/subscribers") return true;
@@ -2534,6 +2957,10 @@ function rootPage(publicUserId) {
       .tab:focus-visible{outline:3px solid rgba(47,116,208,.28);outline-offset:2px}
       .tab strong{font-size:1.08rem}
       .tab span{color:var(--muted);line-height:1.45}
+      .status-strip{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+      .status-pill{display:inline-flex;align-items:center;min-height:30px;border-radius:999px;border:1px solid #cbd5e1;background:#f8fafc;color:#303846;padding:0 10px;font-size:.88rem;font-weight:800;white-space:nowrap}
+      .status-pill[data-tone="success"]{border-color:#7fc9a2;background:#eefaf3;color:#11603a}
+      .status-pill[data-tone="error"]{border-color:#f1a7a1;background:#fff1f0;color:#9f2419}
       .toplink{display:inline-flex;color:var(--blue);font-weight:750;text-decoration:none}
       .toplink:hover{text-decoration:underline}
       @media (max-width:760px){main{padding:18px}.tabs{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}}
@@ -2549,6 +2976,10 @@ function rootPage(publicUserId) {
           </div>
           <a class="toplink" href="/privacy-policy">Privacy & Policy</a>
         </header>
+        <div class="status-strip" aria-label="Account status">
+          <span class="status-pill" data-whatsapp-status>WhatsApp: Checking...</span>
+          <p data-account-copy>Loading account link status.</p>
+        </div>
         <div class="tabs" aria-label="Dashboard tabs">
           <a class="tab" href="${homePath}/connect-gmail">
             <strong>Connect Gmail</strong>
@@ -2569,6 +3000,29 @@ function rootPage(publicUserId) {
         </div>
       </div>
     </main>
+    <script>
+const whatsappStatus = document.querySelector("[data-whatsapp-status]");
+const accountCopy = document.querySelector("[data-account-copy]");
+function setWhatsAppStatus(label, tone) {
+  whatsappStatus.textContent = label;
+  whatsappStatus.dataset.tone = tone || "info";
+}
+fetch("/account/status", { credentials: "same-origin" })
+  .then(function(response) { return response.json(); })
+  .then(function(status) {
+    if (status.whatsappLinked) {
+      setWhatsAppStatus("WhatsApp: Linked", "success");
+      accountCopy.textContent = "This chat is linked to " + (status.maskedPhone || "your WhatsApp number") + ".";
+    } else {
+      setWhatsAppStatus("WhatsApp: Not linked", "error");
+      accountCopy.textContent = "Open a service link from WhatsApp to connect this login to your chat.";
+    }
+  })
+  .catch(function() {
+    setWhatsAppStatus("WhatsApp: Unavailable", "error");
+    accountCopy.textContent = "Could not load account link status.";
+  });
+    </script>
   </body>
 </html>`;
 }
@@ -2608,6 +3062,7 @@ function vaultPage(publicUserId) {
       .message{min-height:22px;color:var(--muted);font-size:.95rem;line-height:1.45}
       .message[data-tone="success"]{color:var(--green)}
       .message[data-tone="error"]{color:#9f2419}
+      .account-meta{display:flex;flex-wrap:wrap;gap:10px;align-items:center;color:var(--muted)}
       @media (max-width:680px){main{padding:18px}.panel{padding:18px}.panel-head{flex-direction:column}}
     </style>
   </head>
@@ -2616,14 +3071,18 @@ function vaultPage(publicUserId) {
       <div class="shell">
         <a class="button secondary" href="${homePath}">Back to dashboard</a>
         <section class="panel" aria-labelledby="vault-title">
-          <div class="panel-head">
-            <div>
-              <h1 id="vault-title">Credentials Vault</h1>
-              <p>Save the Webetu account used for meal reservations.</p>
-            </div>
-            <span class="status-pill" data-webetu-status>Checking...</span>
-          </div>
-          <form data-webetu-form>
+	          <div class="panel-head">
+	            <div>
+	              <h1 id="vault-title">Credentials Vault</h1>
+	              <p>Save the Webetu account used for meal reservations.</p>
+	            </div>
+	            <span class="status-pill" data-webetu-status>Checking...</span>
+	          </div>
+	          <div class="account-meta">
+	            <span class="status-pill" data-whatsapp-status>WhatsApp: Checking...</span>
+	            <span data-whatsapp-copy>Checking account link.</span>
+	          </div>
+	          <form data-webetu-form>
             <label>
               Webetu username
               <input data-webetu-username name="username" autocomplete="username" maxlength="120" required>
@@ -2651,6 +3110,8 @@ const webetuSaveButton = document.querySelector("[data-webetu-save]");
 const webetuRevokeButton = document.querySelector("[data-webetu-revoke]");
 const webetuStatus = document.querySelector("[data-webetu-status]");
 const webetuMessage = document.querySelector("[data-webetu-message]");
+const whatsappStatus = document.querySelector("[data-whatsapp-status]");
+const whatsappCopy = document.querySelector("[data-whatsapp-copy]");
 
 function setMessage(el, message, tone) {
   el.textContent = message || "";
@@ -2680,6 +3141,16 @@ function webetuLabel(status) {
   return "Unavailable";
 }
 
+function updateWhatsAppStatus(status) {
+  if (status && status.whatsappLinked) {
+    setPill(whatsappStatus, "WhatsApp: Linked", "success");
+    whatsappCopy.textContent = "Reservations will report to " + (status.maskedPhone || "the linked WhatsApp chat") + ".";
+    return;
+  }
+  setPill(whatsappStatus, "WhatsApp: Not linked", "error");
+  whatsappCopy.textContent = "Open a service setup link from WhatsApp first, then return here.";
+}
+
 async function loadWebetuStatus() {
   setPill(webetuStatus, "Checking...");
   const status = await readJson(await fetch("/webetu/credentials/status", {
@@ -2688,6 +3159,7 @@ async function loadWebetuStatus() {
   }));
   const label = webetuLabel(status);
   setPill(webetuStatus, label, status.configured ? "success" : status.status === "revoked" ? "error" : "info");
+  updateWhatsAppStatus(status);
   webetuSaveButton.textContent = status.configured ? "Update credentials" : "Save credentials";
   webetuRevokeButton.hidden = !status.configured;
 }
@@ -2738,6 +3210,7 @@ webetuRevokeButton.addEventListener("click", async function() {
 
 loadWebetuStatus().catch(function(err) {
   setPill(webetuStatus, "Unavailable", "error");
+  setPill(whatsappStatus, "WhatsApp: Unavailable", "error");
   setMessage(webetuMessage, err.message || "Could not load credential status.", "error");
 });
 </script>
@@ -2758,6 +3231,7 @@ async function route(req, res) {
   if (isRead && pathname === "/login") return htmlResponse(res, 200, loginPage());
   if (isRead && pathname === "/auth/firebase/finish") return htmlResponse(res, 200, firebaseFinishPage());
   if (isRead && pathname === "/job-scout/setup") return handleJobScoutSetup(req, res, url);
+  if (isRead && pathname === "/account-link/setup") return handleAccountLinkSetup(req, res, url);
   if (isRead && pathname === "/privacy-policy") return htmlResponse(res, 200, privacyPolicyPage());
   if (isRead && pathname === "/connect-gmail") return redirectToScopedPath(req, res, "/connect-gmail");
   if (isRead && pathname === "/vault") return redirectToScopedPath(req, res, "/vault");
@@ -2783,6 +3257,7 @@ async function route(req, res) {
   if (req.method === "GET" && pathname === "/auth/google/callback") return handleCallback(req, res, url);
   if (req.method === "GET" && pathname === "/auth/google/status") return handleStatus(req, res);
   if (req.method === "POST" && pathname === "/auth/google/revoke") return handleRevoke(req, res);
+  if (req.method === "GET" && pathname === "/account/status") return handleAccountStatus(req, res);
   if (req.method === "GET" && pathname === "/webetu/credentials/status") return handleWebetuCredentialStatus(req, res);
   if (req.method === "POST" && pathname === "/webetu/credentials") return handleSaveWebetuCredentials(req, res);
   if (req.method === "POST" && pathname === "/webetu/credentials/revoke") return handleRevokeWebetuCredentials(req, res);
@@ -2795,6 +3270,8 @@ async function route(req, res) {
   if (req.method === "POST" && pathname === "/internal/central-data/backfill") {
     return handleInternalCentralDataBackfill(req, res);
   }
+  if (req.method === "POST" && pathname === "/internal/account-link/invite") return handleInternalAccountLinkInvite(req, res);
+  if (req.method === "GET" && pathname === "/internal/account-link/status") return handleInternalAccountLinkStatus(req, res, url);
   if (req.method === "POST" && pathname === "/internal/job-scout/invite") return handleInternalJobScoutInvite(req, res);
   if (req.method === "POST" && pathname === "/internal/job-scout/profile") return handleInternalJobScoutProfile(req, res);
   if (req.method === "GET" && pathname === "/internal/job-scout/subscribers") {
