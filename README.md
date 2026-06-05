@@ -29,6 +29,10 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `GET /webetu/credentials/status` checks whether the signed-in user has saved Webetu credentials.
 - `POST /webetu/credentials` encrypts and saves the signed-in user's Webetu username/password.
 - `POST /webetu/credentials/revoke` revokes the signed-in user's stored Webetu credentials.
+- `GET /internal/webetu/restaurants` lists supported Webetu restaurant names.
+- `GET /internal/webetu/preferences?phone=...` reads a linked user's Webetu restaurant preference.
+- `POST /internal/webetu/preferences/default` saves a confirmed default restaurant for a linked WhatsApp phone.
+- `POST /internal/webetu/preferences/override` saves a confirmed one-day restaurant override.
 - `/gmail/send` sends Gmail for the signed-in Firebase user only when `confirm` is `true`.
 
 Internal routes require `Authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY`:
@@ -80,6 +84,10 @@ Enable Firestore for the same Firebase project. Agent Genaie writes central reco
 - `serviceSubscriptions`
 - `credentialRefs`
 - `gmailConnections`
+- `phoneLinks`
+- `webetuUsers`
+- `webetuRestaurantCatalog`
+- `webetuRestaurantOverrides`
 
 Gmail OAuth tokens remain in the local encrypted token store for the live send path and are mirrored into Firestore as encrypted `credentialRefs` records. Webetu credentials saved through the dashboard are stored only as encrypted `credentialRefs` records. Firestore encrypted blobs use `CENTRAL_DATA_ENCRYPTION_SECRET`, which must be treated as a production secret and kept stable.
 

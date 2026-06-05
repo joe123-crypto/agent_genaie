@@ -22,6 +22,14 @@ const SESSION_COOKIE_NAME = "agent_genaie_session";
 const SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
 const JOB_SCOUT_SETUP_TTL_SECONDS = 24 * 60 * 60;
 const ACCOUNT_LINK_SETUP_TTL_SECONDS = 24 * 60 * 60;
+const WEBETU_FALLBACK_RESTAURANT = Object.freeze({
+  catalogId: "bab-ezzouar-03",
+  name: "الإقامة الجامعية 03 باب الزوار",
+  idDepot: 190,
+  residence: 5185801,
+  wilaya: null,
+  active: true,
+});
 
 function loadDotEnv() {
   const envPath = path.join(rootDir, ".env");
@@ -275,6 +283,112 @@ function normalizeWebetuCredentials(input = {}) {
   return { username, password };
 }
 
+function normalizeRestaurantLookup(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function normalizeRestaurantDate(value) {
+  const text = String(value ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw httpError(400, "date must be YYYY-MM-DD.");
+  const date = new Date(`${text}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text) {
+    throw httpError(400, "date must be a valid calendar date.");
+  }
+  return text;
+}
+
+function webetuRestaurantOverrideId(userId, date) {
+  return `${validateFirebaseUid(userId)}_${normalizeRestaurantDate(date)}`;
+}
+
+function builtInWebetuRestaurants() {
+  return [WEBETU_FALLBACK_RESTAURANT];
+}
+
+function publicRestaurantFields(entry) {
+  if (!entry) return null;
+  return {
+    catalogId: entry.catalogId ?? null,
+    name: entry.name ?? "",
+  };
+}
+
+function storedRestaurantFields(entry, source = "catalog") {
+  if (!entry || !entry.name || !entry.idDepot) throw httpError(400, "Restaurant catalog entry is incomplete.");
+  return {
+    catalogId: entry.catalogId,
+    name: entry.name,
+    idDepot: Number(entry.idDepot),
+    residence: entry.residence == null ? null : Number(entry.residence),
+    wilaya: entry.wilaya == null ? null : String(entry.wilaya),
+    source,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+}
+
+async function ensureWebetuRestaurantCatalog() {
+  const db = getFirestoreDb();
+  const batch = db.batch();
+  let writes = 0;
+  for (const restaurant of builtInWebetuRestaurants()) {
+    const ref = db.collection("webetuRestaurantCatalog").doc(restaurant.catalogId);
+    const snap = await ref.get();
+    if (snap.exists) continue;
+    batch.set(
+      ref,
+      {
+        ...restaurant,
+        searchName: normalizeRestaurantLookup(restaurant.name),
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    writes += 1;
+  }
+  if (writes > 0) await batch.commit();
+}
+
+async function listWebetuRestaurantCatalog() {
+  await ensureWebetuRestaurantCatalog();
+  const snapshot = await getFirestoreDb().collection("webetuRestaurantCatalog").where("active", "==", true).get();
+  const restaurants = [];
+  const seen = new Set();
+  for (const restaurant of builtInWebetuRestaurants()) {
+    restaurants.push({ ...restaurant, searchName: normalizeRestaurantLookup(restaurant.name) });
+    seen.add(restaurant.catalogId);
+  }
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    if (seen.has(doc.id)) continue;
+    if (!data?.name || !data?.idDepot) continue;
+    restaurants.push({
+      catalogId: data.catalogId ?? doc.id,
+      name: String(data.name),
+      idDepot: Number(data.idDepot),
+      residence: data.residence == null ? null : Number(data.residence),
+      wilaya: data.wilaya == null ? null : String(data.wilaya),
+      active: data.active !== false,
+      searchName: data.searchName ?? normalizeRestaurantLookup(data.name),
+    });
+  }
+  restaurants.sort((a, b) => String(a.name).localeCompare(String(b.name), "ar"));
+  return restaurants;
+}
+
+async function resolveWebetuRestaurant(input) {
+  const lookup = normalizeRestaurantLookup(input);
+  if (!lookup) throw httpError(400, "restaurant is required.");
+  const restaurants = await listWebetuRestaurantCatalog();
+  const match = restaurants.find(
+    (entry) => normalizeRestaurantLookup(entry.catalogId) === lookup || normalizeRestaurantLookup(entry.name) === lookup,
+  );
+  if (!match) {
+    throw httpError(404, "Restaurant is not supported yet. Ask for the supported restaurant list.");
+  }
+  return match;
+}
+
 function usernameHash(username) {
   return crypto.createHash("sha256").update(`webetu:${String(username ?? "").trim()}`).digest("hex").slice(0, 16);
 }
@@ -512,6 +626,7 @@ async function getWebetuCredentialStatus(uid) {
     maskedPhone: phone ? maskPhone(phone) : null,
     phoneHash: phoneHash ? String(phoneHash).slice(0, 12) : null,
     webetuStatus: webetuData?.status ?? null,
+    ...webetuPreferencesFromData(webetuData),
   };
   if (!snap.exists) {
     return {
@@ -1071,6 +1186,115 @@ async function getAccountLinkStatusForPhone(phoneInput) {
     publicUserId: user?.publicUserId ?? null,
     email: user?.profile?.email ?? null,
     status: "linked",
+  };
+}
+
+async function getLinkedUserForWebetuPhone(phoneInput) {
+  const status = await getAccountLinkStatusForPhone(phoneInput);
+  if (!status.linked || !status.userId) {
+    throw httpError(404, "This WhatsApp phone is not linked to an app account yet.");
+  }
+  return status;
+}
+
+function webetuPreferencesFromData(data) {
+  const preferences = data?.preferences && typeof data.preferences === "object" ? data.preferences : {};
+  const restaurant = preferences.defaultRestaurant && typeof preferences.defaultRestaurant === "object"
+    ? preferences.defaultRestaurant
+    : null;
+  return {
+    defaultRestaurant: publicRestaurantFields(restaurant),
+  };
+}
+
+async function getWebetuPreferencesForPhone(phoneInput) {
+  const linked = await getLinkedUserForWebetuPhone(phoneInput);
+  const webetuSnap = await getFirestoreDb().collection("webetuUsers").doc(linked.userId).get();
+  const webetuData = webetuSnap.exists ? webetuSnap.data() : {};
+  return {
+    linked: true,
+    maskedPhone: linked.maskedPhone,
+    userId: linked.userId,
+    publicUserId: linked.publicUserId ?? null,
+    email: linked.email ?? null,
+    webetuStatus: webetuData?.status ?? null,
+    ...webetuPreferencesFromData(webetuData),
+  };
+}
+
+async function setWebetuDefaultRestaurantForPhone(body) {
+  const linked = await getLinkedUserForWebetuPhone(body.phone);
+  const restaurant = await resolveWebetuRestaurant(body.restaurant);
+  const db = getFirestoreDb();
+  const ref = db.collection("webetuUsers").doc(linked.userId);
+  const snap = await ref.get();
+  const existing = snap.exists ? snap.data() : {};
+  const preferences = existing?.preferences && typeof existing.preferences === "object" ? existing.preferences : {};
+  const now = FieldValue.serverTimestamp();
+  const webetuStatus = existing?.status ?? "pending_credentials";
+  await ref.set(
+    {
+      webetuUserId: linked.userId,
+      userId: linked.userId,
+      firebaseUid: linked.userId,
+      publicUserId: linked.publicUserId ?? null,
+      profileRef: `users/${linked.userId}`,
+      status: webetuStatus,
+      preferences: {
+        ...preferences,
+        defaultRestaurant: storedRestaurantFields(restaurant, "agent_confirmed"),
+      },
+      delivery: {
+        ...(existing?.delivery && typeof existing.delivery === "object" ? existing.delivery : {}),
+        channel: "whatsapp",
+        phoneLinkRef: `phoneLinks/${linked.phoneHash}`,
+        phoneHash: linked.phoneHash,
+      },
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      disabledAt: existing?.disabledAt ?? null,
+    },
+    { merge: true },
+  );
+  return {
+    linked: true,
+    maskedPhone: linked.maskedPhone,
+    userId: linked.userId,
+    publicUserId: linked.publicUserId ?? null,
+    defaultRestaurant: publicRestaurantFields(restaurant),
+    status: "saved",
+  };
+}
+
+async function setWebetuRestaurantOverrideForPhone(body) {
+  const linked = await getLinkedUserForWebetuPhone(body.phone);
+  const date = normalizeRestaurantDate(body.date);
+  const restaurant = await resolveWebetuRestaurant(body.restaurant);
+  const db = getFirestoreDb();
+  const ref = db.collection("webetuRestaurantOverrides").doc(webetuRestaurantOverrideId(linked.userId, date));
+  const existing = await ref.get();
+  const now = FieldValue.serverTimestamp();
+  await ref.set(
+    {
+      overrideId: ref.id,
+      userId: linked.userId,
+      date,
+      restaurant: storedRestaurantFields(restaurant, "agent_confirmed"),
+      status: "active",
+      source: "agent_confirmed",
+      createdAt: existing.exists ? existing.data()?.createdAt ?? now : now,
+      updatedAt: now,
+    },
+    { merge: true },
+  );
+  return {
+    linked: true,
+    maskedPhone: linked.maskedPhone,
+    userId: linked.userId,
+    publicUserId: linked.publicUserId ?? null,
+    date,
+    restaurant: publicRestaurantFields(restaurant),
+    status: "saved",
   };
 }
 
@@ -2148,6 +2372,34 @@ async function handleInternalAccountLinkStatus(req, res, url) {
   jsonResponse(res, 200, { ok: true, ...status });
 }
 
+async function handleInternalWebetuRestaurants(req, res) {
+  verifyInternalApiKey(req);
+  const restaurants = (await listWebetuRestaurantCatalog()).map(publicRestaurantFields);
+  jsonResponse(res, 200, { ok: true, restaurants, count: restaurants.length });
+}
+
+async function handleInternalWebetuPreferences(req, res, url) {
+  verifyInternalApiKey(req);
+  const phone = url.searchParams.get("phone");
+  if (!phone) throw httpError(400, "phone is required.");
+  const preferences = await getWebetuPreferencesForPhone(phone);
+  jsonResponse(res, 200, { ok: true, ...preferences });
+}
+
+async function handleInternalWebetuDefaultRestaurant(req, res) {
+  verifyInternalApiKey(req);
+  const body = await readJsonBody(req);
+  const result = await setWebetuDefaultRestaurantForPhone(body);
+  jsonResponse(res, 200, { ok: true, ...result });
+}
+
+async function handleInternalWebetuRestaurantOverride(req, res) {
+  verifyInternalApiKey(req);
+  const body = await readJsonBody(req);
+  const result = await setWebetuRestaurantOverrideForPhone(body);
+  jsonResponse(res, 200, { ok: true, ...result });
+}
+
 async function handleInternalJobScoutProfile(req, res) {
   verifyInternalApiKey(req);
   const body = await readJsonBody(req);
@@ -2901,6 +3153,10 @@ function isPublicRoute(method, pathname) {
   if (method === "POST" && pathname === "/internal/central-data/backfill") return true;
   if (method === "POST" && pathname === "/internal/account-link/invite") return true;
   if (method === "GET" && pathname === "/internal/account-link/status") return true;
+  if (method === "GET" && pathname === "/internal/webetu/restaurants") return true;
+  if (method === "GET" && pathname === "/internal/webetu/preferences") return true;
+  if (method === "POST" && pathname === "/internal/webetu/preferences/default") return true;
+  if (method === "POST" && pathname === "/internal/webetu/preferences/override") return true;
   if (method === "POST" && pathname === "/internal/job-scout/invite") return true;
   if (method === "POST" && pathname === "/internal/job-scout/profile") return true;
   if (method === "GET" && pathname === "/internal/job-scout/subscribers") return true;
@@ -3049,6 +3305,10 @@ function vaultPage(publicUserId) {
       form{display:grid;gap:12px}
       input{width:100%;min-height:44px;border:1px solid #b9c3d1;border-radius:7px;padding:0 12px;font:inherit;background:#fff;color:var(--text)}
       input:focus{outline:3px solid rgba(47,116,208,.18);border-color:var(--blue)}
+      .password-field{position:relative;display:block}
+      .password-field input{padding-right:82px}
+      button.password-toggle{position:absolute;right:6px;top:50%;transform:translateY(-50%);min-height:32px;border-radius:6px;background:#eef2f7;color:#263142;border:1px solid #cbd5e1;padding:0 10px;font-size:.88rem;font-weight:800}
+      .password-toggle:hover:not(:disabled){filter:brightness(.96)}
       .status-pill{display:inline-flex;align-items:center;min-height:30px;border-radius:999px;border:1px solid #cbd5e1;background:#f8fafc;color:#303846;padding:0 10px;font-size:.88rem;font-weight:800;white-space:nowrap}
       .status-pill[data-tone="success"]{border-color:#7fc9a2;background:#eefaf3;color:var(--green)}
       .status-pill[data-tone="error"]{border-color:#f1a7a1;background:#fff1f0;color:#9f2419}
@@ -3089,7 +3349,10 @@ function vaultPage(publicUserId) {
             </label>
             <label>
               Webetu password
-              <input data-webetu-password name="password" type="password" autocomplete="current-password" maxlength="256" required>
+              <span class="password-field">
+                <input data-webetu-password name="password" type="password" autocomplete="current-password" maxlength="256" required>
+                <button class="password-toggle" data-webetu-password-toggle type="button" aria-label="Show Webetu password" aria-pressed="false">Show</button>
+              </span>
             </label>
             <div class="actions">
               <button data-webetu-save type="submit">Save credentials</button>
@@ -3106,6 +3369,7 @@ function vaultPage(publicUserId) {
 const webetuForm = document.querySelector("[data-webetu-form]");
 const webetuUsername = document.querySelector("[data-webetu-username]");
 const webetuPassword = document.querySelector("[data-webetu-password]");
+const webetuPasswordToggle = document.querySelector("[data-webetu-password-toggle]");
 const webetuSaveButton = document.querySelector("[data-webetu-save]");
 const webetuRevokeButton = document.querySelector("[data-webetu-revoke]");
 const webetuStatus = document.querySelector("[data-webetu-status]");
@@ -3126,6 +3390,13 @@ function setPill(el, label, tone) {
 function setBusy(value) {
   webetuSaveButton.disabled = value;
   webetuRevokeButton.disabled = value;
+}
+
+function setPasswordVisible(value) {
+  webetuPassword.type = value ? "text" : "password";
+  webetuPasswordToggle.textContent = value ? "Hide" : "Show";
+  webetuPasswordToggle.setAttribute("aria-label", value ? "Hide Webetu password" : "Show Webetu password");
+  webetuPasswordToggle.setAttribute("aria-pressed", value ? "true" : "false");
 }
 
 async function readJson(response) {
@@ -3179,6 +3450,7 @@ webetuForm.addEventListener("submit", async function(event) {
       })
     }));
     webetuPassword.value = "";
+    setPasswordVisible(false);
     setMessage(webetuMessage, "Webetu credentials saved.", "success");
     await loadWebetuStatus();
   } catch (err) {
@@ -3199,6 +3471,7 @@ webetuRevokeButton.addEventListener("click", async function() {
       body: "{}"
     }));
     webetuPassword.value = "";
+    setPasswordVisible(false);
     setMessage(webetuMessage, "Webetu credentials revoked.", "success");
     await loadWebetuStatus();
   } catch (err) {
@@ -3206,6 +3479,11 @@ webetuRevokeButton.addEventListener("click", async function() {
   } finally {
     setBusy(false);
   }
+});
+
+webetuPasswordToggle.addEventListener("click", function() {
+  setPasswordVisible(webetuPassword.type === "password");
+  webetuPassword.focus();
 });
 
 loadWebetuStatus().catch(function(err) {
@@ -3272,6 +3550,14 @@ async function route(req, res) {
   }
   if (req.method === "POST" && pathname === "/internal/account-link/invite") return handleInternalAccountLinkInvite(req, res);
   if (req.method === "GET" && pathname === "/internal/account-link/status") return handleInternalAccountLinkStatus(req, res, url);
+  if (req.method === "GET" && pathname === "/internal/webetu/restaurants") return handleInternalWebetuRestaurants(req, res);
+  if (req.method === "GET" && pathname === "/internal/webetu/preferences") return handleInternalWebetuPreferences(req, res, url);
+  if (req.method === "POST" && pathname === "/internal/webetu/preferences/default") {
+    return handleInternalWebetuDefaultRestaurant(req, res);
+  }
+  if (req.method === "POST" && pathname === "/internal/webetu/preferences/override") {
+    return handleInternalWebetuRestaurantOverride(req, res);
+  }
   if (req.method === "POST" && pathname === "/internal/job-scout/invite") return handleInternalJobScoutInvite(req, res);
   if (req.method === "POST" && pathname === "/internal/job-scout/profile") return handleInternalJobScoutProfile(req, res);
   if (req.method === "GET" && pathname === "/internal/job-scout/subscribers") {
