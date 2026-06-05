@@ -22,7 +22,7 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `/{publicUserId}/vault` signed-in Webetu credential vault.
 - `/{publicUserId}/onboarding` scoped compatibility route for the Webetu onboarding guide.
 - `/{publicUserId}/connect-gmail` authenticated Gmail connect/disconnect page.
-- `/` and `/connect-gmail` redirect signed-in users to their scoped `/{publicUserId}` route.
+- `/`, `/connect-gmail`, and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail OAuth for the signed-in Firebase user.
 - `/auth/google/status` checks Gmail connection for the signed-in Firebase user.
 - `/auth/google/revoke` revokes and removes stored Gmail tokens for the signed-in Firebase user.

@@ -1792,6 +1792,9 @@ async function handleJobScoutSetup(req, res, url) {
   const firebaseUser = req.firebaseUser ?? (await verifyFirebaseRequest(req));
   const token = url.searchParams.get("token");
   const result = await bindJobScoutInviteToUser(token, firebaseUser);
+  if (result.publicUserId) {
+    return redirectResponse(res, `/${validatePublicUserId(result.publicUserId)}/connect-gmail`);
+  }
   return htmlResponse(res, 200, jobScoutSetupPage(result));
 }
 
@@ -1908,12 +1911,34 @@ function jobScoutSetupPage(result) {
         <div class="meta">
           <div><strong>Status:</strong> ${escapeHtml(result.status)}</div>
         </div>
-        <p style="margin-top:18px">Next, connect Gmail so applications can be sent from your approved sender account. Then return to WhatsApp and send your job preferences plus CV.</p>
+        <p style="margin-top:18px">Next, connect Gmail so applications can be sent from your approved sender account. Then return to WhatsApp and choose guided questions or CV autofill.</p>
         <div class="actions">
           <a class="button" href="${escapeHtmlAttribute(connectPath)}">Connect Gmail</a>
         </div>`,
     "",
   );
+}
+
+function loginRedirectHelpersScript() {
+  return `const params = new URLSearchParams(window.location.search);
+
+function safeNext(value) {
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : "";
+}
+
+const nextPath = safeNext(params.get("next"));
+
+function destinationForSession(session) {
+  const publicUserId = session && session.publicUserId;
+  if (!publicUserId) return nextPath || "/";
+  if (!nextPath || nextPath === "/") return "/" + publicUserId;
+  const genericScopedMatch = nextPath.match(/^\\/(connect-gmail|vault|onboarding)\\/?(\\?.*)?$/);
+  if (genericScopedMatch) {
+    return "/" + publicUserId + "/" + genericScopedMatch[1] + (genericScopedMatch[2] || "");
+  }
+  return nextPath;
+}
+`;
 }
 
 function loginPage() {
@@ -1939,22 +1964,7 @@ const emailInput = document.querySelector("[data-email]");
 const submitButton = document.querySelector("[data-submit]");
 const statusEl = document.querySelector("[data-status]");
 const emailStorageKey = "agentGenaieEmailForSignIn";
-const params = new URLSearchParams(window.location.search);
-
-function safeNext(value) {
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : "";
-}
-
-const nextPath = safeNext(params.get("next"));
-
-function destinationForSession(session) {
-  const publicUserId = session && session.publicUserId;
-  if (!publicUserId) return nextPath || "/";
-  if (!nextPath || nextPath === "/") return "/" + publicUserId;
-  if (nextPath === "/connect-gmail") return "/" + publicUserId + "/connect-gmail";
-  if (nextPath === "/onboarding" || nextPath === "/onboarding/") return "/" + publicUserId + "/onboarding";
-  return nextPath;
-}
+${loginRedirectHelpersScript()}
 
 function emailLinkUrl(settings) {
   const url = new URL(settings.emailLinkUrl);
@@ -2060,23 +2070,8 @@ const emailInput = document.querySelector("[data-email]");
 const submitButton = document.querySelector("[data-submit]");
 const statusEl = document.querySelector("[data-status]");
 const emailStorageKey = "agentGenaieEmailForSignIn";
-const params = new URLSearchParams(window.location.search);
 let auth;
-
-function safeNext(value) {
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : "";
-}
-
-const nextPath = safeNext(params.get("next"));
-
-function destinationForSession(session) {
-  const publicUserId = session && session.publicUserId;
-  if (!publicUserId) return nextPath || "/";
-  if (!nextPath || nextPath === "/") return "/" + publicUserId;
-  if (nextPath === "/connect-gmail") return "/" + publicUserId + "/connect-gmail";
-  if (nextPath === "/onboarding" || nextPath === "/onboarding/") return "/" + publicUserId + "/onboarding";
-  return nextPath;
-}
+${loginRedirectHelpersScript()}
 
 async function createSession(user) {
   const idToken = await user.getIdToken(true);
@@ -2765,6 +2760,7 @@ async function route(req, res) {
   if (isRead && pathname === "/job-scout/setup") return handleJobScoutSetup(req, res, url);
   if (isRead && pathname === "/privacy-policy") return htmlResponse(res, 200, privacyPolicyPage());
   if (isRead && pathname === "/connect-gmail") return redirectToScopedPath(req, res, "/connect-gmail");
+  if (isRead && pathname === "/vault") return redirectToScopedPath(req, res, "/vault");
   if (isRead && pathname === "/config/firebase") return jsonResponse(res, 200, firebaseWebConfig());
   if (req.method === "POST" && pathname === "/auth/session") return handleCreateSession(req, res);
   if (req.method === "GET" && pathname === "/auth/session") return handleSessionStatus(req, res);
