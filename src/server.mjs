@@ -18,6 +18,7 @@ const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 const GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 const DEFAULT_PUBLIC_BASE_URL = "http://localhost:3010";
 const DEFAULT_PASSBOLT_PUBLIC_URL = "https://your-passbolt-domain.example";
+const DEFAULT_PENDING_LINKS_CACHE_PATH = "/home/joseph/.openclaw/workspace/account-link/pending-links.json";
 const SESSION_COOKIE_NAME = "agent_genaie_session";
 const SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
 const JOB_SCOUT_SETUP_TTL_SECONDS = 24 * 60 * 60;
@@ -81,6 +82,7 @@ const config = {
     process.env.OAUTH_STATE_SECRET ??
     process.env.TOKEN_ENCRYPTION_SECRET ??
     "",
+  pendingLinksCachePath: path.resolve(process.env.PENDING_LINKS_CACHE_PATH ?? DEFAULT_PENDING_LINKS_CACHE_PATH),
 };
 
 const contentTypes = new Map([
@@ -1005,11 +1007,70 @@ function accountLinkTokenHash(token) {
   return crypto.createHmac("sha256", config.accountLinkSetupSecret).update(String(token ?? "")).digest("hex");
 }
 
-function firestoreTimestampToIso(value) {
+function dateFromFirestore(value) {
   if (!value) return null;
-  if (typeof value.toDate === "function") return value.toDate().toISOString();
-  if (value instanceof Date) return value.toISOString();
-  return null;
+  if (typeof value.toDate === "function") return value.toDate();
+  if (value instanceof Date) return value;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function firestoreTimestampToIso(value) {
+  return dateFromFirestore(value)?.toISOString() ?? null;
+}
+
+function pendingCacheEntryIsUsable(entry, nowMs = Date.now()) {
+  if (!entry || typeof entry !== "object") return false;
+  if (typeof entry.setupUrl !== "string" || !entry.setupUrl.trim()) return false;
+  const expiresAt = new Date(entry.expiresAt ?? "");
+  return !Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() > nowMs;
+}
+
+async function readPendingLinksCache() {
+  try {
+    const raw = await fs.readFile(config.pendingLinksCachePath, "utf8");
+    const parsed = JSON.parse(raw);
+    const links = Array.isArray(parsed?.links) ? parsed.links : Array.isArray(parsed) ? parsed : [];
+    return links.filter((entry) => entry && typeof entry === "object");
+  } catch (err) {
+    if (err.code === "ENOENT") return [];
+    throw err;
+  }
+}
+
+async function writePendingLinksCache(links) {
+  await fs.mkdir(path.dirname(config.pendingLinksCachePath), { recursive: true });
+  const tmpPath = `${config.pendingLinksCachePath}.${process.pid}.tmp`;
+  const usableLinks = links.filter((entry) => pendingCacheEntryIsUsable(entry));
+  await fs.writeFile(
+    tmpPath,
+    `${JSON.stringify({ version: 1, links: usableLinks }, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+  await fs.rename(tmpPath, config.pendingLinksCachePath);
+}
+
+function pendingCacheEntryMatches(entry, criteria) {
+  if (!entry || typeof entry !== "object") return false;
+  if (criteria.phone && entry.phone !== normalizePhone(criteria.phone)) return false;
+  if (criteria.phoneHash && entry.phoneHash !== criteria.phoneHash) return false;
+  if (criteria.service && entry.service !== criteria.service) return false;
+  if (criteria.purpose && entry.purpose !== criteria.purpose) return false;
+  if (criteria.nextPath && entry.nextPath !== criteria.nextPath) return false;
+  return true;
+}
+
+async function removePendingLinksFromCache(criteria) {
+  try {
+    const links = await readPendingLinksCache();
+    const usableLinks = links.filter((entry) => pendingCacheEntryIsUsable(entry));
+    const remaining = usableLinks.filter((entry) => !pendingCacheEntryMatches(entry, criteria));
+    if (remaining.length !== links.length) {
+      await writePendingLinksCache(remaining);
+    }
+  } catch {
+    // Cache cleanup is a local convenience layer; Firestore remains canonical.
+  }
 }
 
 function normalizeAccountLinkPurpose(value) {
@@ -1037,22 +1098,40 @@ function scopedPathForAccountLink(nextPath, publicUserId) {
   return `/${id}`;
 }
 
+function isActivePhoneLink(data) {
+  return Boolean(data?.userId) && data.status !== "revoked" && !data.revokedAt;
+}
+
 async function writePhoneLinkForUser(db, user, phoneInput, options = {}) {
   const phone = normalizePhone(phoneInput);
   const phoneHash = whatsappPhoneHash(phone);
   const ref = db.collection("phoneLinks").doc(phoneHash);
-  const existing = await ref.get();
+  const [existing, activeUserLinks, identityMatches] = await Promise.all([
+    ref.get(),
+    db.collection("phoneLinks").where("userId", "==", user.uid).get(),
+    db.collection("users").where("identities.whatsappPhoneHash", "==", phoneHash).limit(5).get(),
+  ]);
   if (existing.exists) {
     const data = existing.data();
-    if (data?.userId && data.userId !== user.uid && !data?.revokedAt) {
+    if (data?.userId && data.userId !== user.uid && isActivePhoneLink(data)) {
       throw httpError(409, "This WhatsApp phone is already linked to another app account.");
     }
   }
+  for (const doc of identityMatches.docs) {
+    if (doc.id !== user.uid) {
+      throw httpError(409, "This WhatsApp phone is already linked to another app account.");
+    }
+  }
+
+  const previousActiveLinks = activeUserLinks.docs
+    .filter((doc) => doc.id !== phoneHash && isActivePhoneLink(doc.data()))
+    .map((doc) => ({ ref: doc.ref, data: doc.data() }));
 
   return {
     ref,
     phone,
     phoneHash,
+    previousActiveLinks,
     data: {
       phoneHash,
       phone,
@@ -1069,6 +1148,134 @@ async function writePhoneLinkForUser(db, user, phoneInput, options = {}) {
       revokedAt: null,
     },
   };
+}
+
+function queuePhoneLinkCoreWrites(batch, db, user, phoneLink, now) {
+  for (const previous of phoneLink.previousActiveLinks ?? []) {
+    batch.set(
+      previous.ref,
+      {
+        status: "revoked",
+        revokedAt: now,
+        revokedBy: user.uid,
+        revokedReason: "replaced_by_new_phone",
+        replacedByPhoneHash: phoneLink.phoneHash,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+  }
+
+  batch.set(phoneLink.ref, phoneLink.data, { merge: true });
+  batch.set(
+    db.collection("users").doc(user.uid),
+    {
+      updatedAt: now,
+      identities: {
+        whatsappPhone: phoneLink.phone,
+        whatsappPhoneHash: phoneLink.phoneHash,
+        whatsappPhoneLinkedAt: now,
+      },
+    },
+    { merge: true },
+  );
+}
+
+async function readPhoneDependencyState(db, userId) {
+  const webetuCredId = webetuCredentialRefId(userId);
+  const jobsSubId = serviceSubscriptionId(userId, "jobs");
+  const [webetuCredSnap, webetuSnap, jobsSubSnap] = await Promise.all([
+    db.collection("credentialRefs").doc(webetuCredId).get(),
+    db.collection("webetuUsers").doc(userId).get(),
+    db.collection("serviceSubscriptions").doc(jobsSubId).get(),
+  ]);
+  const webetuCred = webetuCredSnap.exists ? webetuCredSnap.data() : {};
+  return {
+    webetuCredId,
+    hasReadyWebetuCredential: webetuCred?.status === "ready" && Boolean(webetuCred?.encryptedSecret),
+    webetuSnap,
+    jobsSubId,
+    jobsSubSnap,
+  };
+}
+
+function queueWebetuPhoneDeliveryUpdate(batch, db, user, phoneLink, state, now, force = false) {
+  if (!force && !state.hasReadyWebetuCredential && !state.webetuSnap.exists) return;
+  const existing = state.webetuSnap.exists ? state.webetuSnap.data() : {};
+  const webetuStatus = state.hasReadyWebetuCredential ? "active" : existing?.status ?? "pending_credentials";
+  batch.set(
+    db.collection("webetuUsers").doc(user.uid),
+    {
+      webetuUserId: user.uid,
+      userId: user.uid,
+      firebaseUid: user.uid,
+      publicUserId: user.publicUserId ?? null,
+      profileRef: `users/${user.uid}`,
+      credentialRefId: state.webetuCredId,
+      credentialProvider: "firestore_encrypted",
+      status: webetuStatus,
+      delivery: {
+        ...(existing?.delivery && typeof existing.delivery === "object" ? existing.delivery : {}),
+        channel: "whatsapp",
+        phoneLinkRef: `phoneLinks/${phoneLink.phoneHash}`,
+        phoneHash: phoneLink.phoneHash,
+      },
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      disabledAt: null,
+    },
+    { merge: true },
+  );
+  batch.set(
+    db.collection("users").doc(user.uid),
+    {
+      updatedAt: now,
+      serviceStatus: {
+        webetu: webetuStatus,
+      },
+    },
+    { merge: true },
+  );
+}
+
+function queueJobScoutPhoneDeliveryUpdate(batch, db, user, phoneLink, state, now, force = false) {
+  if (!force && !state.jobsSubSnap.exists) return;
+  const existing = state.jobsSubSnap.exists ? state.jobsSubSnap.data() : {};
+  const metadata = existing?.metadata && typeof existing.metadata === "object" ? existing.metadata : {};
+  const preferences = existing?.preferences && typeof existing.preferences === "object" ? existing.preferences : {};
+  const status = existing?.status === "active" ? "active" : "pending";
+  const setupStatus = metadata.setupStatus ?? (metadata.cvFileRef ? "profile_saved" : "linked");
+  batch.set(
+    db.collection("serviceSubscriptions").doc(state.jobsSubId),
+    {
+      subscriptionId: state.jobsSubId,
+      userId: user.uid,
+      service: "jobs",
+      status,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      preferences,
+      metadata: {
+        ...metadata,
+        whatsappPhone: phoneLink.phone,
+        whatsappPhoneHash: phoneLink.phoneHash,
+        phoneLinkRef: `phoneLinks/${phoneLink.phoneHash}`,
+        setupStatus,
+        linkedAt: metadata.linkedAt ?? now,
+      },
+    },
+    { merge: true },
+  );
+  batch.set(
+    db.collection("users").doc(user.uid),
+    {
+      updatedAt: now,
+      serviceStatus: {
+        jobs: status,
+      },
+    },
+    { merge: true },
+  );
 }
 
 async function createAccountLinkInvite(body) {
@@ -1112,7 +1319,9 @@ async function getAccountLinkInvite(token) {
   const snap = await ref.get();
   if (!snap.exists) throw httpError(404, "Account link was not found.");
   const data = snap.data();
-  const expiresAt = data?.expiresAt?.toDate?.() ?? null;
+  if (data?.usedAt || data?.status === "used") throw httpError(410, "Account link has already been used.");
+  if (data?.status && data.status !== "created") throw httpError(410, "Account link is no longer active.");
+  const expiresAt = dateFromFirestore(data?.expiresAt);
   if (!expiresAt || expiresAt.getTime() < Date.now()) throw httpError(410, "Account link expired.");
   return { ref, data };
 }
@@ -1127,24 +1336,10 @@ async function bindAccountLinkInviteToUser(token, firebaseUser) {
     purpose,
     source: "account_link_invite",
   });
-  const webetuCredId = webetuCredentialRefId(user.uid);
-  const webetuCredSnap = await db.collection("credentialRefs").doc(webetuCredId).get();
-  const hasReadyWebetuCredential = webetuCredSnap.exists && webetuCredSnap.data()?.status === "ready" && Boolean(webetuCredSnap.data()?.encryptedSecret);
+  const dependencyState = await readPhoneDependencyState(db, user.uid);
   const batch = db.batch();
 
-  batch.set(phoneLink.ref, phoneLink.data, { merge: true });
-  batch.set(
-    db.collection("users").doc(user.uid),
-    {
-      updatedAt: now,
-      identities: {
-        whatsappPhone: phoneLink.phone,
-        whatsappPhoneHash: phoneLink.phoneHash,
-        whatsappPhoneLinkedAt: now,
-      },
-    },
-    { merge: true },
-  );
+  queuePhoneLinkCoreWrites(batch, db, user, phoneLink, now);
   batch.set(
     ref,
     {
@@ -1155,42 +1350,11 @@ async function bindAccountLinkInviteToUser(token, firebaseUser) {
     },
     { merge: true },
   );
-  if (purpose === "webetu" || hasReadyWebetuCredential) {
-    const webetuStatus = hasReadyWebetuCredential ? "active" : "pending_credentials";
-    batch.set(
-      db.collection("webetuUsers").doc(user.uid),
-      {
-        webetuUserId: user.uid,
-        userId: user.uid,
-        firebaseUid: user.uid,
-        publicUserId: user.publicUserId ?? null,
-        profileRef: `users/${user.uid}`,
-        credentialRefId: webetuCredId,
-        credentialProvider: "firestore_encrypted",
-        status: webetuStatus,
-        delivery: {
-          channel: "whatsapp",
-          phoneLinkRef: `phoneLinks/${phoneLink.phoneHash}`,
-          phoneHash: phoneLink.phoneHash,
-        },
-        updatedAt: now,
-        disabledAt: null,
-      },
-      { merge: true },
-    );
-    batch.set(
-      db.collection("users").doc(user.uid),
-      {
-        updatedAt: now,
-        serviceStatus: {
-          webetu: webetuStatus,
-        },
-      },
-      { merge: true },
-    );
-  }
+  queueWebetuPhoneDeliveryUpdate(batch, db, user, phoneLink, dependencyState, now, purpose === "webetu");
+  queueJobScoutPhoneDeliveryUpdate(batch, db, user, phoneLink, dependencyState, now, purpose === "jobs");
 
   await batch.commit();
+  await removePendingLinksFromCache({ phone: phoneLink.phone, service: "account-link" });
   return {
     userId: user.uid,
     publicUserId: user.publicUserId ?? null,
@@ -1424,7 +1588,9 @@ async function getJobScoutInvite(token) {
   const snap = await ref.get();
   if (!snap.exists) throw httpError(404, "Job Scout setup link was not found.");
   const data = snap.data();
-  const expiresAt = data?.expiresAt?.toDate?.() ?? null;
+  if (data?.usedAt || data?.status === "used") throw httpError(410, "Job Scout setup link has already been used.");
+  if (data?.status && data.status !== "created") throw httpError(410, "Job Scout setup link is no longer active.");
+  const expiresAt = dateFromFirestore(data?.expiresAt);
   if (!expiresAt || expiresAt.getTime() < Date.now()) throw httpError(410, "Job Scout setup link expired.");
   return { ref, data };
 }
@@ -1432,57 +1598,22 @@ async function getJobScoutInvite(token) {
 async function bindJobScoutInviteToUser(token, firebaseUser) {
   const { ref, data } = await getJobScoutInvite(token);
   const phone = normalizePhone(data.phone);
-  const phoneHash = data.phoneHash || whatsappPhoneHash(phone);
   const user = await syncUserToCentralData(firebaseUser.uid);
   const db = getFirestoreDb();
   const now = FieldValue.serverTimestamp();
-  const subId = serviceSubscriptionId(user.uid, "jobs");
-  const subRef = db.collection("serviceSubscriptions").doc(subId);
-  const existingSub = await subRef.get();
-  const existing = existingSub.exists ? existingSub.data() : {};
-  const existingMetadata = existing?.metadata && typeof existing.metadata === "object" ? existing.metadata : {};
-  const existingPreferences = existing?.preferences && typeof existing.preferences === "object" ? existing.preferences : {};
-  const setupStatus = existingMetadata.cvFileRef ? "profile_saved" : "linked";
   const phoneLink = await writePhoneLinkForUser(db, user, phone, {
     purpose: "jobs",
     source: "job_scout_invite",
   });
+  const dependencyState = await readPhoneDependencyState(db, user.uid);
+  const existing = dependencyState.jobsSubSnap.exists ? dependencyState.jobsSubSnap.data() : {};
+  const existingMetadata = existing?.metadata && typeof existing.metadata === "object" ? existing.metadata : {};
+  const setupStatus = existingMetadata.cvFileRef ? "profile_saved" : "linked";
   const batch = db.batch();
 
-  batch.set(phoneLink.ref, phoneLink.data, { merge: true });
-
-  batch.set(
-    db.collection("users").doc(user.uid),
-    {
-      updatedAt: now,
-      identities: {
-        whatsappPhone: phone,
-        whatsappPhoneHash: phoneHash,
-      },
-    },
-    { merge: true },
-  );
-
-  batch.set(
-    subRef,
-    {
-      subscriptionId: subId,
-      userId: user.uid,
-      service: "jobs",
-      status: existing?.status === "active" ? "active" : "pending",
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      preferences: existingPreferences,
-      metadata: {
-        ...existingMetadata,
-        whatsappPhone: phone,
-        whatsappPhoneHash: phoneHash,
-        setupStatus,
-        linkedAt: now,
-      },
-    },
-    { merge: true },
-  );
+  queuePhoneLinkCoreWrites(batch, db, user, phoneLink, now);
+  queueWebetuPhoneDeliveryUpdate(batch, db, user, phoneLink, dependencyState, now);
+  queueJobScoutPhoneDeliveryUpdate(batch, db, user, phoneLink, dependencyState, now, true);
 
   batch.set(
     ref,
@@ -1496,7 +1627,15 @@ async function bindJobScoutInviteToUser(token, firebaseUser) {
   );
 
   await batch.commit();
-  return { userId: user.uid, publicUserId: user.publicUserId ?? null, email: user.email ?? null, phoneHash, status: setupStatus };
+  await removePendingLinksFromCache({ phone: phoneLink.phone, service: "job-scout" });
+  return {
+    userId: user.uid,
+    publicUserId: user.publicUserId ?? null,
+    email: user.email ?? null,
+    phoneHash: phoneLink.phoneHash,
+    maskedPhone: maskPhone(phoneLink.phone),
+    status: setupStatus,
+  };
 }
 
 async function findJobScoutUserByPhone(phoneInput) {
@@ -2439,6 +2578,7 @@ async function handleInternalAccountLinkStatus(req, res, url) {
   const phone = url.searchParams.get("phone");
   if (!phone) throw httpError(400, "phone is required.");
   const status = await getAccountLinkStatusForPhone(phone);
+  if (status.linked) await removePendingLinksFromCache({ phone, service: "account-link" });
   jsonResponse(res, 200, { ok: true, ...status });
 }
 
@@ -2496,10 +2636,56 @@ async function handleInternalJobScoutApplications(req, res, url) {
   return jsonResponse(res, 200, { ok: true, ...result });
 }
 
+async function accountLinkSetupDetails(token, firebaseUser) {
+  const { data } = await getAccountLinkInvite(token);
+  const user = await syncUserToCentralData(firebaseUser.uid);
+  return {
+    token: String(token ?? "").trim(),
+    email: user.email ?? firebaseUser.email ?? null,
+    maskedPhone: maskPhone(data.phone),
+    purpose: normalizeAccountLinkPurpose(data.purpose),
+    nextPath: normalizeAccountLinkNextPath(data.nextPath),
+  };
+}
+
+async function jobScoutSetupDetails(token, firebaseUser) {
+  const { data } = await getJobScoutInvite(token);
+  const user = await syncUserToCentralData(firebaseUser.uid);
+  return {
+    token: String(token ?? "").trim(),
+    email: user.email ?? firebaseUser.email ?? null,
+    maskedPhone: maskPhone(data.phone),
+  };
+}
+
 async function handleJobScoutSetup(req, res, url) {
   const firebaseUser = req.firebaseUser ?? (await verifyFirebaseRequest(req));
   const token = url.searchParams.get("token");
-  const result = await bindJobScoutInviteToUser(token, firebaseUser);
+  const details = await jobScoutSetupDetails(token, firebaseUser);
+  return htmlResponse(res, 200, jobScoutConfirmPage(details));
+}
+
+async function handleJobScoutSetupConfirm(req, res, url) {
+  const firebaseUser = req.firebaseUser ?? (await verifyFirebaseRequest(req));
+  const token = url.searchParams.get("token");
+  const details = await jobScoutSetupDetails(token, firebaseUser);
+  let result;
+  try {
+    result = await bindJobScoutInviteToUser(token, firebaseUser);
+  } catch (err) {
+    if (err.status === 409) {
+      return htmlResponse(
+        res,
+        409,
+        setupConflictPage({
+          ...details,
+          setupPath: "/job-scout/setup",
+          purposeLabel: "Job Scout",
+        }),
+      );
+    }
+    throw err;
+  }
   if (result.publicUserId) {
     return redirectResponse(res, `/${validatePublicUserId(result.publicUserId)}/connect-gmail`);
   }
@@ -2509,7 +2695,31 @@ async function handleJobScoutSetup(req, res, url) {
 async function handleAccountLinkSetup(req, res, url) {
   const firebaseUser = req.firebaseUser ?? (await verifyFirebaseRequest(req));
   const token = url.searchParams.get("token");
-  const result = await bindAccountLinkInviteToUser(token, firebaseUser);
+  const details = await accountLinkSetupDetails(token, firebaseUser);
+  return htmlResponse(res, 200, accountLinkConfirmPage(details));
+}
+
+async function handleAccountLinkSetupConfirm(req, res, url) {
+  const firebaseUser = req.firebaseUser ?? (await verifyFirebaseRequest(req));
+  const token = url.searchParams.get("token");
+  const details = await accountLinkSetupDetails(token, firebaseUser);
+  let result;
+  try {
+    result = await bindAccountLinkInviteToUser(token, firebaseUser);
+  } catch (err) {
+    if (err.status === 409) {
+      return htmlResponse(
+        res,
+        409,
+        setupConflictPage({
+          ...details,
+          setupPath: "/account-link/setup",
+          purposeLabel: setupPurposeLabel(details.purpose),
+        }),
+      );
+    }
+    throw err;
+  }
   if (result.publicUserId) {
     return redirectResponse(res, scopedPathForAccountLink(result.nextPath, result.publicUserId));
   }
@@ -2645,6 +2855,116 @@ function jobScoutSetupPage(result) {
           <a class="button" href="${escapeHtmlAttribute(connectPath)}">Connect Gmail</a>
         </div>`,
     "",
+  );
+}
+
+function setupPurposeLabel(purpose) {
+  const normalized = normalizeAccountLinkPurpose(purpose);
+  if (normalized === "webetu") return "Webetu meal reservations";
+  if (normalized === "jobs") return "Job Scout";
+  if (normalized === "news") return "Personalized news";
+  if (normalized === "account") return "Account link";
+  return normalized.replace(/[_-]+/g, " ");
+}
+
+function setupSwitchAccountScript(loginNext) {
+  return `<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+const switchButton = document.querySelector("[data-switch-account]");
+async function signOutFirebase() {
+  const response = await fetch("/config/firebase");
+  const settings = await response.json().catch(function() { return {}; });
+  if (!settings.configured) return;
+  const app = initializeApp(settings.firebase);
+  await signOut(getAuth(app));
+}
+if (switchButton) {
+  switchButton.addEventListener("click", async function() {
+    switchButton.disabled = true;
+    try {
+      await fetch("/auth/session/logout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: "{}"
+      });
+    } catch {}
+    try {
+      await signOutFirebase();
+    } catch {}
+    window.location.assign(${JSON.stringify(`/login?next=${encodeURIComponent(loginNext)}`)});
+  });
+}
+</script>`;
+}
+
+function accountLinkConfirmPage(details) {
+  const setupPath = `/account-link/setup?token=${encodeURIComponent(details.token)}`;
+  const confirmPath = `/account-link/setup/confirm?token=${encodeURIComponent(details.token)}`;
+  return authPage(
+    "Confirm account link",
+    `<a class="toplink" href="/">Back to app</a>
+        <h1>Confirm account link</h1>
+        <p>Confirm before linking this WhatsApp chat to the signed-in app account.</p>
+        <div class="meta">
+          <div><strong>Signed-in email:</strong> ${escapeHtml(details.email ?? "Unknown email")}</div>
+          <div><strong>WhatsApp:</strong> ${escapeHtml(details.maskedPhone)}</div>
+          <div><strong>Purpose:</strong> ${escapeHtml(setupPurposeLabel(details.purpose))}</div>
+        </div>
+        <div class="actions">
+          <form method="post" action="${escapeHtmlAttribute(confirmPath)}">
+            <button type="submit">Confirm and link</button>
+          </form>
+          <button class="secondary" data-switch-account type="button">Use a different Google account</button>
+          <a class="button secondary" href="/">Cancel</a>
+        </div>`,
+    setupSwitchAccountScript(setupPath),
+  );
+}
+
+function jobScoutConfirmPage(details) {
+  const setupPath = `/job-scout/setup?token=${encodeURIComponent(details.token)}`;
+  const confirmPath = `/job-scout/setup/confirm?token=${encodeURIComponent(details.token)}`;
+  return authPage(
+    "Confirm Job Scout setup",
+    `<a class="toplink" href="/">Back to app</a>
+        <h1>Confirm Job Scout setup</h1>
+        <p>Confirm before linking this WhatsApp chat to the signed-in app account for Job Scout.</p>
+        <div class="meta">
+          <div><strong>Signed-in email:</strong> ${escapeHtml(details.email ?? "Unknown email")}</div>
+          <div><strong>WhatsApp:</strong> ${escapeHtml(details.maskedPhone)}</div>
+          <div><strong>Purpose:</strong> Job Scout</div>
+        </div>
+        <div class="actions">
+          <form method="post" action="${escapeHtmlAttribute(confirmPath)}">
+            <button type="submit">Confirm and link</button>
+          </form>
+          <button class="secondary" data-switch-account type="button">Use a different Google account</button>
+          <a class="button secondary" href="/">Cancel</a>
+        </div>`,
+    setupSwitchAccountScript(setupPath),
+  );
+}
+
+function setupConflictPage(details) {
+  const setupPath = `${details.setupPath}?token=${encodeURIComponent(details.token)}`;
+  return authPage(
+    "WhatsApp already linked",
+    `<a class="toplink" href="/">Back to app</a>
+        <h1>WhatsApp already linked</h1>
+        <p>This WhatsApp phone is already linked to another app account. Nothing was changed.</p>
+        <div class="meta">
+          <div><strong>Signed-in email:</strong> ${escapeHtml(details.email ?? "Unknown email")}</div>
+          <div><strong>WhatsApp:</strong> ${escapeHtml(details.maskedPhone ?? "this WhatsApp phone")}</div>
+          <div><strong>Purpose:</strong> ${escapeHtml(details.purposeLabel)}</div>
+        </div>
+        <div class="actions">
+          <button class="secondary" data-switch-account type="button">Use a different Google account</button>
+          <a class="button secondary" href="/">Cancel</a>
+        </div>`,
+    setupSwitchAccountScript(setupPath),
   );
 }
 
@@ -3655,6 +3975,8 @@ async function route(req, res) {
   if (isRead && pathname === "/auth/firebase/finish") return htmlResponse(res, 200, firebaseFinishPage());
   if (isRead && pathname === "/job-scout/setup") return handleJobScoutSetup(req, res, url);
   if (isRead && pathname === "/account-link/setup") return handleAccountLinkSetup(req, res, url);
+  if (req.method === "POST" && pathname === "/job-scout/setup/confirm") return handleJobScoutSetupConfirm(req, res, url);
+  if (req.method === "POST" && pathname === "/account-link/setup/confirm") return handleAccountLinkSetupConfirm(req, res, url);
   if (isRead && pathname === "/privacy-policy") return htmlResponse(res, 200, privacyPolicyPage());
   if (isRead && pathname === "/connect-gmail") return redirectToScopedPath(req, res, "/connect-gmail");
   if (isRead && pathname === "/vault") return redirectToScopedPath(req, res, "/vault");
