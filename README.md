@@ -6,7 +6,7 @@ Agent Genaie is a Node service for user onboarding, Firebase-backed login, Gmail
 
 Public routes:
 
-- `/login` starts Firebase passwordless email-link sign-in.
+- `/login` supports Firebase Google Sign-In and passwordless email-link sign-in.
 - `/auth/firebase/finish` completes Firebase email-link sign-in and creates the server session cookie.
 - `/auth/session` creates or checks the Firebase-backed server session.
 - `/auth/session/logout` clears the server session cookie.
@@ -66,10 +66,12 @@ https://www.googleapis.com/auth/gmail.send
 In Firebase Console:
 
 1. Enable Authentication -> Sign-in method -> Email/Password -> Email link.
-2. Add your app domain as an authorized domain.
-3. Create a web app and copy its `apiKey`, `authDomain`, `projectId`, and `appId`.
-4. Create a service account key JSON file from Project settings -> Service accounts.
-5. Base64 encode the service account JSON:
+2. Enable Authentication -> Sign-in method -> Google.
+3. Keep same-email account linking enabled so Google and email-link sign-ins attach to the same Firebase user when the email matches.
+4. Add your app domain as an authorized domain.
+5. Create a web app and copy its `apiKey`, `authDomain`, `projectId`, and `appId`.
+6. Create a service account key JSON file from Project settings -> Service accounts.
+7. Base64 encode the service account JSON:
 
 ```bash
 base64 -w0 /path/to/firebase-service-account.json
@@ -124,6 +126,7 @@ export PORT=3010
 `OWNER_FIREBASE_UID` must be the Firebase UID of the fallback owner account whose Gmail is connected at `/{publicUserId}/connect-gmail`.
 
 After login, the app sets an HttpOnly `agent_genaie_session` cookie that protects app pages server-side.
+Google Sign-In is only for app login. Gmail sending still requires the separate `/{publicUserId}/connect-gmail` authorization.
 
 ## Run
 

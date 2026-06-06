@@ -307,22 +307,62 @@ function builtInWebetuRestaurants() {
 
 function publicRestaurantFields(entry) {
   if (!entry) return null;
+  const name = entry.name ?? entry.nameAR ?? entry.nameFR ?? "";
   return {
     catalogId: entry.catalogId ?? null,
-    name: entry.name ?? "",
+    name,
+    nameAR: entry.nameAR ?? null,
+    nameFR: entry.nameFR ?? null,
+    breakfast: entry.breakfast == null ? null : Boolean(entry.breakfast),
+    lunch: entry.lunch == null ? null : Boolean(entry.lunch),
+    dinner: entry.dinner == null ? null : Boolean(entry.dinner),
   };
 }
 
 function storedRestaurantFields(entry, source = "catalog") {
-  if (!entry || !entry.name || !entry.idDepot) throw httpError(400, "Restaurant catalog entry is incomplete.");
+  if (!entry || !entry.name || !entry.idDepot) throw httpError(400, "Restaurant entry is incomplete.");
   return {
-    catalogId: entry.catalogId,
+    catalogId: entry.catalogId ?? `onou-depot-${Number(entry.idDepot)}`,
     name: entry.name,
+    nameAR: entry.nameAR ?? null,
+    nameFR: entry.nameFR ?? null,
     idDepot: Number(entry.idDepot),
     residence: entry.residence == null ? null : Number(entry.residence),
     wilaya: entry.wilaya == null ? null : String(entry.wilaya),
+    breakfast: entry.breakfast == null ? null : Boolean(entry.breakfast),
+    lunch: entry.lunch == null ? null : Boolean(entry.lunch),
+    dinner: entry.dinner == null ? null : Boolean(entry.dinner),
     source,
+    selectedAt: FieldValue.serverTimestamp(),
+    lastVerifiedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
+  };
+}
+
+function liveWebetuRestaurantFromPayload(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw httpError(400, "restaurant must be a supported restaurant object.");
+  }
+  const idDepot = Number(input.idDepot ?? input.id_depot ?? input.id);
+  if (!Number.isInteger(idDepot) || idDepot <= 0) {
+    throw httpError(400, "restaurant idDepot is required.");
+  }
+  const nameAR = String(input.nameAR ?? input.nameAr ?? input.name_ar ?? "").trim();
+  const nameFR = String(input.nameFR ?? input.nameFr ?? input.name_fr ?? input.nameEN ?? "").trim();
+  const name = String(input.name ?? (nameAR || nameFR)).trim();
+  if (!name) throw httpError(400, "restaurant name is required.");
+  return {
+    catalogId: String(input.catalogId ?? input.catalog_id ?? `onou-depot-${idDepot}`),
+    name,
+    nameAR: nameAR || name,
+    nameFR: nameFR || name,
+    idDepot,
+    residence: input.residence == null || input.residence === "" ? null : Number(input.residence),
+    wilaya: input.wilaya == null || input.wilaya === "" ? null : String(input.wilaya),
+    breakfast: input.breakfast == null ? null : Boolean(input.breakfast),
+    lunch: input.lunch == null ? null : Boolean(input.lunch),
+    dinner: input.dinner == null ? null : Boolean(input.dinner),
+    source: String(input.source ?? "onou_getdepotres"),
   };
 }
 
@@ -377,6 +417,9 @@ async function listWebetuRestaurantCatalog() {
 }
 
 async function resolveWebetuRestaurant(input) {
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    return liveWebetuRestaurantFromPayload(input);
+  }
   const lookup = normalizeRestaurantLookup(input);
   if (!lookup) throw httpError(400, "restaurant is required.");
   const restaurants = await listWebetuRestaurantCatalog();
@@ -425,11 +468,15 @@ function splitName(displayName) {
 function userProfileFromRecord(user) {
   const { firstName, lastName } = splitName(user.displayName);
   const googleProvider = user.providerData?.find((entry) => entry.providerId === "google.com");
+  const providerIds = Array.isArray(user.providerData)
+    ? user.providerData.map((entry) => entry.providerId).filter(Boolean)
+    : [];
   return {
     userId: user.uid,
     updatedAt: FieldValue.serverTimestamp(),
     profile: {
       email: user.email ?? "",
+      emailLower: user.email ? String(user.email).trim().toLowerCase() : "",
       emailVerified: Boolean(user.emailVerified),
       displayName: user.displayName ?? null,
       photoUrl: user.photoURL ?? null,
@@ -439,8 +486,31 @@ function userProfileFromRecord(user) {
     identities: {
       firebaseUid: user.uid,
       googleProviderUid: googleProvider?.uid ?? null,
+      providerIds,
     },
   };
+}
+
+function isGoogleSignIn(decodedToken) {
+  return decodedToken?.firebase?.sign_in_provider === "google.com";
+}
+
+async function assertNoDuplicateCentralEmail(firebaseUser) {
+  if (!isGoogleSignIn(firebaseUser)) return;
+  const email = String(firebaseUser.email ?? "").trim();
+  if (!email) return;
+  const emailLower = email.toLowerCase();
+  const db = getFirestoreDb();
+  const matches = new Map();
+  const exact = await db.collection("users").where("profile.email", "==", email).limit(5).get();
+  for (const doc of exact.docs) matches.set(doc.id, doc);
+  const lower = await db.collection("users").where("profile.emailLower", "==", emailLower).limit(5).get();
+  for (const doc of lower.docs) matches.set(doc.id, doc);
+  for (const docId of matches.keys()) {
+    if (docId !== firebaseUser.uid) {
+      throw httpError(409, "A different app account already uses this email. Sign in with your original method or ask support to link the accounts.");
+    }
+  }
 }
 
 function serviceStatusWith(existing, overrides = {}) {
@@ -1242,7 +1312,7 @@ async function setWebetuDefaultRestaurantForPhone(body) {
       status: webetuStatus,
       preferences: {
         ...preferences,
-        defaultRestaurant: storedRestaurantFields(restaurant, "agent_confirmed"),
+        defaultRestaurant: storedRestaurantFields(restaurant, restaurant.source ?? "agent_confirmed"),
       },
       delivery: {
         ...(existing?.delivery && typeof existing.delivery === "object" ? existing.delivery : {}),
@@ -1279,7 +1349,7 @@ async function setWebetuRestaurantOverrideForPhone(body) {
       overrideId: ref.id,
       userId: linked.userId,
       date,
-      restaurant: storedRestaurantFields(restaurant, "agent_confirmed"),
+      restaurant: storedRestaurantFields(restaurant, restaurant.source ?? "agent_confirmed"),
       status: "active",
       source: "agent_confirmed",
       createdAt: existing.exists ? existing.data()?.createdAt ?? now : now,
@@ -2456,6 +2526,7 @@ async function handleCreateSession(req, res) {
   const body = await readJsonBody(req);
   const idToken = typeof body.idToken === "string" ? body.idToken.trim() : "";
   const firebaseUser = await verifyFirebaseIdToken(idToken);
+  await assertNoDuplicateCentralEmail(firebaseUser);
   const sessionCookie = await getFirebaseAdminAuth().createSessionCookie(idToken, {
     expiresIn: SESSION_COOKIE_MAX_AGE_SECONDS * 1000,
   });
@@ -2530,6 +2601,8 @@ function authPage(title, body, script) {
       .actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:18px}
       button,a.button{display:inline-flex;min-height:44px;align-items:center;justify-content:center;border:0;border-radius:7px;background:#2f74d0;color:#fff;font:inherit;font-weight:750;text-decoration:none;padding:0 16px;cursor:pointer}
       button.secondary,a.secondary{background:#eef2f7;color:#263142;border:1px solid #cbd5e1}
+      button.google{width:100%;background:#fff;color:#202124;border:1px solid #cbd5e1;gap:10px}
+      button.google:before{content:"G";display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#f8fafc;color:#1a73e8;font-weight:900}
       button.danger{background:#b42318}
       button:disabled{opacity:.55;cursor:not-allowed}
       button:focus-visible,a.button:focus-visible,input:focus-visible{outline:3px solid rgba(47,116,208,.28);outline-offset:2px}
@@ -2541,6 +2614,8 @@ function authPage(title, body, script) {
       .meta{display:grid;gap:8px;margin:18px 0 0;padding:14px;border-radius:7px;background:#f8fafc;border:1px solid #d8dee7;color:#303846}
       .meta strong{color:#15171a}
       .toplink{display:inline-flex;margin-bottom:18px;color:#2f74d0;text-decoration:none;font-weight:750}
+      .divider{display:flex;align-items:center;gap:12px;margin:18px 0;color:#6b7280;font-size:.92rem}
+      .divider:before,.divider:after{content:"";height:1px;background:#d8dee7;flex:1}
     </style>
   </head>
   <body>
@@ -2619,7 +2694,9 @@ function loginPage() {
     "Sign in",
     `<a class="toplink" href="/">Back to app</a>
         <h1>Sign in</h1>
-        <p>Enter your email address. The app will send a sign-in link that opens this same server. If you do not see the email, check your Spam or Junk folder.</p>
+        <p>Continue with Google, or use an email sign-in link if you prefer.</p>
+        <button class="google" data-google-submit type="button">Continue with Google</button>
+        <div class="divider">or</div>
         <form data-login-form>
           <label for="email">Email address</label>
           <input id="email" data-email type="email" autocomplete="email" required>
@@ -2630,11 +2707,12 @@ function loginPage() {
         <div class="status" data-status hidden></div>`,
     `<script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAuth, onAuthStateChanged, sendSignInLinkToEmail } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, sendSignInLinkToEmail, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
 const form = document.querySelector("[data-login-form]");
 const emailInput = document.querySelector("[data-email]");
 const submitButton = document.querySelector("[data-submit]");
+const googleButton = document.querySelector("[data-google-submit]");
 const statusEl = document.querySelector("[data-status]");
 const emailStorageKey = "agentGenaieEmailForSignIn";
 ${loginRedirectHelpersScript()}
@@ -2666,6 +2744,7 @@ function setStatus(message, tone) {
 function setBusy(value) {
   submitButton.disabled = value;
   emailInput.disabled = value;
+  googleButton.disabled = value;
 }
 
 async function start() {
@@ -2673,19 +2752,43 @@ async function start() {
   const settings = await response.json();
   if (!settings.configured) {
     form.hidden = true;
-    setStatus("Firebase email login is not configured yet. Missing: " + settings.missing.join(", "), "error");
+    googleButton.hidden = true;
+    setStatus("Firebase login is not configured yet. Missing: " + settings.missing.join(", "), "error");
     return;
   }
 
   const app = initializeApp(settings.firebase);
   const auth = getAuth(app);
+  const googleProvider = new GoogleAuthProvider();
+  googleProvider.addScope("email");
+  googleProvider.addScope("profile");
+  googleProvider.setCustomParameters({ prompt: "select_account" });
+  let manualSignInInProgress = false;
+
   onAuthStateChanged(auth, async function(user) {
     if (!user) return;
+    if (manualSignInInProgress) return;
     try {
       const session = await createSession(user);
       window.location.assign(destinationForSession(session));
     } catch (err) {
       setStatus(err.message || "Could not create server session.", "error");
+    }
+  });
+
+  googleButton.addEventListener("click", async function() {
+    setBusy(true);
+    setStatus("Opening Google sign-in...");
+    manualSignInInProgress = true;
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const session = await createSession(result.user);
+      setStatus("Signed in with Google. Opening app.", "success");
+      window.location.assign(destinationForSession(session));
+    } catch (err) {
+      manualSignInInProgress = false;
+      setStatus(err.message || "Could not finish Google sign-in.", "error");
+      setBusy(false);
     }
   });
 
@@ -3217,8 +3320,14 @@ function rootPage(publicUserId) {
       .status-pill{display:inline-flex;align-items:center;min-height:30px;border-radius:999px;border:1px solid #cbd5e1;background:#f8fafc;color:#303846;padding:0 10px;font-size:.88rem;font-weight:800;white-space:nowrap}
       .status-pill[data-tone="success"]{border-color:#7fc9a2;background:#eefaf3;color:#11603a}
       .status-pill[data-tone="error"]{border-color:#f1a7a1;background:#fff1f0;color:#9f2419}
+      .header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
       .toplink{display:inline-flex;color:var(--blue);font-weight:750;text-decoration:none}
       .toplink:hover{text-decoration:underline}
+      button.secondary{display:inline-flex;min-height:38px;align-items:center;justify-content:center;border:1px solid #cbd5e1;border-radius:7px;background:#eef2f7;color:#263142;font:inherit;font-weight:750;padding:0 12px;cursor:pointer}
+      button.secondary:hover:not(:disabled){filter:brightness(.96)}
+      button.secondary:disabled{opacity:.55;cursor:not-allowed}
+      button.secondary:focus-visible{outline:3px solid rgba(47,116,208,.28);outline-offset:2px}
+      .account-error{color:#9f2419;font-size:.95rem}
       @media (max-width:760px){main{padding:18px}.tabs{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}}
     </style>
   </head>
@@ -3230,11 +3339,15 @@ function rootPage(publicUserId) {
             <h1>Genaie Dashboard</h1>
             <p>Choose the service area you want to manage.</p>
           </div>
-          <a class="toplink" href="/privacy-policy">Privacy & Policy</a>
+          <div class="header-actions">
+            <a class="toplink" href="/privacy-policy">Privacy & Policy</a>
+            <button class="secondary" data-sign-out type="button">Sign out</button>
+          </div>
         </header>
         <div class="status-strip" aria-label="Account status">
           <span class="status-pill" data-whatsapp-status>WhatsApp: Checking...</span>
           <p data-account-copy>Loading account link status.</p>
+          <p class="account-error" data-account-error hidden></p>
         </div>
         <div class="tabs" aria-label="Dashboard tabs">
           <a class="tab" href="${homePath}/connect-gmail">
@@ -3256,13 +3369,45 @@ function rootPage(publicUserId) {
         </div>
       </div>
     </main>
-    <script>
+    <script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
 const whatsappStatus = document.querySelector("[data-whatsapp-status]");
 const accountCopy = document.querySelector("[data-account-copy]");
+const accountError = document.querySelector("[data-account-error]");
+const signOutButton = document.querySelector("[data-sign-out]");
 function setWhatsAppStatus(label, tone) {
   whatsappStatus.textContent = label;
   whatsappStatus.dataset.tone = tone || "info";
 }
+async function signOutFirebase() {
+  const response = await fetch("/config/firebase");
+  const settings = await response.json().catch(function() { return {}; });
+  if (!settings.configured) return;
+  const app = initializeApp(settings.firebase);
+  await signOut(getAuth(app));
+}
+async function signOutDashboard() {
+  signOutButton.disabled = true;
+  accountError.hidden = true;
+  try {
+    const response = await fetch("/auth/session/logout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: "{}"
+    });
+    if (!response.ok) throw new Error("Could not sign out.");
+    await signOutFirebase();
+    window.location.assign("/login");
+  } catch (err) {
+    accountError.textContent = err.message || "Could not sign out.";
+    accountError.hidden = false;
+    signOutButton.disabled = false;
+  }
+}
+signOutButton.addEventListener("click", signOutDashboard);
 fetch("/account/status", { credentials: "same-origin" })
   .then(function(response) { return response.json(); })
   .then(function(status) {
