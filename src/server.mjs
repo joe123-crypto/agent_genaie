@@ -3448,13 +3448,24 @@ function scopedRouteForPath(pathname) {
   };
 }
 
-async function requireMatchingScopedUser(req, publicUserId) {
-  const routeUser = await resolvePublicUser(publicUserId);
+function scopedRouteLocation(publicUserId, rest = "") {
+  const id = validatePublicUserId(publicUserId);
+  const suffix = String(rest ?? "").replace(/^\/+/, "");
+  return suffix ? `/${id}/${suffix}` : `/${id}`;
+}
+
+async function requireOrRedirectMatchingScopedUser(req, res, scoped) {
+  const routeUser = await resolvePublicUser(scoped.publicUserId);
   const firebaseUser = req.firebaseUser ?? (await verifyFirebaseRequest(req));
-  if (firebaseUser.uid !== routeUser.firebaseUid) {
-    throw httpError(403, "This page belongs to another signed-in user.");
+  if (firebaseUser.uid === routeUser.firebaseUid) return routeUser;
+  if (req.method === "GET" || req.method === "HEAD") {
+    const signedInUser = await syncUserToCentralData(firebaseUser.uid);
+    if (signedInUser.publicUserId) {
+      redirectResponse(res, scopedRouteLocation(signedInUser.publicUserId, scoped.rest));
+      return null;
+    }
   }
-  return routeUser;
+  throw httpError(403, "This page belongs to another signed-in user.");
 }
 
 async function redirectToScopedPath(req, res, suffix = "") {
@@ -3542,7 +3553,8 @@ function privacyPolicyPage() {
 }
 
 async function handleScopedPage(req, res, scoped) {
-  await requireMatchingScopedUser(req, scoped.publicUserId);
+  const routeUser = await requireOrRedirectMatchingScopedUser(req, res, scoped);
+  if (!routeUser) return;
   if (!scoped.rest) return htmlResponse(res, 200, rootPage(scoped.publicUserId));
   if (scoped.rest === "connect-gmail") return htmlResponse(res, 200, connectGmailPage(scoped.publicUserId));
   if (scoped.rest === "vault") return htmlResponse(res, 200, vaultPage(scoped.publicUserId));

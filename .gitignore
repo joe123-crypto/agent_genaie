@@ -5,6 +5,7 @@ data/
 logs/
 archives/
 node_modules/
+migration_plan.md
 
 # Runtime and local tooling output
 *.log
