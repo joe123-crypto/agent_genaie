@@ -216,23 +216,23 @@ start().catch(function(err) {
           <a className="toplink" href={homePath}>Back to app</a>
           <h1>Connect Gmail</h1>
           <p>Sign in with email first, then grant Gmail send access for this account.</p>
-          <div data-signed-out hidden>
+          <div data-signed-out hidden suppressHydrationWarning>
             <div className="actions">
               <a className="button" href={`/login?next=${encodeURIComponent(connectPath)}`}>Sign in with email</a>
             </div>
           </div>
-          <div data-signed-in hidden>
+          <div data-signed-in hidden suppressHydrationWarning>
             <div className="meta">
-              <span>Signed in as <strong data-user-email suppressHydrationWarning></strong></span>
+              <span>Signed in as <strong data-user-email suppressHydrationWarning>…</strong></span>
               <span>Gmail status: <strong data-gmail-status suppressHydrationWarning>Checking...</strong></span>
             </div>
             <div className="actions">
-              <button data-connect type="button">Connect Gmail</button>
-              <button className="danger" data-disconnect type="button" hidden>Disconnect Gmail</button>
-              <button className="secondary" data-sign-out type="button">Sign out</button>
+              <button data-connect type="button" suppressHydrationWarning>Connect Gmail</button>
+              <button className="danger" data-disconnect type="button" hidden suppressHydrationWarning>Disconnect Gmail</button>
+              <button className="secondary" data-sign-out type="button" suppressHydrationWarning>Sign out</button>
             </div>
           </div>
-          <div className="status" data-status hidden></div>
+          <div className="status" data-status hidden suppressHydrationWarning></div>
         </section>
       </main>
       <script type="module" dangerouslySetInnerHTML={{ __html: connectScript }} />
