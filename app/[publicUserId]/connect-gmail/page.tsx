@@ -223,8 +223,8 @@ start().catch(function(err) {
           </div>
           <div data-signed-in hidden>
             <div className="meta">
-              <span>Signed in as <strong data-user-email></strong></span>
-              <span>Gmail status: <strong data-gmail-status>Checking...</strong></span>
+              <span>Signed in as <strong data-user-email suppressHydrationWarning></strong></span>
+              <span>Gmail status: <strong data-gmail-status suppressHydrationWarning>Checking...</strong></span>
             </div>
             <div className="actions">
               <button data-connect type="button">Connect Gmail</button>
