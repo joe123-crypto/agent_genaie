@@ -61,7 +61,9 @@ async function loadTokensFromFirestore(tokenStoreKey: string) {
       .get();
     for (const doc of snap.docs) {
       const data = doc.data();
-      if (data.userId && tokenStoreKeyForUid(data.userId) === tokenStoreKey) {
+      // Match on the real Firebase UID, or fall back to docs the earlier broken
+      // migration wrote with the tokenStoreKey itself stored as userId.
+      if (data.userId && (tokenStoreKeyForUid(data.userId) === tokenStoreKey || data.userId === tokenStoreKey)) {
         const tokens = decryptCentralSecret(data.secret, doc.id);
         if (tokens?.access_token) return tokens;
       }
