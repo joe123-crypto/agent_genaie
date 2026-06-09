@@ -193,11 +193,11 @@ loadWebetuStatus().catch(function(err) {
                 <h1 id="vault-title">Credentials Vault</h1>
                 <p>Save the Webetu account used for meal reservations.</p>
               </div>
-              <span className="status-pill" data-webetu-status>Checking...</span>
+              <span className="status-pill" data-webetu-status suppressHydrationWarning>Checking...</span>
             </div>
             <div className="account-meta">
-              <span className="status-pill" data-whatsapp-status>WhatsApp: Checking...</span>
-              <span data-whatsapp-copy>Checking account link.</span>
+              <span className="status-pill" data-whatsapp-status suppressHydrationWarning>WhatsApp: Checking...</span>
+              <span data-whatsapp-copy suppressHydrationWarning>Checking account link.</span>
             </div>
             <form data-webetu-form>
               <label>

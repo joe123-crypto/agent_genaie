@@ -142,9 +142,9 @@ fetch("/account/status", { credentials: "same-origin" })
             </div>
           </header>
           <div className="status-strip" aria-label="Account status">
-            <span className="status-pill" data-whatsapp-status>WhatsApp: Checking...</span>
-            <p data-account-copy>Loading account link status.</p>
-            <p className="account-error" data-account-error hidden></p>
+            <span className="status-pill" data-whatsapp-status suppressHydrationWarning>WhatsApp: Checking...</span>
+            <p data-account-copy suppressHydrationWarning>Loading account link status.</p>
+            <p className="account-error" data-account-error hidden suppressHydrationWarning></p>
           </div>
           <div className="tabs" aria-label="Dashboard tabs">
             <a className="tab" href={`${homePath}/connect-gmail`}>
