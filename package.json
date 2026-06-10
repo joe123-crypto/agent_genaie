@@ -10,7 +10,8 @@
     "migrate:tokens": "npx tsx scripts/migrate-tokens.ts",
     "backfill:phone-links": "npx tsx scripts/backfill-phone-links.ts",
     "backup:firestore": "npx tsx scripts/backup-firestore.ts",
-    "restore:firestore": "npx tsx scripts/restore-firestore.ts"
+    "restore:firestore": "npx tsx scripts/restore-firestore.ts",
+    "cleanup:legacy": "npx tsx scripts/cleanup-legacy-data.ts"
   },
   "engines": {
     "node": ">=20"

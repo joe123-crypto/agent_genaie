@@ -88,41 +88,13 @@ export async function getSignedInAccountStatus(uid: string) {
   if (!doc.exists) throw httpError(404, "User profile not found.");
   const data = doc.data() || {};
 
-  // Resolve an active WhatsApp link across new and legacy data models.
   let phone: string | null = null;
   let phoneHash: string | null = null;
 
-  // 1. New schema: phoneLinksByUser/{uid}
   const link = phoneDoc.exists ? phoneDoc.data() || {} : {};
   if (phoneDoc.exists && isActivePhoneLink(link)) {
     phone = link.phone ? normalizePhone(link.phone) : null;
     phoneHash = link.phoneHash || (phone ? whatsappPhoneHash(phone) : null);
-  }
-
-  // 2. Legacy schema: phoneLinks collection (keyed by phoneHash, has userId).
-  // syncUserToCentralData overwrites users.identities on every sign-in, so this
-  // collection is the most reliable source of pre-migration phone links.
-  if (!phone) {
-    try {
-      const legacySnap = await db.collection("phoneLinks").where("userId", "==", safeUid).get();
-      for (const legacyDoc of legacySnap.docs) {
-        const legacy = legacyDoc.data() || {};
-        if (isActivePhoneLink(legacy)) {
-          phone = legacy.phone ? normalizePhone(legacy.phone) : null;
-          phoneHash = legacy.phoneHash || legacyDoc.id || (phone ? whatsappPhoneHash(phone) : null);
-          if (phone) break;
-        }
-      }
-    } catch (err) {
-      console.error("Failed to read legacy phoneLinks for user:", err);
-    }
-  }
-
-  // 3. Legacy schema: users/{uid}.identities (may be wiped by syncUserToCentralData)
-  if (!phone) {
-    const identities = data.identities ?? {};
-    phone = identities.whatsappPhone ? normalizePhone(identities.whatsappPhone) : null;
-    phoneHash = identities.whatsappPhoneHash || (phone ? whatsappPhoneHash(phone) : null);
   }
   return {
     userId: safeUid,
