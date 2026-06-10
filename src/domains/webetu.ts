@@ -56,6 +56,7 @@ export async function saveWebetuCredentials(uid: string, body: any) {
   const credsRef = db.collection("credentialRefs").doc(refId);
   const centralRef = db.collection("users").doc(safeUid);
   await db.runTransaction(async (t) => {
+    const doc = await t.get(centralRef);
     t.set(credsRef, {
       userId: safeUid,
       service: "webetu",
@@ -65,7 +66,6 @@ export async function saveWebetuCredentials(uid: string, body: any) {
       updatedAt: FieldValue.serverTimestamp(),
       lastVerifiedAt: FieldValue.serverTimestamp(),
     });
-    const doc = await t.get(centralRef);
     if (doc.exists) {
       t.update(centralRef, {
         "services.webetu": "connected",
@@ -90,13 +90,13 @@ export async function revokeWebetuCredentials(uid: string) {
   const centralRef = db.collection("users").doc(safeUid);
   await db.runTransaction(async (t) => {
     const doc = await t.get(credsRef);
+    const userDoc = await t.get(centralRef);
     if (doc.exists) {
       t.update(credsRef, {
         status: "revoked",
         updatedAt: FieldValue.serverTimestamp(),
       });
     }
-    const userDoc = await t.get(centralRef);
     if (userDoc.exists) {
       t.update(centralRef, {
         "services.webetu": "not_connected",
