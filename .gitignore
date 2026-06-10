@@ -18,6 +18,10 @@ build/
 tmp/
 .DS_Store
 
+# TypeScript/Next.js build artifacts
+tsconfig.tsbuildinfo
+next-env.d.ts
+
 # Secret material that should never be committed
 firebase-service-account*.json
 service-account*.json

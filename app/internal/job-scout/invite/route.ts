@@ -1,0 +1,23 @@
+import { NextRequest, NextResponse } from "next/server";
+import { verifyInternalApiKey } from "@/src/security/session";
+import { createJobScoutInvite } from "@/src/domains/job-scout";
+
+export const runtime = "nodejs";
+
+export async function POST(req: NextRequest) {
+  try {
+    verifyInternalApiKey(req);
+    const body = await req.json().catch(() => ({}));
+    if (!body.phone) throw new Error("phone is required");
+    
+    const result = await createJobScoutInvite(body.phone, body.ttlSeconds);
+    return NextResponse.json(result);
+  } catch (err: unknown) {
+    const error = err as Error & { status?: number };
+    const status = error.status ?? 500;
+    return NextResponse.json(
+      { ok: false, error: error.message ?? "Internal server error" },
+      { status }
+    );
+  }
+}
