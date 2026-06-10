@@ -8,7 +8,9 @@ function LoginContent() {
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const searchParams = useSearchParams();
-  const nextParam = searchParams.get("next") || "/";
+  // Only allow same-origin paths to prevent open redirects and javascript: URLs
+  const rawNext = searchParams.get("next") || "/";
+  const nextParam = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
 
   useEffect(() => {
     fetch("/config/firebase")
