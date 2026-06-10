@@ -7,9 +7,10 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "legacy:start": "node src/server.mjs",
-    "legacy:check": "node --check src/server.mjs",
-    "migrate:tokens": "npx tsx scripts/migrate-tokens.ts"
+    "migrate:tokens": "npx tsx scripts/migrate-tokens.ts",
+    "backfill:phone-links": "npx tsx scripts/backfill-phone-links.ts",
+    "backup:firestore": "npx tsx scripts/backup-firestore.ts",
+    "restore:firestore": "npx tsx scripts/restore-firestore.ts"
   },
   "engines": {
     "node": ">=20"

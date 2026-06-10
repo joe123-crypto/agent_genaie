@@ -1,7 +1,7 @@
 import { loadDotEnv } from "../src/config/index";
 loadDotEnv();
 
-import { config, SESSION_COOKIE_NAME } from "../src/config/index";
+import { config } from "../src/config/index";
 import { getFirestoreDb } from "../src/firebase/admin";
 import { decryptJson, encryptCentralSecret } from "../src/security/crypto";
 import { credentialRefId, tokenStoreKeyForUid } from "../src/lib/utils";
