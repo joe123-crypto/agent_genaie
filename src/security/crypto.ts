@@ -94,8 +94,11 @@ export function verifyState(state: string) {
   const [b64Payload, signature] = String(state || "").split(".");
   if (!b64Payload || !signature) throw httpError(400, "Invalid state parameter.");
   const text = Buffer.from(b64Payload, "base64url").toString("utf8");
-  const expected = crypto.createHmac("sha256", secret).update(text).digest("base64url");
-  if (signature !== expected) throw httpError(400, "State signature mismatch.");
+  const expected = crypto.createHmac("sha256", secret).update(text).digest();
+  const provided = Buffer.from(signature, "base64url");
+  if (provided.length !== expected.length || !crypto.timingSafeEqual(provided, expected)) {
+    throw httpError(400, "State signature mismatch.");
+  }
   try {
     return JSON.parse(text);
   } catch (err) {

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { NextRequest } from "next/server";
 import { getFirebaseAdminAuth } from "@/src/firebase/admin";
 import { httpError } from "@/src/lib/utils";
@@ -89,7 +90,9 @@ export function verifyInternalApiKey(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   const bearer = extractBearerToken(authHeader);
   if (!bearer) throw httpError(401, "Unauthorized: internal API key required.");
-  if (!config.internalApiKey || bearer !== config.internalApiKey) {
+  const expected = Buffer.from(config.internalApiKey, "utf8");
+  const provided = Buffer.from(bearer, "utf8");
+  if (!config.internalApiKey || provided.length !== expected.length || !crypto.timingSafeEqual(provided, expected)) {
     throw httpError(403, "Forbidden: invalid internal API key.");
   }
 }

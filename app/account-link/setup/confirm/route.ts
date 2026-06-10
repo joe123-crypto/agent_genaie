@@ -3,7 +3,7 @@ import { SESSION_COOKIE_NAME } from "@/src/config";
 import { parseCookies, verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, getSignedInAccountStatus } from "@/src/domains/users";
 import { getAccountLinkInvite, bindAccountLinkInviteToUser } from "@/src/domains/account-link";
-import { maskPhone, validatePublicUserId, httpError } from "@/src/lib/utils";
+import { maskPhone, validatePublicUserId, httpError, escapeHtml } from "@/src/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -61,9 +61,9 @@ button:disabled{opacity:.55;cursor:not-allowed}.meta{display:grid;gap:8px;margin
 <h1>WhatsApp already linked</h1>
 <p>This WhatsApp phone is already linked to another app account. Nothing was changed.</p>
 <div class="meta">
-  <div><strong>Signed-in email:</strong> ${details.email ?? "Unknown email"}</div>
-  <div><strong>WhatsApp:</strong> ${details.maskedPhone}</div>
-  <div><strong>Purpose:</strong> ${details.purposeLabel}</div>
+  <div><strong>Signed-in email:</strong> ${escapeHtml(details.email ?? "Unknown email")}</div>
+  <div><strong>WhatsApp:</strong> ${escapeHtml(details.maskedPhone)}</div>
+  <div><strong>Purpose:</strong> ${escapeHtml(details.purposeLabel)}</div>
 </div>
 <div class="actions">
   <button class="secondary" data-switch-account type="button">Use a different Google account</button>
@@ -147,10 +147,10 @@ export async function POST(req: NextRequest) {
 </head><body><main><section>
 <a class="toplink" href="/">Back to app</a>
 <h1>Account linked</h1>
-<p>This WhatsApp chat is now linked to ${email ? String(email) : "your signed-in account"}.</p>
+<p>This WhatsApp chat is now linked to ${email ? escapeHtml(email) : "your signed-in account"}.</p>
 <div class="meta">
-  <div><strong>WhatsApp:</strong> ${maskPhone(invite.phone)}</div>
-  <div><strong>Purpose:</strong> ${purposeLabel(invite.purpose ?? "")}</div>
+  <div><strong>WhatsApp:</strong> ${escapeHtml(maskPhone(invite.phone))}</div>
+  <div><strong>Purpose:</strong> ${escapeHtml(purposeLabel(invite.purpose ?? ""))}</div>
 </div>
 <div class="actions"><a class="button" href="/">Continue</a></div>
 </section></main></body></html>`;

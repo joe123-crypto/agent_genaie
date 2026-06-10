@@ -3,7 +3,7 @@ import { SESSION_COOKIE_NAME } from "@/src/config";
 import { parseCookies, verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, getSignedInAccountStatus } from "@/src/domains/users";
 import { getJobScoutInvite, bindJobScoutInviteToUser } from "@/src/domains/job-scout";
-import { maskPhone, validatePublicUserId } from "@/src/lib/utils";
+import { maskPhone, validatePublicUserId, escapeHtml } from "@/src/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -17,8 +17,8 @@ function conflictHtml(details: { email: string | null; maskedPhone: string; toke
 <h1>WhatsApp already linked</h1>
 <p>This WhatsApp phone is already linked to another app account. Nothing was changed.</p>
 <div class="meta">
-  <div><strong>Signed-in email:</strong> ${details.email ?? "Unknown email"}</div>
-  <div><strong>WhatsApp:</strong> ${details.maskedPhone}</div>
+  <div><strong>Signed-in email:</strong> ${escapeHtml(details.email ?? "Unknown email")}</div>
+  <div><strong>WhatsApp:</strong> ${escapeHtml(details.maskedPhone)}</div>
   <div><strong>Purpose:</strong> Job Scout</div>
 </div>
 <div class="actions">
@@ -99,9 +99,9 @@ export async function POST(req: NextRequest) {
 </head><body><main><section>
 <a class="toplink" href="/">Back to app</a>
 <h1>Job Scout setup linked</h1>
-<p>This WhatsApp chat is now linked to ${successEmail} for Job Scout.</p>
+<p>This WhatsApp chat is now linked to ${escapeHtml(successEmail)} for Job Scout.</p>
 <div class="meta">
-  <div><strong>Status:</strong> ${result.status ?? "active"}</div>
+  <div><strong>Status:</strong> ${escapeHtml(result.status ?? "active")}</div>
 </div>
 <p style="margin-top:18px">Next, connect Gmail so applications can be sent from your approved sender account. Then return to WhatsApp and choose guided questions or CV autofill.</p>
 <div class="actions"><a class="button" href="${connectPath}">Connect Gmail</a></div>
