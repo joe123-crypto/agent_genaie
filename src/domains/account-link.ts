@@ -237,14 +237,11 @@ function whatsAppLinkResult(phoneInput: string | null | undefined, phoneHashInpu
 // Resolves an active WhatsApp link across the new and legacy data models.
 // Order: new phoneLinksByUser collection → legacy phoneLinks collection
 // (keyed by phoneHash, queried by userId) → legacy users/{uid}.identities.
-// The legacy phoneLinks collection is the most reliable old-schema source
-// because syncUserToCentralData overwrites users.identities on every sign-in.
 export async function getWhatsAppLinkForUser(uid: string) {
   const safeUid = validateFirebaseUid(uid);
   const db = getFirestoreDb();
   const empty = { whatsappLinked: false, maskedPhone: null as string | null, phoneHash: null as string | null };
 
-  // 1. New schema: phoneLinksByUser/{uid}
   const doc = await db.collection("phoneLinksByUser").doc(safeUid).get();
   if (doc.exists) {
     const data = doc.data() || {};
@@ -253,26 +250,6 @@ export async function getWhatsAppLinkForUser(uid: string) {
       if (result) return result;
     }
   }
-
-  // 2. Legacy schema: phoneLinks collection (keyed by phoneHash, has userId)
-  try {
-    const legacySnap = await db.collection("phoneLinks").where("userId", "==", safeUid).get();
-    for (const legacyDoc of legacySnap.docs) {
-      const data = legacyDoc.data() || {};
-      if (isActivePhoneLink(data)) {
-        const result = whatsAppLinkResult(data.phone, data.phoneHash || legacyDoc.id);
-        if (result) return result;
-      }
-    }
-  } catch (err) {
-    console.error("Failed to read legacy phoneLinks for user:", err);
-  }
-
-  // 3. Legacy schema: users/{uid}.identities (may be wiped by syncUserToCentralData)
-  const userDoc = await db.collection("users").doc(safeUid).get();
-  const identities = userDoc.data()?.identities ?? {};
-  const result = whatsAppLinkResult(identities.whatsappPhone, identities.whatsappPhoneHash);
-  if (result) return result;
 
   return empty;
 }

@@ -9,6 +9,7 @@ import {
   normalizeJobPreferences,
   normalizeStringList,
   normalizeCvFileRef,
+  isActivePhoneLink,
 } from "@/src/lib/utils";
 import { jobScoutTokenHash } from "@/src/security/crypto";
 import { ensurePublicUserId } from "./users";
@@ -145,7 +146,37 @@ export async function listJobScoutSubscribers(limitInput: number) {
   const limit = Number.isFinite(limitInput) ? Math.max(1, Math.min(limitInput, 100)) : 50;
   const db = getFirestoreDb();
   const snap = await db.collection("jobScoutProfiles").limit(limit).get();
-  return snap.docs.map((doc) => doc.data());
+
+  return Promise.all(snap.docs.map(async (doc) => {
+    const profile = doc.data();
+    const uid = doc.id;
+
+    const [phoneDoc, userDoc, gmailCredDoc] = await Promise.all([
+      db.collection("phoneLinksByUser").doc(uid).get(),
+      db.collection("users").doc(uid).get(),
+      db.collection("credentialRefs").doc(`gmail_oauth_token_${uid}`).get(),
+    ]);
+
+    const phoneData = phoneDoc.exists ? phoneDoc.data() || {} : {};
+    const userData = userDoc.exists ? userDoc.data() || {} : {};
+    const gmailData = gmailCredDoc.exists ? gmailCredDoc.data() || {} : {};
+
+    const rawPhone = isActivePhoneLink(phoneData) ? phoneData.phone : null;
+    const phone = rawPhone ? normalizePhone(rawPhone) : null;
+    const hash = phone ? whatsappPhoneHash(phone) : (phoneData.phoneHash as string | null | undefined) || null;
+    const senderEmail = (gmailData.metadata as any)?.senderEmail || null;
+
+    return {
+      ...profile,
+      whatsappPhone: phone,
+      whatsappPhoneHash: hash,
+      senderEmail,
+      profile: {
+        email: (userData.profile as any)?.email || null,
+        displayName: (userData.profile as any)?.displayName || null,
+      },
+    };
+  }));
 }
 
 export async function listJobApplications(userIdInput: string) {
