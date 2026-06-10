@@ -1,16 +1,32 @@
 {
   "name": "agent-genaie",
-  "version": "0.1.0",
-  "type": "module",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
-    "start": "node src/server.mjs",
-    "check": "node --check src/server.mjs"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "migrate:tokens": "npx tsx scripts/migrate-tokens.ts",
+    "backfill:phone-links": "npx tsx scripts/backfill-phone-links.ts",
+    "backup:firestore": "npx tsx scripts/backup-firestore.ts",
+    "restore:firestore": "npx tsx scripts/restore-firestore.ts",
+    "cleanup:legacy": "npx tsx scripts/cleanup-legacy-data.ts"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "firebase-admin": "^13.10.0"
+    "firebase-admin": "^14.0.0",
+    "next": "^15.3.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
   }
 }
