@@ -139,13 +139,13 @@ export async function mirrorGmailConnectionToCentralData(uid: string, tokens: an
     const credsRef = db.collection("credentialRefs").doc(refId);
     await db.runTransaction(async (t) => {
       const credsDoc = await t.get(credsRef);
+      const doc = await t.get(centralRef);
       if (credsDoc.exists) {
         t.update(credsRef, {
           status: "revoked",
           updatedAt: FieldValue.serverTimestamp(),
         });
       }
-      const doc = await t.get(centralRef);
       if (doc.exists) {
         t.update(centralRef, {
           "services.gmail": "not_connected",
@@ -166,6 +166,7 @@ export async function mirrorGmailConnectionToCentralData(uid: string, tokens: an
   const secret = encryptCentralSecret(centralTokens, refId);
   const credsRef = db.collection("credentialRefs").doc(refId);
   await db.runTransaction(async (t) => {
+    const doc = await t.get(centralRef);
     t.set(credsRef, {
       userId: safeUid,
       service: "gmail",
@@ -175,7 +176,6 @@ export async function mirrorGmailConnectionToCentralData(uid: string, tokens: an
       updatedAt: FieldValue.serverTimestamp(),
       lastVerifiedAt: FieldValue.serverTimestamp(),
     });
-    const doc = await t.get(centralRef);
     if (doc.exists) {
       t.update(centralRef, {
         "services.gmail": "connected",
