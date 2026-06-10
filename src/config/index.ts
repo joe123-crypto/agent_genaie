@@ -10,7 +10,7 @@ export const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 export const GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 export const DEFAULT_PUBLIC_BASE_URL = "http://localhost:3010";
 export const DEFAULT_PASSBOLT_PUBLIC_URL = "https://your-passbolt-domain.example";
-export const DEFAULT_PENDING_LINKS_CACHE_PATH = "/home/joseph/.openclaw/workspace/account-link/pending-links.json";
+export const DEFAULT_PENDING_LINKS_CACHE_PATH = "/tmp/pending-links.json";
 export const SESSION_COOKIE_NAME = "agent_genaie_session";
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
 export const JOB_SCOUT_SETUP_TTL_SECONDS = 24 * 60 * 60;
@@ -42,7 +42,7 @@ export const config = {
   clientId: process.env.GOOGLE_CLIENT_ID ?? "",
   clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
   redirectUri: process.env.GOOGLE_REDIRECT_URI ?? `${publicBaseUrl}/auth/google/callback`,
-  tokenStorePath: path.resolve(rootDir, process.env.TOKEN_STORE_PATH ?? "data/tokens.json"),
+  tokenStorePath: path.resolve(rootDir, process.env.TOKEN_STORE_PATH ?? "/tmp/tokens.json"),
   tokenEncryptionSecret: process.env.TOKEN_ENCRYPTION_SECRET ?? "",
   oauthStateSecret: process.env.OAUTH_STATE_SECRET ?? process.env.TOKEN_ENCRYPTION_SECRET ?? "",
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? "",
