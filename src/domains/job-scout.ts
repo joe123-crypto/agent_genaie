@@ -14,9 +14,10 @@ import {
 import { jobScoutTokenHash } from "@/src/security/crypto";
 import { ensurePublicUserId } from "./users";
 import { queuePhoneLinkCoreWrites, queueJobScoutPhoneDeliveryUpdate } from "./account-link";
-import { config, JOB_SCOUT_SETUP_TTL_SECONDS } from "@/src/config";
+import { config, assertPublicBaseUrl, JOB_SCOUT_SETUP_TTL_SECONDS } from "@/src/config";
 
 export async function createJobScoutInvite(phoneInput: string, ttlSecondsInput?: number) {
+  assertPublicBaseUrl();
   const phone = normalizePhone(phoneInput);
   const ttlSeconds = Number.isFinite(ttlSecondsInput)
     ? Math.max(60, Math.min(ttlSecondsInput as number, JOB_SCOUT_SETUP_TTL_SECONDS))

@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyFirebaseRequest } from "@/src/security/session";
 import { signState } from "@/src/security/crypto";
 import { syncUserToCentralData } from "@/src/domains/users";
-import { config, GMAIL_SEND_SCOPE, AUTH_URL } from "@/src/config";
+import { config, assertPublicBaseUrl, GMAIL_SEND_SCOPE, AUTH_URL } from "@/src/config";
 import { normalizeAccountLinkNextPath } from "@/src/lib/utils";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
+    assertPublicBaseUrl();
     const decoded = await verifyFirebaseRequest(req);
     await syncUserToCentralData(decoded.uid);
 
