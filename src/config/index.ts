@@ -32,7 +32,17 @@ export function loadDotEnv() {
 // Ensure .env is loaded before exporting config
 loadDotEnv();
 
-const publicBaseUrl = process.env.PUBLIC_BASE_URL ?? DEFAULT_PUBLIC_BASE_URL;
+function resolvePublicBaseUrl() {
+  const explicit = process.env.PUBLIC_BASE_URL?.trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+  // Vercel auto-injects these at build + runtime (host only, no protocol).
+  const vercelHost =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim() || process.env.VERCEL_URL?.trim();
+  if (vercelHost) return `https://${vercelHost.replace(/\/+$/, "")}`;
+  return DEFAULT_PUBLIC_BASE_URL;
+}
+
+const publicBaseUrl = resolvePublicBaseUrl();
 
 export const config = {
   host: process.env.HOST ?? "127.0.0.1",
@@ -67,6 +77,18 @@ export const config = {
     "",
   pendingLinksCachePath: path.resolve(process.env.PENDING_LINKS_CACHE_PATH ?? DEFAULT_PENDING_LINKS_CACHE_PATH),
 };
+
+export function assertPublicBaseUrl() {
+  if (config.publicBaseUrl !== DEFAULT_PUBLIC_BASE_URL) return; // resolved to a real URL
+  if (process.env.PUBLIC_BASE_URL?.trim()) return; // someone set localhost on purpose
+  if (process.env.NODE_ENV !== "production") return; // local dev is fine
+  const err = new Error(
+    "PUBLIC_BASE_URL is not set in a production deployment; refusing to emit localhost OAuth/email/setup links. " +
+      "Set PUBLIC_BASE_URL in the environment (Vercel injects VERCEL_URL automatically).",
+  ) as Error & { status?: number };
+  err.status = 500;
+  throw err;
+}
 
 export function requireConfig(keys: (keyof typeof config)[]) {
   const missing = keys.filter((key) => !config[key]);
