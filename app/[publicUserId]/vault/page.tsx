@@ -214,7 +214,6 @@ loadWebetuStatus().catch(function(err) {
               <div className="actions">
                 <button data-webetu-save type="submit">Save credentials</button>
                 <button className="danger" data-webetu-revoke type="button" hidden>Revoke</button>
-                <a className="button secondary" href="/onboarding">Webetu onboarding</a>
                 <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
               </div>
             </form>

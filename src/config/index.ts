@@ -9,7 +9,6 @@ export const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 export const GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 export const DEFAULT_PUBLIC_BASE_URL = "http://localhost:3010";
-export const DEFAULT_PASSBOLT_PUBLIC_URL = "https://your-passbolt-domain.example";
 export const DEFAULT_PENDING_LINKS_CACHE_PATH = "/tmp/pending-links.json";
 export const SESSION_COOKIE_NAME = "agent_genaie_session";
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
@@ -55,7 +54,6 @@ export const config = {
   ownerFirebaseUid: process.env.OWNER_FIREBASE_UID ?? "",
   centralDataEncryptionSecret: process.env.CENTRAL_DATA_ENCRYPTION_SECRET ?? process.env.TOKEN_ENCRYPTION_SECRET ?? "",
   centralDataKeyVersion: process.env.CENTRAL_DATA_KEY_VERSION ?? "v1",
-  passboltPublicUrl: process.env.PASSBOLT_PUBLIC_URL ?? DEFAULT_PASSBOLT_PUBLIC_URL,
   jobScoutSetupSecret:
     process.env.JOB_SCOUT_SETUP_SECRET ??
     process.env.OAUTH_STATE_SECRET ??

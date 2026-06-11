@@ -14,7 +14,6 @@ Public routes:
 - `/auth/google/callback` receives the Google OAuth callback.
 - `/account-link/setup` shows the WhatsApp-to-login account linking page for a given invite token.
 - `/job-scout/setup` shows the WhatsApp-to-login Job Scout setup page for a given invite token.
-- `/onboarding` shows the public Webetu onboarding guide.
 - `/privacy-policy` explains Webetu credential and Gmail permission usage.
 - `/health` checks service health.
 
@@ -23,7 +22,6 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `/{publicUserId}` signed-in dashboard launcher with service tabs.
 - `/{publicUserId}/vault` signed-in Webetu credential vault.
 - `/{publicUserId}/connect-gmail` authenticated Gmail connect/disconnect page.
-- `/{publicUserId}/onboarding` scoped compatibility route for the Webetu onboarding guide.
 - `/`, `/connect-gmail`, and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail OAuth for the signed-in Firebase user.
 - `GET /auth/google/status` checks Gmail connection for the signed-in Firebase user.
@@ -120,7 +118,6 @@ export JOB_SCOUT_SETUP_SECRET="$(openssl rand -base64 32)"
 export ACCOUNT_LINK_SETUP_SECRET="$(openssl rand -base64 32)"
 export CENTRAL_DATA_ENCRYPTION_SECRET="$(openssl rand -base64 32)"
 export CENTRAL_DATA_KEY_VERSION="v1"
-export PASSBOLT_PUBLIC_URL="https://your-passbolt-domain.example"
 export FIREBASE_PROJECT_ID="..."
 export FIREBASE_API_KEY="..."
 export FIREBASE_AUTH_DOMAIN="your-project.firebaseapp.com"
