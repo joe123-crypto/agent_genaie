@@ -155,10 +155,6 @@ fetch("/account/status", { credentials: "same-origin" })
               <strong>Credentials Vault</strong>
               <span>Save, update, or remove encrypted Webetu credentials.</span>
             </a>
-            <a className="tab" href="/onboarding">
-              <strong>Webetu Onboarding</strong>
-              <span>Open the public setup guide for Webetu meal reservations.</span>
-            </a>
             <a className="tab" href="/privacy-policy">
               <strong>Privacy &amp; Policy</strong>
               <span>Read how credentials and Gmail permissions are used.</span>

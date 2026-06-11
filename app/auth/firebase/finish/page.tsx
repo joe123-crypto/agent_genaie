@@ -31,7 +31,7 @@ function destinationForSession(session) {
   const publicUserId = session && session.publicUserId;
   if (!publicUserId) return nextPath || "/";
   if (!nextPath || nextPath === "/") return "/" + publicUserId;
-  const genericScopedMatch = nextPath.match(/^\\/(connect-gmail|vault|onboarding)\\/?(\?.*)?$/);
+  const genericScopedMatch = nextPath.match(/^\\/(connect-gmail|vault)\\/?(\?.*)?$/);
   if (genericScopedMatch) {
     return "/" + publicUserId + "/" + genericScopedMatch[1] + (genericScopedMatch[2] || "");
   }
