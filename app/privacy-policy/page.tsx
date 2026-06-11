@@ -27,7 +27,6 @@ export default function PrivacyPolicyPage() {
             <p>This page explains how Genaie uses Webetu credentials and Gmail permissions.</p>
             <div className="actions">
               <a className="button" href="/login">Sign in</a>
-              <a className="button secondary" href="/onboarding">Webetu onboarding</a>
             </div>
           </header>
           <section>
