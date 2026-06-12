@@ -16,7 +16,7 @@ import {
 } from "@/src/lib/utils";
 import { accountLinkTokenHash } from "@/src/security/crypto";
 import { ensurePublicUserId } from "./users";
-import { config, ACCOUNT_LINK_SETUP_TTL_SECONDS } from "@/src/config";
+import { config, assertPublicBaseUrl, ACCOUNT_LINK_SETUP_TTL_SECONDS } from "@/src/config";
 
 export function readPendingLinksCache() {
   const cachePath = config.pendingLinksCachePath;
@@ -46,6 +46,7 @@ export function removePendingLinksFromCache(criteria: any) {
 }
 
 export async function createAccountLinkInvite(body: any) {
+  assertPublicBaseUrl();
   const phone = normalizePhone(body.phone);
   const purpose = normalizeAccountLinkPurpose(body.purpose);
   const nextPath = normalizeAccountLinkNextPath(body.nextPath);
