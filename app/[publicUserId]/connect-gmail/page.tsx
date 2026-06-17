@@ -3,6 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { loadGmailTokens } from "@/src/domains/gmail";
+import { tokenStoreKeyForUid } from "@/src/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -37,21 +39,16 @@ export default async function ConnectGmailPage({ params }: { params: Promise<{ p
 
   const homePath = `/${publicUserId}`;
 
-  const connectScript = `
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+  const tokens = await loadGmailTokens(tokenStoreKeyForUid(uid)).catch(() => null);
+  const gmailConnected = !!tokens;
+  const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? "signed-in user";
 
-const signedOut = document.querySelector("[data-signed-out]");
-const signedIn = document.querySelector("[data-signed-in]");
-const emailEl = document.querySelector("[data-user-email]");
+  const connectScript = `
 const gmailStatusEl = document.querySelector("[data-gmail-status]");
 const statusEl = document.querySelector("[data-status]");
 const connectButton = document.querySelector("[data-connect]");
 const disconnectButton = document.querySelector("[data-disconnect]");
 const signOutButton = document.querySelector("[data-sign-out]");
-let auth;
-let currentUser;
-let sessionUser;
 
 function setStatus(message, tone) {
   statusEl.textContent = message;
@@ -68,27 +65,15 @@ function setBusy(value) {
   signOutButton.disabled = value;
 }
 
-async function authedFetch(url, options) {
-  const headers = Object.assign({}, options && options.headers ? options.headers : {});
-  if (currentUser) {
-    headers.authorization = "Bearer " + await currentUser.getIdToken();
-  }
-  return fetch(url, Object.assign({}, options || {}, { credentials: "same-origin", headers: headers }));
-}
-
 async function readJson(response) {
   const body = await response.json().catch(function() { return {}; });
   if (!response.ok) throw new Error(body.error || "Request failed with " + response.status);
   return body;
 }
 
-async function loadSession() {
-  return readJson(await fetch("/auth/session", { credentials: "same-origin" }));
-}
-
 async function loadGmailStatus() {
   gmailStatusEl.textContent = "Checking...";
-  const status = await readJson(await authedFetch("/auth/google/status", { method: "GET" }));
+  const status = await readJson(await fetch("/auth/google/status", { method: "GET", credentials: "same-origin" }));
   if (status.connected) {
     gmailStatusEl.textContent = "Connected";
     connectButton.textContent = "Reconnect Gmail";
@@ -100,90 +85,59 @@ async function loadGmailStatus() {
   }
 }
 
-async function start() {
-  const response = await fetch("/config/firebase");
-  const settings = await response.json();
-  if (!settings.configured) {
-    signedOut.hidden = true;
-    signedIn.hidden = true;
-    setStatus("Firebase email login is not configured yet. Missing: " + settings.missing.join(", "), "error");
-    return;
-  }
-  const app = initializeApp(settings.firebase);
-  auth = getAuth(app);
-
-  onAuthStateChanged(auth, async function(user) {
-    currentUser = user;
-    sessionUser = null;
-    clearStatus();
-    let session = { authenticated: false };
-    try { session = await loadSession(); } catch (err) {
-      setStatus(err.message || "Could not check server session.", "error");
-    }
-    if (!user && !session.authenticated) {
-      signedIn.hidden = true;
-      signedOut.hidden = false;
-      return;
-    }
-    sessionUser = session.authenticated ? session : null;
-    emailEl.textContent = user?.email || sessionUser?.email || "signed-in user";
-    signedOut.hidden = true;
-    signedIn.hidden = false;
-    try { await loadGmailStatus(); } catch (err) {
-      gmailStatusEl.textContent = "Unavailable";
-      setStatus(err.message || "Could not check Gmail connection.", "error");
-    }
-  });
-
-  connectButton.addEventListener("click", async function() {
-    if (!currentUser && !sessionUser) return;
-    setBusy(true);
-    clearStatus();
-    try {
-      const payload = await readJson(await authedFetch("/auth/google/start", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}"
-      }));
-      window.location.href = payload.url;
-    } catch (err) {
-      setStatus(err.message || "Could not start Gmail connection.", "error");
-      setBusy(false);
-    }
-  });
-
-  disconnectButton.addEventListener("click", async function() {
-    if (!currentUser && !sessionUser) return;
-    setBusy(true);
-    clearStatus();
-    try {
-      await readJson(await authedFetch("/auth/google/revoke", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}"
-      }));
-      setStatus("Gmail disconnected.", "success");
-      await loadGmailStatus();
-    } catch (err) {
-      setStatus(err.message || "Could not disconnect Gmail.", "error");
-    } finally { setBusy(false); }
-  });
-
-  signOutButton.addEventListener("click", async function() {
-    setBusy(true);
-    await fetch("/auth/session/logout", {
+connectButton.addEventListener("click", async function() {
+  setBusy(true);
+  clearStatus();
+  try {
+    const payload = await readJson(await fetch("/auth/google/start", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: "{}",
-      credentials: "same-origin"
-    }).catch(function() { return undefined; });
-    await signOut(auth);
-    window.location.assign("/login");
-  });
-}
+      credentials: "same-origin",
+      body: "{}"
+    }));
+    window.location.href = payload.url;
+  } catch (err) {
+    setStatus(err.message || "Could not start Gmail connection.", "error");
+    setBusy(false);
+  }
+});
 
-start().catch(function(err) {
-  setStatus(err.message || "Could not load Firebase settings.", "error");
+disconnectButton.addEventListener("click", async function() {
+  setBusy(true);
+  clearStatus();
+  try {
+    await readJson(await fetch("/auth/google/revoke", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: "{}"
+    }));
+    setStatus("Gmail disconnected.", "success");
+    await loadGmailStatus();
+  } catch (err) {
+    setStatus(err.message || "Could not disconnect Gmail.", "error");
+  } finally { setBusy(false); }
+});
+
+signOutButton.addEventListener("click", async function() {
+  setBusy(true);
+  await fetch("/auth/session/logout", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+    credentials: "same-origin"
+  }).catch(function() { return undefined; });
+  try {
+    const settings = await fetch("/config/firebase").then(function(r) { return r.json(); }).catch(function() { return {}; });
+    if (settings.configured) {
+      const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js");
+      const { getAuth, signOut } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js");
+      await signOut(getAuth(initializeApp(settings.firebase))).catch(function() { return undefined; });
+    }
+  } catch (err) {
+    // Best-effort client sign-out; the server session is already cleared above.
+  }
+  window.location.assign("/login");
 });
 `;
 
@@ -215,21 +169,16 @@ start().catch(function(err) {
         <section>
           <a className="toplink" href={homePath}>Back to app</a>
           <h1>Connect Gmail</h1>
-          <p>Sign in with email first, then grant Gmail send access for this account.</p>
-          <div data-signed-out hidden suppressHydrationWarning>
-            <div className="actions">
-              <a className="button" href={`/login?next=${encodeURIComponent(connectPath)}`}>Sign in with email</a>
-            </div>
-          </div>
-          <div data-signed-in hidden suppressHydrationWarning>
+          <p>Grant Gmail send access for this account, or revoke it at any time.</p>
+          <div data-signed-in>
             <div className="meta">
-              <span>Signed in as <strong data-user-email suppressHydrationWarning>…</strong></span>
-              <span>Gmail status: <strong data-gmail-status suppressHydrationWarning>Checking...</strong></span>
+              <span>Signed in as <strong data-user-email>{email}</strong></span>
+              <span>Gmail status: <strong data-gmail-status>{gmailConnected ? "Connected" : "Not connected"}</strong></span>
             </div>
             <div className="actions">
-              <button data-connect type="button" suppressHydrationWarning>Connect Gmail</button>
-              <button className="danger" data-disconnect type="button" hidden suppressHydrationWarning>Disconnect Gmail</button>
-              <button className="secondary" data-sign-out type="button" suppressHydrationWarning>Sign out</button>
+              <button data-connect type="button">{gmailConnected ? "Reconnect Gmail" : "Connect Gmail"}</button>
+              <button className="danger" data-disconnect type="button" hidden={!gmailConnected}>Disconnect Gmail</button>
+              <button className="secondary" data-sign-out type="button">Sign out</button>
             </div>
           </div>
           <div className="status" data-status hidden suppressHydrationWarning></div>
