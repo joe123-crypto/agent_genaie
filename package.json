@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "migrate:tokens": "npx tsx scripts/migrate-tokens.ts",
     "backfill:phone-links": "npx tsx scripts/backfill-phone-links.ts",
+    "backfill:job-scout-preferences": "npx tsx scripts/backfill-job-scout-preferences.ts",
     "backup:firestore": "npx tsx scripts/backup-firestore.ts",
     "restore:firestore": "npx tsx scripts/restore-firestore.ts",
     "cleanup:legacy": "npx tsx scripts/cleanup-legacy-data.ts"

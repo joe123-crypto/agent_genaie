@@ -116,12 +116,19 @@ export function normalizeStringList(value: unknown, maxItems = 24) {
   return output;
 }
 
+function normalizeLocaleCode(value: unknown, fallback: string) {
+  const text = String(value ?? "").replace(/[^A-Za-z]/g, "").toLowerCase();
+  return /^[a-z]{2}$/.test(text) ? text : fallback;
+}
+
 export function normalizeJobPreferences(input: any = {}) {
   const source = input && typeof input === "object" ? input : {};
   const maxApplications = Number.parseInt(source.maxApplicationsPerRun ?? "2", 10);
   return {
     targetRoles: normalizeStringList(source.targetRoles ?? source.roles),
     locations: normalizeStringList(source.locations),
+    country: normalizeLocaleCode(source.country, "dz"),
+    language: normalizeLocaleCode(source.language, "fr"),
     qualifications: normalizeStringList(source.qualifications),
     experience: normalizeStringList(source.experience),
     skills: normalizeStringList(source.skills),

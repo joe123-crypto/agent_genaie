@@ -3,6 +3,7 @@
 !.env.example
 data/
 logs/
+scripts/
 archives/
 node_modules/
 migration_plan.md

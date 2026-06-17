@@ -117,7 +117,11 @@ export async function findJobScoutUserByPhone(phoneInput: string) {
 }
 
 export async function saveJobScoutProfile(body: any) {
-  const safeUid = validateFirebaseUid(body.userId);
+  const resolvedUid = body.userId ?? (body.phone ? await findJobScoutUserByPhone(body.phone) : null);
+  if (!resolvedUid) {
+    throw httpError(404, "Linked Job Scout user not found.");
+  }
+  const safeUid = validateFirebaseUid(resolvedUid);
   const db = getFirestoreDb();
   const profileRef = db.collection("jobScoutProfiles").doc(safeUid);
   await db.runTransaction(async (t) => {
@@ -193,24 +197,54 @@ export async function recordJobApplication(body: any) {
   const role = String(body.role ?? "").trim();
   if (!company) throw httpError(400, "company is required.");
   if (!role) throw httpError(400, "role is required.");
+  const status = String(body.status ?? "applied").trim();
+  if (!["applied", "skipped", "physical_submission", "failed"].includes(status)) {
+    throw httpError(400, "status is invalid.");
+  }
+  const applicationEmail = String(body.applicationEmail ?? body.application_email ?? "").trim() || null;
+  const source = String(body.source ?? "").trim() || "agent";
+  const sourceUrl = String(body.sourceUrl ?? body.source_url ?? body.url ?? "").trim() || null;
+  const messageId = String(body.messageId ?? body.message_id ?? "").trim() || null;
+  const closing = String(body.closing ?? "").trim() || null;
+  const matchReason = String(body.matchReason ?? body.match_reason ?? "").trim() || null;
+  const replace = body.replace === true;
   const db = getFirestoreDb();
   const id = jobApplicationId(safeUid, company, role);
   const docRef = db.collection("jobApplications").doc(id);
   const now = FieldValue.serverTimestamp();
+  let created = false;
+  let updated = false;
   await db.runTransaction(async (t) => {
     const doc = await t.get(docRef);
+    const payload = {
+      id,
+      applicationId: id,
+      userId: safeUid,
+      subscriptionId: `${safeUid}_jobs`,
+      company,
+      role,
+      source,
+      url: sourceUrl,
+      sourceUrl,
+      applicationEmail,
+      status,
+      notes: normalizeStringList(body.notes),
+      messageId,
+      closing,
+      matchReason,
+      appliedAt: status === "applied" ? now : null,
+      updatedAt: now,
+    };
     if (!doc.exists) {
       t.set(docRef, {
-        id,
-        userId: safeUid,
-        company,
-        role,
-        source: String(body.source ?? "").trim() || "agent",
-        url: String(body.url ?? "").trim() || null,
-        notes: normalizeStringList(body.notes),
-        appliedAt: now,
+        ...payload,
+        createdAt: now,
       });
+      created = true;
+    } else if (replace) {
+      t.update(docRef, payload);
+      updated = true;
     }
   });
-  return { ok: true, id };
+  return { ok: true, id, created, updated, skippedExisting: !created && !updated };
 }
