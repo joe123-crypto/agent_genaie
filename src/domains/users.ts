@@ -18,6 +18,7 @@ export async function syncUserToCentralData(uid: string) {
         publicUserId: generatePublicUserId(),
         services: {
           gmail: "not_connected",
+          calendar: "not_connected",
           jobs: "not_subscribed",
           webetu: "not_subscribed",
           news: "not_subscribed",
@@ -35,6 +36,7 @@ export async function syncUserToCentralData(uid: string) {
         "profile.firstName": data.profile.firstName,
         "profile.lastName": data.profile.lastName,
         identities: data.identities,
+        "services.calendar": current.services?.calendar ?? "not_connected",
         updatedAt: FieldValue.serverTimestamp(),
         publicUserId: newPublicId,
       });
@@ -105,7 +107,14 @@ export async function getSignedInAccountStatus(uid: string) {
       displayName: data.profile?.displayName ?? null,
       photoUrl: data.profile?.photoUrl ?? null,
     },
-    services: data.services ?? { gmail: "not_connected", jobs: "not_subscribed", webetu: "not_subscribed", news: "not_subscribed" },
+    services: {
+      gmail: "not_connected",
+      calendar: "not_connected",
+      jobs: "not_subscribed",
+      webetu: "not_subscribed",
+      news: "not_subscribed",
+      ...(data.services ?? {}),
+    },
     whatsappLinked: Boolean(phone && phoneHash),
     maskedPhone: phone ? maskPhone(phone) : null,
     phoneHash: phoneHash ? String(phoneHash).slice(0, 12) : null,

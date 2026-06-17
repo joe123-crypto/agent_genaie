@@ -1,5 +1,5 @@
 import { FieldValue } from "firebase-admin/firestore";
-import { config, GMAIL_SEND_URL, TOKEN_URL } from "@/src/config";
+import { config, CALENDAR_SCOPE, GMAIL_SEND_URL, TOKEN_URL } from "@/src/config";
 import { getFirestoreDb } from "@/src/firebase/admin";
 import { encryptCentralSecret, decryptCentralSecret } from "@/src/security/crypto";
 import { tokenStoreKeyForUid, buildMimeMessage, httpError, validateFirebaseUid, credentialRefId } from "@/src/lib/utils";
@@ -32,6 +32,7 @@ export async function exchangeCodeForTokens(code: string) {
   return {
     access_token: data.access_token,
     refresh_token: data.refresh_token,
+    scope: data.scope,
     expiry_date: Date.now() + (data.expires_in ?? 3600) * 1000,
   };
 }
@@ -47,8 +48,13 @@ export async function refreshAccessToken(tokens: any) {
   return {
     access_token: data.access_token,
     refresh_token: tokens.refresh_token,
+    scope: data.scope ?? tokens.scope,
     expiry_date: Date.now() + (data.expires_in ?? 3600) * 1000,
   };
+}
+
+export function hasCalendarScope(tokens: any): boolean {
+  return typeof tokens?.scope === "string" && tokens.scope.split(" ").includes(CALENDAR_SCOPE);
 }
 
 async function loadTokensFromFirestore(tokenStoreKey: string) {
@@ -149,6 +155,7 @@ export async function mirrorGmailConnectionToCentralData(uid: string, tokens: an
       if (doc.exists) {
         t.update(centralRef, {
           "services.gmail": "not_connected",
+          "services.calendar": "not_connected",
           updatedAt: FieldValue.serverTimestamp(),
         });
       }
@@ -159,6 +166,7 @@ export async function mirrorGmailConnectionToCentralData(uid: string, tokens: an
   const centralTokens = {
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token,
+    scope: tokens.scope,
     expiry_date: tokens.expiry_date,
     updatedAtMs: Date.now(),
     migrationSource: "agent_genaie",
@@ -179,11 +187,18 @@ export async function mirrorGmailConnectionToCentralData(uid: string, tokens: an
     if (doc.exists) {
       t.update(centralRef, {
         "services.gmail": "connected",
+        "services.calendar": hasCalendarScope(tokens) ? "connected" : "not_connected",
         updatedAt: FieldValue.serverTimestamp(),
       });
     } else {
       t.set(centralRef, {
-        services: { gmail: "connected", jobs: "not_subscribed", webetu: "not_subscribed", news: "not_subscribed" },
+        services: {
+          gmail: "connected",
+          calendar: hasCalendarScope(tokens) ? "connected" : "not_connected",
+          jobs: "not_subscribed",
+          webetu: "not_subscribed",
+          news: "not_subscribed",
+        },
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });

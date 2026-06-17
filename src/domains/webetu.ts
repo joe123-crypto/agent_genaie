@@ -73,7 +73,13 @@ export async function saveWebetuCredentials(uid: string, body: any) {
       });
     } else {
       t.set(centralRef, {
-        services: { gmail: "not_connected", jobs: "not_subscribed", webetu: "connected", news: "not_subscribed" },
+        services: {
+          gmail: "not_connected",
+          calendar: "not_connected",
+          jobs: "not_subscribed",
+          webetu: "connected",
+          news: "not_subscribed",
+        },
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
