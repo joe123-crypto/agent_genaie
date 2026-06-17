@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { getWebetuCredentialStatus } from "@/src/domains/webetu";
 
 export const runtime = "nodejs";
 
@@ -17,15 +18,14 @@ export default async function VaultPage({ params }: { params: Promise<{ publicUs
 
   if (!sessionCookie) redirect(`/login?next=${encodeURIComponent(vaultPath)}`);
 
-  let uid: string;
-  try {
-    const user = await verifyFirebaseSessionCookie(sessionCookie);
-    uid = user.uid;
-  } catch {
-    redirect(`/login?next=${encodeURIComponent(vaultPath)}`);
-  }
+  const [verified, routeUser] = await Promise.all([
+    verifyFirebaseSessionCookie(sessionCookie).catch(() => null),
+    resolvePublicUser(publicUserId).catch(() => null),
+  ]);
 
-  const routeUser = await resolvePublicUser(publicUserId);
+  if (!verified) redirect(`/login?next=${encodeURIComponent(vaultPath)}`);
+  const uid = verified.uid;
+
   if (!routeUser) notFound();
 
   if (uid !== routeUser.id) {
@@ -36,6 +36,25 @@ export default async function VaultPage({ params }: { params: Promise<{ publicUs
   }
 
   const homePath = `/${publicUserId}`;
+
+  const webetuStatus = await getWebetuCredentialStatus(uid).catch(() => null);
+  const webetuConfigured = !!webetuStatus?.configured;
+  const webetuLabel = webetuConfigured
+    ? "Saved"
+    : webetuStatus?.status === "revoked"
+    ? "Revoked"
+    : webetuStatus
+    ? "Not saved"
+    : "Unavailable";
+  const webetuTone = webetuConfigured ? "success" : webetuStatus?.status === "revoked" ? "error" : "info";
+  const webetuSaveLabel = webetuConfigured ? "Update credentials" : "Save credentials";
+
+  const whatsappLinked = !!webetuStatus?.whatsappLinked;
+  const whatsappLabel = whatsappLinked ? "WhatsApp: Linked" : "WhatsApp: Not linked";
+  const whatsappTone = whatsappLinked ? "success" : "error";
+  const whatsappCopy = whatsappLinked
+    ? `Reservations will report to ${webetuStatus?.maskedPhone || "the linked WhatsApp chat"}.`
+    : "Open a service setup link from WhatsApp first, then return here.";
 
   const vaultScript = `
 const webetuForm = document.querySelector("[data-webetu-form]");
@@ -140,12 +159,6 @@ webetuPasswordToggle.addEventListener("click", function() {
   setPasswordVisible(webetuPassword.type === "password");
   webetuPassword.focus();
 });
-
-loadWebetuStatus().catch(function(err) {
-  setPill(webetuStatus, "Unavailable", "error");
-  setPill(whatsappStatus, "WhatsApp: Unavailable", "error");
-  setMessage(webetuMessage, err.message || "Could not load credential status.", "error");
-});
 `;
 
   return (
@@ -193,11 +206,11 @@ loadWebetuStatus().catch(function(err) {
                 <h1 id="vault-title">Credentials Vault</h1>
                 <p>Save the Webetu account used for meal reservations.</p>
               </div>
-              <span className="status-pill" data-webetu-status suppressHydrationWarning>Checking...</span>
+              <span className="status-pill" data-webetu-status data-tone={webetuTone}>{webetuLabel}</span>
             </div>
             <div className="account-meta">
-              <span className="status-pill" data-whatsapp-status suppressHydrationWarning>WhatsApp: Checking...</span>
-              <span data-whatsapp-copy suppressHydrationWarning>Checking account link.</span>
+              <span className="status-pill" data-whatsapp-status data-tone={whatsappTone}>{whatsappLabel}</span>
+              <span data-whatsapp-copy>{whatsappCopy}</span>
             </div>
             <form data-webetu-form>
               <label>
@@ -212,8 +225,8 @@ loadWebetuStatus().catch(function(err) {
                 </span>
               </label>
               <div className="actions">
-                <button data-webetu-save type="submit">Save credentials</button>
-                <button className="danger" data-webetu-revoke type="button" hidden>Revoke</button>
+                <button data-webetu-save type="submit">{webetuSaveLabel}</button>
+                <button className="danger" data-webetu-revoke type="button" hidden={!webetuConfigured}>Revoke</button>
                 <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
               </div>
             </form>

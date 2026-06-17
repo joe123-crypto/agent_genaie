@@ -16,15 +16,14 @@ export default async function DashboardPage({ params }: { params: Promise<{ publ
 
   if (!sessionCookie) redirect(`/login?next=/${publicUserId}`);
 
-  let uid: string;
-  try {
-    const user = await verifyFirebaseSessionCookie(sessionCookie);
-    uid = user.uid;
-  } catch {
-    redirect(`/login?next=/${publicUserId}`);
-  }
+  const [verified, routeUser] = await Promise.all([
+    verifyFirebaseSessionCookie(sessionCookie).catch(() => null),
+    resolvePublicUser(publicUserId).catch(() => null),
+  ]);
 
-  const routeUser = await resolvePublicUser(publicUserId);
+  if (!verified) redirect(`/login?next=/${publicUserId}`);
+  const uid = verified.uid;
+
   if (!routeUser) notFound();
 
   if (uid !== routeUser.id) {
@@ -36,19 +35,20 @@ export default async function DashboardPage({ params }: { params: Promise<{ publ
 
   const homePath = `/${publicUserId}`;
 
+  const accountStatus = await getSignedInAccountStatus(uid).catch(() => null);
+  const whatsappLinked = !!accountStatus?.whatsappLinked;
+  const whatsappLabel = whatsappLinked ? "WhatsApp: Linked" : "WhatsApp: Not linked";
+  const whatsappTone = whatsappLinked ? "success" : "error";
+  const accountCopy = whatsappLinked
+    ? `This chat is linked to ${accountStatus?.maskedPhone || "your WhatsApp number"}.`
+    : "Open a service link from WhatsApp to connect this login to your chat.";
+
   const dashboardScript = `
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
-const whatsappStatus = document.querySelector("[data-whatsapp-status]");
-const accountCopy = document.querySelector("[data-account-copy]");
 const accountError = document.querySelector("[data-account-error]");
 const signOutButton = document.querySelector("[data-sign-out]");
-
-function setWhatsAppStatus(label, tone) {
-  whatsappStatus.textContent = label;
-  whatsappStatus.dataset.tone = tone || "info";
-}
 
 async function signOutFirebase() {
   const response = await fetch("/config/firebase");
@@ -79,22 +79,6 @@ async function signOutDashboard() {
 }
 
 signOutButton.addEventListener("click", signOutDashboard);
-
-fetch("/account/status", { credentials: "same-origin" })
-  .then(function(response) { return response.json(); })
-  .then(function(status) {
-    if (status.whatsappLinked) {
-      setWhatsAppStatus("WhatsApp: Linked", "success");
-      accountCopy.textContent = "This chat is linked to " + (status.maskedPhone || "your WhatsApp number") + ".";
-    } else {
-      setWhatsAppStatus("WhatsApp: Not linked", "error");
-      accountCopy.textContent = "Open a service link from WhatsApp to connect this login to your chat.";
-    }
-  })
-  .catch(function() {
-    setWhatsAppStatus("WhatsApp: Unavailable", "error");
-    accountCopy.textContent = "Could not load account link status.";
-  });
 `;
 
   return (
@@ -142,9 +126,9 @@ fetch("/account/status", { credentials: "same-origin" })
             </div>
           </header>
           <div className="status-strip" aria-label="Account status">
-            <span className="status-pill" data-whatsapp-status suppressHydrationWarning>WhatsApp: Checking...</span>
-            <p data-account-copy suppressHydrationWarning>Loading account link status.</p>
-            <p className="account-error" data-account-error hidden suppressHydrationWarning></p>
+            <span className="status-pill" data-whatsapp-status data-tone={whatsappTone}>{whatsappLabel}</span>
+            <p data-account-copy>{accountCopy}</p>
+            <p className="account-error" data-account-error hidden></p>
           </div>
           <div className="tabs" aria-label="Dashboard tabs">
             <a className="tab" href={`${homePath}/connect-gmail`}>
