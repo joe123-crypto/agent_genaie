@@ -16,15 +16,14 @@ export default async function DashboardPage({ params }: { params: Promise<{ publ
 
   if (!sessionCookie) redirect(`/login?next=/${publicUserId}`);
 
-  let uid: string;
-  try {
-    const user = await verifyFirebaseSessionCookie(sessionCookie);
-    uid = user.uid;
-  } catch {
-    redirect(`/login?next=/${publicUserId}`);
-  }
+  const [verified, routeUser] = await Promise.all([
+    verifyFirebaseSessionCookie(sessionCookie, false).catch(() => null),
+    resolvePublicUser(publicUserId),
+  ]);
 
-  const routeUser = await resolvePublicUser(publicUserId);
+  if (!verified) redirect(`/login?next=/${publicUserId}`);
+  const uid = verified.uid;
+
   if (!routeUser) notFound();
 
   if (uid !== routeUser.id) {

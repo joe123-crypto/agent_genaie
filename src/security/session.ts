@@ -58,10 +58,13 @@ export async function verifyFirebaseIdToken(idToken: string) {
   }
 }
 
-export async function verifyFirebaseSessionCookie(sessionCookie: string) {
+// checkRevoked=true makes a network round-trip to Firebase Auth to confirm the session
+// hasn't been revoked. Read-only page renders pass false for fast local JWT verification;
+// sensitive mutations keep the default strict check.
+export async function verifyFirebaseSessionCookie(sessionCookie: string, checkRevoked = true) {
   if (!sessionCookie) throw httpError(401, "No session cookie provided.");
   try {
-    return await getFirebaseAdminAuth().verifySessionCookie(sessionCookie, true);
+    return await getFirebaseAdminAuth().verifySessionCookie(sessionCookie, checkRevoked);
   } catch (err: any) {
     throw httpError(401, "Invalid or expired session.");
   }

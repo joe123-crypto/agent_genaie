@@ -14,7 +14,7 @@ export default async function ConnectGmailRedirectPage() {
 
   let uid: string;
   try {
-    const user = await verifyFirebaseSessionCookie(sessionCookie);
+    const user = await verifyFirebaseSessionCookie(sessionCookie, false);
     uid = user.uid;
   } catch {
     redirect("/login?next=/connect-gmail");

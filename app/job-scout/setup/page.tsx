@@ -22,7 +22,7 @@ export default async function JobScoutSetupPage({ searchParams }: { searchParams
   let uid: string;
   let email: string | null = null;
   try {
-    const user = await verifyFirebaseSessionCookie(sessionCookie);
+    const user = await verifyFirebaseSessionCookie(sessionCookie, false);
     uid = user.uid;
     email = user.email ?? null;
   } catch {

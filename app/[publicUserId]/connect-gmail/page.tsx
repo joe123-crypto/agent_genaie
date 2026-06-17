@@ -3,8 +3,6 @@ import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
-import { loadGmailTokens } from "@/src/domains/gmail";
-import { tokenStoreKeyForUid } from "@/src/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -19,15 +17,15 @@ export default async function ConnectGmailPage({ params }: { params: Promise<{ p
 
   if (!sessionCookie) redirect(`/login?next=${encodeURIComponent(connectPath)}`);
 
-  let uid: string;
-  try {
-    const user = await verifyFirebaseSessionCookie(sessionCookie);
-    uid = user.uid;
-  } catch {
-    redirect(`/login?next=${encodeURIComponent(connectPath)}`);
-  }
+  // Verify the session and resolve the route's user in parallel — they're independent.
+  const [verified, routeUser] = await Promise.all([
+    verifyFirebaseSessionCookie(sessionCookie, false).catch(() => null),
+    resolvePublicUser(publicUserId),
+  ]);
 
-  const routeUser = await resolvePublicUser(publicUserId);
+  if (!verified) redirect(`/login?next=${encodeURIComponent(connectPath)}`);
+  const uid = verified.uid;
+
   if (!routeUser) notFound();
 
   if (uid !== routeUser.id) {
@@ -39,8 +37,8 @@ export default async function ConnectGmailPage({ params }: { params: Promise<{ p
 
   const homePath = `/${publicUserId}`;
 
-  const tokens = await loadGmailTokens(tokenStoreKeyForUid(uid)).catch(() => null);
-  const gmailConnected = !!tokens;
+  // The user doc (already fetched above) records connection state — no extra query needed.
+  const gmailConnected = (routeUser as { services?: { gmail?: string } }).services?.gmail === "connected";
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? "signed-in user";
 
   const connectScript = `
