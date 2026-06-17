@@ -18,7 +18,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ publ
 
   const [verified, routeUser] = await Promise.all([
     verifyFirebaseSessionCookie(sessionCookie).catch(() => null),
-    resolvePublicUser(publicUserId),
+    resolvePublicUser(publicUserId).catch(() => null),
   ]);
 
   if (!verified) redirect(`/login?next=/${publicUserId}`);
