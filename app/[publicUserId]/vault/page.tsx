@@ -19,7 +19,7 @@ export default async function VaultPage({ params }: { params: Promise<{ publicUs
   if (!sessionCookie) redirect(`/login?next=${encodeURIComponent(vaultPath)}`);
 
   const [verified, routeUser] = await Promise.all([
-    verifyFirebaseSessionCookie(sessionCookie, false).catch(() => null),
+    verifyFirebaseSessionCookie(sessionCookie).catch(() => null),
     resolvePublicUser(publicUserId),
   ]);
 

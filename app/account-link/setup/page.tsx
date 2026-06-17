@@ -36,7 +36,7 @@ export default async function AccountLinkSetupPage({ searchParams }: { searchPar
   let uid: string;
   let email: string | null = null;
   try {
-    const user = await verifyFirebaseSessionCookie(sessionCookie, false);
+    const user = await verifyFirebaseSessionCookie(sessionCookie);
     uid = user.uid;
     email = user.email ?? null;
   } catch {

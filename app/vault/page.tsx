@@ -14,7 +14,7 @@ export default async function VaultRedirectPage() {
 
   let uid: string;
   try {
-    const user = await verifyFirebaseSessionCookie(sessionCookie, false);
+    const user = await verifyFirebaseSessionCookie(sessionCookie);
     uid = user.uid;
   } catch {
     redirect("/login?next=/vault");

@@ -19,7 +19,7 @@ export default async function ConnectGmailPage({ params }: { params: Promise<{ p
 
   // Verify the session and resolve the route's user in parallel — they're independent.
   const [verified, routeUser] = await Promise.all([
-    verifyFirebaseSessionCookie(sessionCookie, false).catch(() => null),
+    verifyFirebaseSessionCookie(sessionCookie).catch(() => null),
     resolvePublicUser(publicUserId),
   ]);
 
