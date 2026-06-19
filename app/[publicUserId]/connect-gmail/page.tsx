@@ -39,10 +39,12 @@ export default async function ConnectGmailPage({ params }: { params: Promise<{ p
 
   // The user doc (already fetched above) records connection state — no extra query needed.
   const gmailConnected = (routeUser as { services?: { gmail?: string } }).services?.gmail === "connected";
+  const calendarConnected = (routeUser as { services?: { calendar?: string } }).services?.calendar === "connected";
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? "signed-in user";
 
   const connectScript = `
 const gmailStatusEl = document.querySelector("[data-gmail-status]");
+const calendarStatusEl = document.querySelector("[data-calendar-status]");
 const statusEl = document.querySelector("[data-status]");
 const connectButton = document.querySelector("[data-connect]");
 const disconnectButton = document.querySelector("[data-disconnect]");
@@ -69,18 +71,20 @@ async function readJson(response) {
   return body;
 }
 
-async function loadGmailStatus() {
+async function loadGoogleStatus() {
   gmailStatusEl.textContent = "Checking...";
+  calendarStatusEl.textContent = "Checking...";
   const status = await readJson(await fetch("/auth/google/status", { method: "GET", credentials: "same-origin" }));
   if (status.connected) {
     gmailStatusEl.textContent = "Connected";
-    connectButton.textContent = "Reconnect Gmail";
+    connectButton.textContent = "Reconnect Google";
     disconnectButton.hidden = false;
   } else {
     gmailStatusEl.textContent = "Not connected";
-    connectButton.textContent = "Connect Gmail";
+    connectButton.textContent = "Connect Google";
     disconnectButton.hidden = true;
   }
+  calendarStatusEl.textContent = status.calendarConnected ? "Connected" : "Not connected";
 }
 
 connectButton.addEventListener("click", async function() {
@@ -95,7 +99,7 @@ connectButton.addEventListener("click", async function() {
     }));
     window.location.href = payload.url;
   } catch (err) {
-    setStatus(err.message || "Could not start Gmail connection.", "error");
+    setStatus(err.message || "Could not start Google connection.", "error");
     setBusy(false);
   }
 });
@@ -110,10 +114,10 @@ disconnectButton.addEventListener("click", async function() {
       credentials: "same-origin",
       body: "{}"
     }));
-    setStatus("Gmail disconnected.", "success");
-    await loadGmailStatus();
+    setStatus("Google access disconnected.", "success");
+    await loadGoogleStatus();
   } catch (err) {
-    setStatus(err.message || "Could not disconnect Gmail.", "error");
+    setStatus(err.message || "Could not disconnect Google access.", "error");
   } finally { setBusy(false); }
 });
 
@@ -166,16 +170,17 @@ signOutButton.addEventListener("click", async function() {
       <main>
         <section>
           <a className="toplink" href={homePath}>Back to app</a>
-          <h1>Connect Gmail</h1>
-          <p>Grant Gmail send access for this account, or revoke it at any time.</p>
+          <h1>Connect Google</h1>
+          <p>Grant Google access for this account — send job application emails (Gmail) and add calendar events. You can revoke it at any time, which removes both permissions.</p>
           <div data-signed-in>
             <div className="meta">
               <span>Signed in as <strong data-user-email>{email}</strong></span>
               <span>Gmail status: <strong data-gmail-status>{gmailConnected ? "Connected" : "Not connected"}</strong></span>
+              <span>Calendar status: <strong data-calendar-status>{calendarConnected ? "Connected" : "Not connected"}</strong></span>
             </div>
             <div className="actions">
-              <button data-connect type="button">{gmailConnected ? "Reconnect Gmail" : "Connect Gmail"}</button>
-              <button className="danger" data-disconnect type="button" hidden={!gmailConnected}>Disconnect Gmail</button>
+              <button data-connect type="button">{gmailConnected ? "Reconnect Google" : "Connect Google"}</button>
+              <button className="danger" data-disconnect type="button" hidden={!gmailConnected}>Disconnect Google</button>
               <button className="secondary" data-sign-out type="button">Sign out</button>
             </div>
           </div>

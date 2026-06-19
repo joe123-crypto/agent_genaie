@@ -132,16 +132,12 @@ signOutButton.addEventListener("click", signOutDashboard);
           </div>
           <div className="tabs" aria-label="Dashboard tabs">
             <a className="tab" href={`${homePath}/connect-gmail`}>
-              <strong>Connect Gmail</strong>
-              <span>Approve or revoke Gmail send access for job application emails.</span>
+              <strong>Connect Google</strong>
+              <span>Approve or revoke Google access — send job application emails (Gmail) and add calendar events.</span>
             </a>
             <a className="tab" href={`${homePath}/vault`}>
               <strong>Credentials Vault</strong>
               <span>Save, update, or remove encrypted Webetu credentials.</span>
-            </a>
-            <a className="tab" href="/privacy-policy">
-              <strong>Privacy &amp; Policy</strong>
-              <span>Read how credentials and Gmail permissions are used.</span>
             </a>
           </div>
         </div>
