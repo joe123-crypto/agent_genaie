@@ -139,10 +139,6 @@ signOutButton.addEventListener("click", signOutDashboard);
               <strong>Credentials Vault</strong>
               <span>Save, update, or remove encrypted Webetu credentials.</span>
             </a>
-            <a className="tab" href="/privacy-policy">
-              <strong>Privacy &amp; Policy</strong>
-              <span>Read how credentials, Gmail, and Calendar permissions are used.</span>
-            </a>
           </div>
         </div>
       </main>
