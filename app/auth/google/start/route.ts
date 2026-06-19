@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyFirebaseRequest } from "@/src/security/session";
 import { signState } from "@/src/security/crypto";
 import { syncUserToCentralData } from "@/src/domains/users";
-import { config, assertPublicBaseUrl, GMAIL_SEND_SCOPE, AUTH_URL } from "@/src/config";
+import { config, assertPublicBaseUrl, GOOGLE_OAUTH_SCOPES, AUTH_URL } from "@/src/config";
 import { normalizeAccountLinkNextPath } from "@/src/lib/utils";
 
 export const runtime = "nodejs";
@@ -25,9 +25,10 @@ export async function POST(req: NextRequest) {
       client_id: config.clientId,
       redirect_uri: config.redirectUri,
       response_type: "code",
-      scope: GMAIL_SEND_SCOPE,
+      scope: GOOGLE_OAUTH_SCOPES,
       access_type: "offline",
       prompt: "consent",
+      include_granted_scopes: "true",
       state: stateStr,
     });
 

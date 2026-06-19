@@ -4,10 +4,13 @@ import path from "node:path";
 const rootDir = process.cwd();
 
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+export const GOOGLE_OAUTH_SCOPES = [GMAIL_SEND_SCOPE, CALENDAR_SCOPE].join(" ");
 export const TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 export const GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
+export const CALENDAR_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 export const DEFAULT_PUBLIC_BASE_URL = "http://localhost:3010";
 export const DEFAULT_PENDING_LINKS_CACHE_PATH = "/tmp/pending-links.json";
 export const SESSION_COOKIE_NAME = "agent_genaie_session";
