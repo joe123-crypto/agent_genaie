@@ -121,6 +121,14 @@ function LoginContent() {
             Send Magic Link
           </button>
         </form>
+        <p style={styles.footer}>
+          Want to know how your personal information and Google permissions are
+          used? See our{" "}
+          <a href="/privacy-policy" style={styles.footerLink}>
+            Privacy &amp; Policy
+          </a>{" "}
+          page.
+        </p>
       </div>
     </div>
   );
@@ -213,5 +221,15 @@ const styles = {
     fontWeight: "500",
     cursor: "pointer",
     transition: "opacity 0.2s",
+  },
+  footer: {
+    margin: "24px 0 0 0",
+    color: "var(--muted)",
+    fontSize: "12px",
+    lineHeight: 1.5,
+  },
+  footerLink: {
+    color: "var(--blue)",
+    textDecoration: "underline",
   },
 };

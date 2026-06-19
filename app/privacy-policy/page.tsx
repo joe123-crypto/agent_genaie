@@ -1,4 +1,23 @@
-export default function PrivacyPolicyPage() {
+import { cookies } from "next/headers";
+import { SESSION_COOKIE_NAME } from "@/src/config";
+import { verifyFirebaseSessionCookie } from "@/src/security/session";
+import { getSignedInAccountStatus } from "@/src/domains/users";
+
+export const runtime = "nodejs";
+
+export default async function PrivacyPolicyPage() {
+  let dashboardHref: string | null = null;
+  const sessionCookie = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
+  if (sessionCookie) {
+    try {
+      const { uid } = await verifyFirebaseSessionCookie(sessionCookie);
+      const status = await getSignedInAccountStatus(uid).catch(() => null);
+      if (status?.publicUserId) dashboardHref = `/${status.publicUserId}`;
+    } catch {
+      // invalid/expired session → treat as logged out
+    }
+  }
+
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
@@ -27,7 +46,11 @@ export default function PrivacyPolicyPage() {
             <h1>Privacy &amp; Policy</h1>
             <p>This page explains how Genaie uses Webetu credentials, Gmail, and Calendar permissions.</p>
             <div className="actions">
-              <a className="button" href="/login">Sign in</a>
+              {dashboardHref ? (
+                <a className="button" href={dashboardHref}>Back to dashboard</a>
+              ) : (
+                <a className="button" href="/login">Sign in</a>
+              )}
             </div>
           </header>
           <section>
