@@ -198,7 +198,7 @@ export async function recordJobApplication(body: any) {
   if (!company) throw httpError(400, "company is required.");
   if (!role) throw httpError(400, "role is required.");
   const status = String(body.status ?? "applied").trim();
-  if (!["applied", "skipped", "physical_submission", "failed"].includes(status)) {
+  if (!["applied", "skipped", "action_required", "physical_submission", "failed"].includes(status)) {
     throw httpError(400, "status is invalid.");
   }
   const applicationEmail = String(body.applicationEmail ?? body.application_email ?? "").trim() || null;
@@ -207,6 +207,19 @@ export async function recordJobApplication(body: any) {
   const messageId = String(body.messageId ?? body.message_id ?? "").trim() || null;
   const closing = String(body.closing ?? "").trim() || null;
   const matchReason = String(body.matchReason ?? body.match_reason ?? "").trim() || null;
+  const submissionMethod = String(body.submissionMethod ?? body.submission_method ?? "").trim() || null;
+  if (submissionMethod && !["email", "website", "manual"].includes(submissionMethod)) {
+    throw httpError(400, "submissionMethod is invalid.");
+  }
+  const applicationUrl = String(body.applicationUrl ?? body.application_url ?? sourceUrl ?? "").trim() || null;
+  const blockerCode = String(body.blockerCode ?? body.blocker_code ?? "").trim().slice(0, 80) || null;
+  const attemptValue = Number(body.attemptCount ?? body.attempt_count ?? 0);
+  const attemptCount = Number.isFinite(attemptValue) ? Math.max(0, Math.min(Math.trunc(attemptValue), 3)) : 0;
+  const evidenceInput = body.evidence && typeof body.evidence === "object" ? body.evidence : {};
+  const evidence = {
+    finalUrl: String(evidenceInput.finalUrl ?? "").trim().slice(0, 2000) || null,
+    filledFields: normalizeStringList(evidenceInput.filledFields).slice(0, 30),
+  };
   const replace = body.replace === true;
   const db = getFirestoreDb();
   const id = jobApplicationId(safeUid, company, role);
@@ -232,6 +245,12 @@ export async function recordJobApplication(body: any) {
       messageId,
       closing,
       matchReason,
+      submissionMethod,
+      applicationUrl,
+      blockerCode,
+      attemptCount,
+      lastAttemptAt: attemptCount > 0 ? now : null,
+      evidence,
       appliedAt: status === "applied" ? now : null,
       updatedAt: now,
     };
