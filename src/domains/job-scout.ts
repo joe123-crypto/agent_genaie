@@ -12,6 +12,7 @@ import {
   isActivePhoneLink,
 } from "@/src/lib/utils";
 import { jobScoutTokenHash } from "@/src/security/crypto";
+import { putObject, getPresignedGetUrl, deleteObject } from "./r2-storage";
 import { ensurePublicUserId } from "./users";
 import { queuePhoneLinkCoreWrites, queueJobScoutPhoneDeliveryUpdate } from "./account-link";
 import { config, assertPublicBaseUrl, JOB_SCOUT_SETUP_TTL_SECONDS } from "@/src/config";
@@ -143,6 +144,91 @@ export async function saveJobScoutProfile(body: any) {
         updatedAt: FieldValue.serverTimestamp(),
       });
     }
+  });
+  return { ok: true };
+}
+
+// Vercel Functions reject request bodies larger than 4.5 MB, and multipart adds
+// framing overhead, so cap the CV comfortably below that. Larger files would
+// need a direct presigned PUT rather than this proxied upload.
+const CV_MAX_BYTES = 4 * 1024 * 1024;
+
+export function cvObjectKey(uid: string) {
+  return `${uid}/cv/cv.pdf`;
+}
+
+export async function saveJobScoutCv(input: {
+  userId?: string;
+  phone?: string;
+  bytes: Buffer;
+  contentType?: string;
+}) {
+  const resolvedUid = input.userId ?? (input.phone ? await findJobScoutUserByPhone(input.phone) : null);
+  if (!resolvedUid) {
+    throw httpError(404, "Linked Job Scout user not found.");
+  }
+  const safeUid = validateFirebaseUid(resolvedUid);
+  if (!input.bytes || input.bytes.length === 0) throw httpError(400, "CV file is required.");
+  if (input.bytes.length > CV_MAX_BYTES) throw httpError(413, "CV file is too large (max 4 MB).");
+  const contentType = String(input.contentType ?? "").toLowerCase().split(";")[0].trim();
+  if (contentType !== "application/pdf") throw httpError(415, "CV must be a PDF (application/pdf).");
+
+  const key = cvObjectKey(safeUid);
+  await putObject(key, input.bytes, "application/pdf");
+
+  const db = getFirestoreDb();
+  const profileRef = db.collection("jobScoutProfiles").doc(safeUid);
+  await db.runTransaction(async (t) => {
+    const doc = await t.get(profileRef);
+    if (doc.exists) {
+      t.update(profileRef, {
+        cvFileRef: normalizeCvFileRef(key),
+        // The previous extraction no longer matches the new file; clear it so
+        // stale personal data isn't retained until the worker re-parses.
+        cvParsedText: null,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    } else {
+      t.set(profileRef, {
+        userId: safeUid,
+        preferences: normalizeJobPreferences(undefined),
+        cvFileRef: normalizeCvFileRef(key),
+        cvParsedText: null,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+  });
+  return { ok: true, key };
+}
+
+export async function getJobScoutCvUrl(userIdInput: string) {
+  const safeUid = validateFirebaseUid(userIdInput);
+  const db = getFirestoreDb();
+  const doc = await db.collection("jobScoutProfiles").doc(safeUid).get();
+  const cvFileRef = doc.exists ? (doc.data()?.cvFileRef as string | null | undefined) : null;
+  if (!cvFileRef) throw httpError(404, "No CV on file.");
+  const expiresIn = 300;
+  const url = await getPresignedGetUrl(cvFileRef, expiresIn);
+  return { url, key: cvFileRef, expiresIn };
+}
+
+export async function deleteJobScoutCv(userIdInput: string) {
+  const safeUid = validateFirebaseUid(userIdInput);
+  const db = getFirestoreDb();
+  const profileRef = db.collection("jobScoutProfiles").doc(safeUid);
+  const doc = await profileRef.get();
+  if (!doc.exists) return { ok: true };
+  const cvFileRef = doc.data()?.cvFileRef as string | null | undefined;
+  // Remove the R2 object only when there is one to remove...
+  if (cvFileRef) await deleteObject(cvFileRef);
+  // ...but always purge the CV references and extracted text, so parsed data
+  // left behind by old deletions or /profile writes (which may have no
+  // cvFileRef) doesn't linger.
+  await profileRef.update({
+    cvFileRef: null,
+    cvParsedText: null,
+    updatedAt: FieldValue.serverTimestamp(),
   });
   return { ok: true };
 }
