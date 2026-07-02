@@ -476,3 +476,7 @@ export function buildMimeMessage(input: any) {
   headers.push("Content-Transfer-Encoding: base64");
   return [...headers, "", Buffer.from(html || text, "utf8").toString("base64"), ""].join("\r\n");
 }
+
+export function encodeGmailRawMessage(input: any) {
+  return Buffer.from(buildMimeMessage(input), "utf8").toString("base64url");
+}

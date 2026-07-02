@@ -2,7 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { config, CALENDAR_SCOPE, GMAIL_SEND_URL, TOKEN_URL } from "@/src/config";
 import { getFirestoreDb } from "@/src/firebase/admin";
 import { encryptCentralSecret, decryptCentralSecret } from "@/src/security/crypto";
-import { tokenStoreKeyForUid, buildMimeMessage, httpError, validateFirebaseUid, credentialRefId } from "@/src/lib/utils";
+import { tokenStoreKeyForUid, encodeGmailRawMessage, httpError, validateFirebaseUid, credentialRefId } from "@/src/lib/utils";
 import { loadUserTokens, saveUserTokens, readStore } from "./local-store";
 
 export async function postForm(url: string, values: Record<string, string>) {
@@ -121,7 +121,7 @@ export async function getValidAccessToken(tokenStoreKey: string) {
 }
 
 export async function sendGmailForTokenStoreKey(tokenStoreKey: string, body: any) {
-  const rawBase64 = buildMimeMessage(body);
+  const rawBase64 = encodeGmailRawMessage(body);
   const accessToken = await getValidAccessToken(tokenStoreKey);
   const response = await fetch(GMAIL_SEND_URL, {
     method: "POST",
