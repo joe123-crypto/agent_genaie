@@ -12,12 +12,15 @@
     "backfill:job-scout-preferences": "npx tsx scripts/backfill-job-scout-preferences.ts",
     "backup:firestore": "npx tsx scripts/backup-firestore.ts",
     "restore:firestore": "npx tsx scripts/restore-firestore.ts",
-    "cleanup:legacy": "npx tsx scripts/cleanup-legacy-data.ts"
+    "cleanup:legacy": "npx tsx scripts/cleanup-legacy-data.ts",
+    "migrate:cvs": "npx tsx scripts/migrate-cvs-to-r2.ts"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1077.0",
+    "@aws-sdk/s3-request-presigner": "^3.1077.0",
     "@vercel/analytics": "^2.0.1",
     "firebase-admin": "^13.10.0",
     "next": "^15.3.3",

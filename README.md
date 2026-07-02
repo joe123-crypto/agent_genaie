@@ -42,6 +42,9 @@ Internal routes require `Authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY`:
 - `GET /internal/account-link/status` checks the current account link status for a phone number.
 - `POST /internal/job-scout/invite` creates a short-lived WhatsApp-to-login Job Scout setup link.
 - `POST /internal/job-scout/profile` saves WhatsApp-collected Job Scout preferences and a CV file reference.
+- `POST /internal/job-scout/cv` uploads a user's CV PDF to R2 (multipart `file` + `userId` or `phone`); stored at `<uid>/cv/cv.pdf`.
+- `GET /internal/job-scout/cv?userId=...` returns a short-lived presigned URL to download the user's CV.
+- `DELETE /internal/job-scout/cv?userId=...` deletes the user's CV from R2 and clears the profile reference.
 - `GET /internal/job-scout/subscribers` lists Job Scout subscribers who are ready for application dispatch.
 - `GET /internal/job-scout/applications` lists recorded Job Scout applications for one user.
 - `POST /internal/job-scout/applications` records an applied, skipped, physical-submission, or failed Job Scout outcome.
@@ -126,9 +129,15 @@ export FIREBASE_EMAIL_LINK_URL="https://your-agent-genaie-domain.example/auth/fi
 export FIREBASE_SERVICE_ACCOUNT_JSON_BASE64="..."
 export OWNER_FIREBASE_UID="..."
 export AGENT_GENAI_INTERNAL_API_KEY="$(openssl rand -base64 32)"
+export R2_ACCOUNT_ID="..."
+export R2_ACCESS_KEY_ID="..."
+export R2_SECRET_ACCESS_KEY="..."
+export R2_BUCKET="..."
 export HOST=127.0.0.1
 export PORT=3010
 ```
+
+`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET` configure the Cloudflare R2 (S3-compatible) bucket that stores user CVs. Objects are keyed by Firebase UID (`<uid>/cv/cv.pdf`). `R2_ENDPOINT` is optional and defaults to `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`. Run `npm run migrate:cvs -- --dry-run` to preview migrating existing on-disk CVs into R2, then without `--dry-run` to perform it.
 
 Set **all** secrets to distinct random values. If any are omitted they fall back to `TOKEN_ENCRYPTION_SECRET`, which means one leaked secret compromises everything at once.
 

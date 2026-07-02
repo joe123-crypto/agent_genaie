@@ -3,7 +3,10 @@
 !.env.example
 data/
 logs/
-scripts/
+scripts/*
+# Keep the R2 CV migration script under version control (other operational
+# scripts remain local-only).
+!scripts/migrate-cvs-to-r2.ts
 archives/
 node_modules/
 migration_plan.md
