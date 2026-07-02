@@ -95,7 +95,7 @@ Enable Firestore for the same Firebase project. Agent Genaie writes central reco
 - `phoneLinksByPhone` — active WhatsApp-to-user links keyed by phone hash
 - `accountLinkInvites` — short-lived account link setup tokens
 - `jobScoutInvites` — short-lived Job Scout setup tokens
-- `jobScoutProfiles` — Job Scout preferences and CV references
+- `jobScoutProfiles` — Job Scout preferences and CV references; `cvFileRef` is the R2 object key `<uid>/cv/cv.pdf` (the CV itself lives in the R2 bucket, not Firestore)
 - `jobScoutDeliveryByPhone` — Job Scout delivery records keyed by phone hash
 - `jobApplications` — recorded Job Scout application outcomes
 - `webetuDeliveryByPhone` — Webetu delivery records keyed by phone hash

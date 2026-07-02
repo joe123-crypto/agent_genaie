@@ -12,7 +12,7 @@ import {
   isActivePhoneLink,
 } from "@/src/lib/utils";
 import { jobScoutTokenHash } from "@/src/security/crypto";
-import { putObject, getPresignedGetUrl, deleteObject } from "./r2-storage";
+import { putObject, getPresignedGetUrl, deleteObject, objectExists } from "./r2-storage";
 import { ensurePublicUserId } from "./users";
 import { queuePhoneLinkCoreWrites, queueJobScoutPhoneDeliveryUpdate } from "./account-link";
 import { config, assertPublicBaseUrl, JOB_SCOUT_SETUP_TTL_SECONDS } from "@/src/config";
@@ -208,6 +208,10 @@ export async function getJobScoutCvUrl(userIdInput: string) {
   const doc = await db.collection("jobScoutProfiles").doc(safeUid).get();
   const cvFileRef = doc.exists ? (doc.data()?.cvFileRef as string | null | undefined) : null;
   if (!cvFileRef) throw httpError(404, "No CV on file.");
+  // Presigning never checks existence, so verify the object is actually in R2 —
+  // otherwise a stale cvFileRef would yield a URL that 404s on download and let
+  // readiness checks pass falsely.
+  if (!(await objectExists(cvFileRef))) throw httpError(404, "CV file is missing from storage.");
   const expiresIn = 300;
   const url = await getPresignedGetUrl(cvFileRef, expiresIn);
   return { url, key: cvFileRef, expiresIn };
