@@ -16,6 +16,11 @@ export function getR2Client() {
   cachedClient = new S3Client({
     region: "auto",
     endpoint: config.r2Endpoint,
+    // R2 supports path-style addressing (Cloudflare's S3 API recommends it), so
+    // this is behavior-neutral against R2 while also letting the same client work
+    // against S3-compatible servers reached by host/IP (e.g. MinIO in CI), where
+    // virtual-hosted-style bucket prefixes can't resolve.
+    forcePathStyle: true,
     credentials: {
       accessKeyId: config.r2AccessKeyId,
       secretAccessKey: config.r2SecretAccessKey,
