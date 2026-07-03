@@ -43,6 +43,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FIREBASE_PROJECT_ID: demo-genaie
+      # Used to hash Job Scout invite tokens; any value works against the emulator.
+      JOB_SCOUT_SETUP_SECRET: ci-test-secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
