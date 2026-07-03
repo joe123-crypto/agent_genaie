@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Typecheck & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # `next build` compiles every route handler, catching most breakages.
+      # config uses `?? ""` fallbacks, so no secrets are needed at build time.
+      - run: npm run build
+
+  unit:
+    name: Unit tests (DB & R2 structure contract)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test:unit
+
+  firestore:
+    name: Firestore emulator integration
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_PROJECT_ID: demo-genaie
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # The emulator runs on the JVM.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      # getFirebaseAdminApp() requires a service account via cert(), but the
+      # emulator ignores the credential — a well-formed throwaway key is enough.
+      - name: Generate throwaway service account
+        run: |
+          KEY=$(openssl genrsa 2048 2>/dev/null)
+          PK=$(printf '%s' "$KEY" | awk 'BEGIN{ORS="\\n"}{print}')
+          SA=$(printf '{"type":"service_account","project_id":"demo-genaie","private_key_id":"ci","private_key":"%s","client_email":"ci@demo-genaie.iam.gserviceaccount.com","client_id":"1","token_uri":"https://oauth2.googleapis.com/token"}' "$PK")
+          echo "FIREBASE_SERVICE_ACCOUNT_JSON_BASE64=$(printf '%s' "$SA" | base64 -w0)" >> "$GITHUB_ENV"
+      # emulators:exec starts the emulator, exports FIRESTORE_EMULATOR_HOST for
+      # the test command, then tears the emulator down.
+      - name: Run integration tests against Firestore emulator
+        run: npx --yes firebase-tools emulators:exec --only firestore --project demo-genaie "npm run test:integration:firestore"
+
+  r2:
+    name: R2 / S3 integration (MinIO)
+    runs-on: ubuntu-latest
+    env:
+      # getR2Client() requires R2_ACCOUNT_ID even though MinIO ignores it (the
+      # explicit R2_ENDPOINT is what's actually used).
+      R2_ACCOUNT_ID: minio
+      R2_ENDPOINT: http://127.0.0.1:9000
+      R2_ACCESS_KEY_ID: minioadmin
+      R2_SECRET_ACCESS_KEY: minioadmin
+      R2_BUCKET: cv-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Run MinIO as a background container. Service containers can't override the
+      # entrypoint `command`, so `docker run` is used instead.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio server /data
+      - name: Wait for MinIO and create bucket
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:9000/minio/health/live; then break; fi
+            sleep 1
+          done
+          docker run --rm --network host --entrypoint sh minio/mc -c "
+            mc alias set local http://127.0.0.1:9000 minioadmin minioadmin &&
+            mc mb --ignore-existing local/${R2_BUCKET}"
+      - run: npm run test:integration:r2
+      - name: MinIO logs on failure
+        if: failure()
+        run: docker logs minio
