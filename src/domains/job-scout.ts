@@ -19,8 +19,10 @@ import { queuePhoneLinkCoreWrites, queueJobScoutPhoneDeliveryUpdate } from "./ac
 import { config, assertPublicBaseUrl, JOB_SCOUT_SETUP_TTL_SECONDS } from "@/src/config";
 import {
   evaluateJobScoutReadiness,
+  canonicalGmailCredentialIsActive,
   JOB_SCOUT_ONBOARDING_VERSION,
   JOB_SCOUT_SAFETY_ACKNOWLEDGEMENT_VERSION,
+  legacyGmailCredentialIsActive,
 } from "./job-scout-readiness";
 
 export async function createJobScoutInvite(phoneInput: string, ttlSecondsInput?: number) {
@@ -142,21 +144,22 @@ export async function saveJobScoutProfile(
   const cvFileRef = normalizeCvFileRef(body.cvFileRef);
   if (!await dependencies.objectExists(cvFileRef)) throw httpError(400, "The staged CV is not available.");
 
-  const [existingDoc, phoneDoc, userDoc, gmailCredDoc] = await Promise.all([
+  const [existingDoc, phoneDoc, userDoc, gmailConnection] = await Promise.all([
     profileRef.get(),
     db.collection("phoneLinksByUser").doc(safeUid).get(),
     db.collection("users").doc(safeUid).get(),
-    db.collection("credentialRefs").doc(credentialRefId(safeUid, "gmail", "oauth2")).get(),
+    getGmailConnection(db, safeUid),
   ]);
   const existing = existingDoc.exists ? existingDoc.data() || {} : {};
   const phoneData = phoneDoc.exists ? phoneDoc.data() || {} : {};
   const userData = userDoc.exists ? userDoc.data() || {} : {};
-  const gmailData = gmailCredDoc.exists ? gmailCredDoc.data() || {} : {};
   if (!isActivePhoneLink(phoneData)) throw httpError(409, "The WhatsApp phone link is not active.");
-  if (!gmailCredentialIsActive(gmailCredDoc.exists, gmailData)) {
+  if (!gmailConnection.connected) {
     throw httpError(409, "Gmail is not connected.");
   }
-  if (!String((userData.profile as any)?.email || "").trim()) {
+  const senderEmail = String((userData.profile as any)?.email || "").trim()
+    || gmailConnection.legacySenderEmail;
+  if (!senderEmail) {
     throw httpError(409, "The linked user has no application email.");
   }
 
@@ -277,33 +280,42 @@ export async function deleteJobScoutCv(userIdInput: string) {
   return { ok: true };
 }
 
-function gmailCredentialIsActive(exists: boolean, data: Record<string, any>) {
-  return Boolean(
-    exists
-    && data.service === "gmail"
-    && data.purpose === "oauth2"
-    && data.status === "active"
-  );
+async function getGmailConnection(db: FirebaseFirestore.Firestore, uid: string) {
+  const [canonicalDoc, legacyDoc] = await Promise.all([
+    db.collection("credentialRefs").doc(credentialRefId(uid, "gmail", "oauth2")).get(),
+    db.collection("credentialRefs").doc(`gmail_oauth_token_${uid}`).get(),
+  ]);
+  const canonicalData = canonicalDoc.exists ? canonicalDoc.data() || {} : {};
+  const legacyData = legacyDoc.exists ? legacyDoc.data() || {} : {};
+  const canonicalConnected = canonicalGmailCredentialIsActive(canonicalDoc.exists, canonicalData);
+  const legacyConnected = legacyGmailCredentialIsActive(legacyDoc.exists, legacyData);
+  return {
+    connected: canonicalConnected || legacyConnected,
+    legacySenderEmail: legacyConnected
+      ? String(legacyData.metadata?.senderEmail || "").trim() || null
+      : null,
+  };
 }
 
 async function buildJobScoutSubscriber(uidInput: string, profile: Record<string, any>): Promise<any> {
   const uid = validateFirebaseUid(uidInput);
   const db = getFirestoreDb();
-  const [phoneDoc, userDoc, gmailCredDoc] = await Promise.all([
+  const [phoneDoc, userDoc, gmailConnection] = await Promise.all([
     db.collection("phoneLinksByUser").doc(uid).get(),
     db.collection("users").doc(uid).get(),
-    db.collection("credentialRefs").doc(credentialRefId(uid, "gmail", "oauth2")).get(),
+    getGmailConnection(db, uid),
   ]);
 
   const phoneData = phoneDoc.exists ? phoneDoc.data() || {} : {};
   const userData = userDoc.exists ? userDoc.data() || {} : {};
-  const gmailData = gmailCredDoc.exists ? gmailCredDoc.data() || {} : {};
   const rawPhone = isActivePhoneLink(phoneData) ? phoneData.phone : null;
   const phone = rawPhone ? normalizePhone(rawPhone) : null;
   const hash = phone ? whatsappPhoneHash(phone) : (phoneData.phoneHash as string | null | undefined) || null;
-  const gmailConnected = gmailCredentialIsActive(gmailCredDoc.exists, gmailData);
   const profileEmail = String((userData.profile as any)?.email || "").trim() || null;
-  const senderEmail = gmailConnected ? profileEmail : null;
+  const gmailConnected = gmailConnection.connected;
+  const senderEmail = gmailConnected
+    ? profileEmail || gmailConnection.legacySenderEmail
+    : null;
   const cvFileRef = String(profile.cvFileRef || "").trim();
   const cvAvailable = Boolean(cvFileRef && await objectExists(cvFileRef));
   const readiness = evaluateJobScoutReadiness({

@@ -23,6 +23,24 @@ export type JobScoutReadiness = {
   missingRequirements: string[];
 };
 
+export function canonicalGmailCredentialIsActive(exists: boolean, data: Record<string, any>) {
+  return Boolean(
+    exists
+    && data.service === "gmail"
+    && data.purpose === "oauth2"
+    && data.status === "active"
+  );
+}
+
+export function legacyGmailCredentialIsActive(exists: boolean, data: Record<string, any>) {
+  return Boolean(
+    exists
+    && data.status !== "revoked"
+    && !data.revokedAt
+    && String(data.metadata?.senderEmail || "").trim()
+  );
+}
+
 function nonEmptyList(value: unknown) {
   return Array.isArray(value) && value.some((item) => String(item ?? "").trim());
 }
