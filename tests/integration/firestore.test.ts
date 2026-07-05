@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { getFirestoreDb } from "@/src/firebase/admin";
-import { jobApplicationId } from "@/src/lib/utils";
+import { credentialRefId, jobApplicationId, whatsappPhoneHash } from "@/src/lib/utils";
 import { jobScoutTokenHash } from "@/src/security/crypto";
 import {
   saveJobScoutProfile,
@@ -23,12 +23,37 @@ const opts = { skip: skip && "FIRESTORE_EMULATOR_HOST not set" };
 test("saveJobScoutProfile writes the expected jobScoutProfiles document shape", opts, async () => {
   const db = getFirestoreDb();
   const uid = `it-profile-${Date.now()}`;
+  const phone = "+263775780179";
+  await Promise.all([
+    db.collection("phoneLinksByUser").doc(uid).set({
+      userId: uid,
+      phone,
+      phoneHash: whatsappPhoneHash(phone),
+      status: "active",
+    }),
+    db.collection("users").doc(uid).set({
+      profile: { email: "applicant@example.com", displayName: "Applicant" },
+    }),
+    db.collection("credentialRefs").doc(credentialRefId(uid, "gmail", "oauth2")).set({
+      userId: uid,
+      service: "gmail",
+      purpose: "oauth2",
+      status: "active",
+    }),
+  ]);
   await saveJobScoutProfile({
     userId: uid,
-    preferences: { targetRoles: ["Dev", "dev"], maxApplicationsPerRun: 99, country: "FR" },
+    preferences: {
+      targetRoles: ["Dev", "dev"],
+      locations: ["Paris, France"],
+      maxApplicationsPerRun: 99,
+      country: "FR",
+    },
     cvFileRef: `${uid}/cv/cv.pdf`,
     cvParsedText: "x".repeat(60000),
-  });
+    profileConfirmed: true,
+    safetyAcknowledged: true,
+  }, { objectExists: async () => true });
 
   const snap = await db.collection("jobScoutProfiles").doc(uid).get();
   assert.ok(snap.exists, "profile document should exist");
@@ -39,6 +64,10 @@ test("saveJobScoutProfile writes the expected jobScoutProfiles document shape", 
   assert.equal(data.preferences.country, "fr"); // normalized locale
   assert.equal(data.cvFileRef, `${uid}/cv/cv.pdf`);
   assert.equal(data.cvParsedText.length, 50000); // capped
+  assert.equal(data.onboardingVersion, 2);
+  assert.equal(data.setupStatus, "ready");
+  assert.ok(data.profileConfirmedAt, "profile confirmation timestamp present");
+  assert.ok(data.safetyAcknowledgedAt, "safety acknowledgement timestamp present");
   assert.ok(data.createdAt, "createdAt server timestamp present");
   assert.ok(data.updatedAt, "updatedAt server timestamp present");
 });
