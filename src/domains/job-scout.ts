@@ -123,7 +123,10 @@ export async function findJobScoutUserByPhone(phoneInput: string) {
   return deliveryDoc.data()!.userId;
 }
 
-export async function saveJobScoutProfile(body: any) {
+export async function saveJobScoutProfile(
+  body: any,
+  dependencies: { objectExists: typeof objectExists } = { objectExists },
+) {
   const resolvedUid = body.userId ?? (body.phone ? await findJobScoutUserByPhone(body.phone) : null);
   if (!resolvedUid) {
     throw httpError(404, "Linked Job Scout user not found.");
@@ -137,7 +140,7 @@ export async function saveJobScoutProfile(body: any) {
     throw httpError(400, "At least one validated location and country are required.");
   }
   const cvFileRef = normalizeCvFileRef(body.cvFileRef);
-  if (!await objectExists(cvFileRef)) throw httpError(400, "The staged CV is not available.");
+  if (!await dependencies.objectExists(cvFileRef)) throw httpError(400, "The staged CV is not available.");
 
   const [existingDoc, phoneDoc, userDoc, gmailCredDoc] = await Promise.all([
     profileRef.get(),

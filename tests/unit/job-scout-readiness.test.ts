@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateJobScoutReadiness } from "./job-scout-readiness";
+import { evaluateJobScoutReadiness } from "@/src/domains/job-scout-readiness";
 
 const complete = {
   linked: true,
