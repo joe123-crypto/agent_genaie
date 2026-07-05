@@ -10,12 +10,18 @@ import {
   normalizeStringList,
   normalizeCvFileRef,
   isActivePhoneLink,
+  credentialRefId,
 } from "@/src/lib/utils";
 import { jobScoutTokenHash } from "@/src/security/crypto";
 import { putObject, getPresignedGetUrl, deleteObject, objectExists } from "./r2-storage";
 import { ensurePublicUserId } from "./users";
 import { queuePhoneLinkCoreWrites, queueJobScoutPhoneDeliveryUpdate } from "./account-link";
 import { config, assertPublicBaseUrl, JOB_SCOUT_SETUP_TTL_SECONDS } from "@/src/config";
+import {
+  evaluateJobScoutReadiness,
+  JOB_SCOUT_ONBOARDING_VERSION,
+  JOB_SCOUT_SAFETY_ACKNOWLEDGEMENT_VERSION,
+} from "./job-scout-readiness";
 
 export async function createJobScoutInvite(phoneInput: string, ttlSecondsInput?: number) {
   assertPublicBaseUrl();
@@ -125,27 +131,55 @@ export async function saveJobScoutProfile(body: any) {
   const safeUid = validateFirebaseUid(resolvedUid);
   const db = getFirestoreDb();
   const profileRef = db.collection("jobScoutProfiles").doc(safeUid);
-  await db.runTransaction(async (t) => {
-    const doc = await t.get(profileRef);
-    if (doc.exists) {
-      t.update(profileRef, {
-        preferences: normalizeJobPreferences(body.preferences),
-        cvFileRef: body.cvFileRef ? normalizeCvFileRef(body.cvFileRef) : null,
-        cvParsedText: body.cvParsedText ? String(body.cvParsedText).slice(0, 50000) : null,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    } else {
-      t.set(profileRef, {
-        userId: safeUid,
-        preferences: normalizeJobPreferences(body.preferences),
-        cvFileRef: body.cvFileRef ? normalizeCvFileRef(body.cvFileRef) : null,
-        cvParsedText: body.cvParsedText ? String(body.cvParsedText).slice(0, 50000) : null,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    }
-  });
-  return { ok: true };
+  const preferences = normalizeJobPreferences(body.preferences);
+  if (preferences.targetRoles.length === 0) throw httpError(400, "At least one target role is required.");
+  if (preferences.locations.length === 0 || !/^[a-z]{2}$/.test(preferences.country)) {
+    throw httpError(400, "At least one validated location and country are required.");
+  }
+  const cvFileRef = normalizeCvFileRef(body.cvFileRef);
+  if (!await objectExists(cvFileRef)) throw httpError(400, "The staged CV is not available.");
+
+  const [existingDoc, phoneDoc, userDoc, gmailCredDoc] = await Promise.all([
+    profileRef.get(),
+    db.collection("phoneLinksByUser").doc(safeUid).get(),
+    db.collection("users").doc(safeUid).get(),
+    db.collection("credentialRefs").doc(credentialRefId(safeUid, "gmail", "oauth2")).get(),
+  ]);
+  const existing = existingDoc.exists ? existingDoc.data() || {} : {};
+  const phoneData = phoneDoc.exists ? phoneDoc.data() || {} : {};
+  const userData = userDoc.exists ? userDoc.data() || {} : {};
+  const gmailData = gmailCredDoc.exists ? gmailCredDoc.data() || {} : {};
+  if (!isActivePhoneLink(phoneData)) throw httpError(409, "The WhatsApp phone link is not active.");
+  if (!gmailCredentialIsActive(gmailCredDoc.exists, gmailData)) {
+    throw httpError(409, "Gmail is not connected.");
+  }
+  if (!String((userData.profile as any)?.email || "").trim()) {
+    throw httpError(409, "The linked user has no application email.");
+  }
+
+  const profileConfirmedAt = existing.profileConfirmedAt
+    || (body.profileConfirmed === true ? FieldValue.serverTimestamp() : null);
+  const safetyAcknowledgedAt = existing.safetyAcknowledgedAt
+    || (body.safetyAcknowledged === true ? FieldValue.serverTimestamp() : null);
+  if (!profileConfirmedAt) throw httpError(400, "Profile confirmation is required.");
+  if (!safetyAcknowledgedAt) throw httpError(400, "Scam-safety acknowledgement is required.");
+
+  await profileRef.set({
+    userId: safeUid,
+    preferences,
+    cvFileRef,
+    cvParsedText: body.cvParsedText ? String(body.cvParsedText).slice(0, 50000) : null,
+    onboardingVersion: JOB_SCOUT_ONBOARDING_VERSION,
+    setupStatus: "ready",
+    profileConfirmedAt,
+    safetyAcknowledgedAt,
+    safetyAcknowledgementVersion:
+      existing.safetyAcknowledgementVersion || JOB_SCOUT_SAFETY_ACKNOWLEDGEMENT_VERSION,
+    completionSource: existing.completionSource || "explicit",
+    createdAt: existing.createdAt || FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { ok: true, setupStatus: "ready", ready: true };
 }
 
 // Vercel Functions reject request bodies larger than 4.5 MB, and multipart adds
@@ -194,6 +228,8 @@ export async function saveJobScoutCv(input: {
         preferences: normalizeJobPreferences(undefined),
         cvFileRef: normalizeCvFileRef(key),
         cvParsedText: null,
+        onboardingVersion: JOB_SCOUT_ONBOARDING_VERSION,
+        setupStatus: "draft",
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -232,9 +268,67 @@ export async function deleteJobScoutCv(userIdInput: string) {
   await profileRef.update({
     cvFileRef: null,
     cvParsedText: null,
+    setupStatus: "draft",
     updatedAt: FieldValue.serverTimestamp(),
   });
   return { ok: true };
+}
+
+function gmailCredentialIsActive(exists: boolean, data: Record<string, any>) {
+  return Boolean(
+    exists
+    && data.service === "gmail"
+    && data.purpose === "oauth2"
+    && data.status === "active"
+  );
+}
+
+async function buildJobScoutSubscriber(uidInput: string, profile: Record<string, any>): Promise<any> {
+  const uid = validateFirebaseUid(uidInput);
+  const db = getFirestoreDb();
+  const [phoneDoc, userDoc, gmailCredDoc] = await Promise.all([
+    db.collection("phoneLinksByUser").doc(uid).get(),
+    db.collection("users").doc(uid).get(),
+    db.collection("credentialRefs").doc(credentialRefId(uid, "gmail", "oauth2")).get(),
+  ]);
+
+  const phoneData = phoneDoc.exists ? phoneDoc.data() || {} : {};
+  const userData = userDoc.exists ? userDoc.data() || {} : {};
+  const gmailData = gmailCredDoc.exists ? gmailCredDoc.data() || {} : {};
+  const rawPhone = isActivePhoneLink(phoneData) ? phoneData.phone : null;
+  const phone = rawPhone ? normalizePhone(rawPhone) : null;
+  const hash = phone ? whatsappPhoneHash(phone) : (phoneData.phoneHash as string | null | undefined) || null;
+  const gmailConnected = gmailCredentialIsActive(gmailCredDoc.exists, gmailData);
+  const profileEmail = String((userData.profile as any)?.email || "").trim() || null;
+  const senderEmail = gmailConnected ? profileEmail : null;
+  const cvFileRef = String(profile.cvFileRef || "").trim();
+  const cvAvailable = Boolean(cvFileRef && await objectExists(cvFileRef));
+  const readiness = evaluateJobScoutReadiness({
+    onboardingVersion: profile.onboardingVersion,
+    preferences: profile.preferences,
+    linked: Boolean(phone),
+    gmailConnected,
+    senderEmail,
+    cvFileRef,
+    cvAvailable,
+    profileConfirmedAt: profile.profileConfirmedAt,
+    safetyAcknowledgedAt: profile.safetyAcknowledgedAt,
+  });
+
+  return {
+    ...profile,
+    ...readiness,
+    userId: uid,
+    whatsappPhone: phone,
+    whatsappPhoneHash: hash,
+    gmailConnected,
+    senderEmail,
+    cvAvailable,
+    profile: {
+      email: profileEmail,
+      displayName: (userData.profile as any)?.displayName || null,
+    },
+  };
 }
 
 export async function listJobScoutSubscribers(limitInput: number) {
@@ -242,36 +336,78 @@ export async function listJobScoutSubscribers(limitInput: number) {
   const db = getFirestoreDb();
   const snap = await db.collection("jobScoutProfiles").limit(limit).get();
 
-  return Promise.all(snap.docs.map(async (doc) => {
-    const profile = doc.data();
-    const uid = doc.id;
+  const subscribers = await Promise.all(
+    snap.docs.map((doc) => buildJobScoutSubscriber(doc.id, doc.data())),
+  );
+  return subscribers.filter((subscriber) => subscriber.ready);
+}
 
-    const [phoneDoc, userDoc, gmailCredDoc] = await Promise.all([
-      db.collection("phoneLinksByUser").doc(uid).get(),
-      db.collection("users").doc(uid).get(),
-      db.collection("credentialRefs").doc(`gmail_oauth_token_${uid}`).get(),
-    ]);
-
-    const phoneData = phoneDoc.exists ? phoneDoc.data() || {} : {};
-    const userData = userDoc.exists ? userDoc.data() || {} : {};
-    const gmailData = gmailCredDoc.exists ? gmailCredDoc.data() || {} : {};
-
-    const rawPhone = isActivePhoneLink(phoneData) ? phoneData.phone : null;
-    const phone = rawPhone ? normalizePhone(rawPhone) : null;
-    const hash = phone ? whatsappPhoneHash(phone) : (phoneData.phoneHash as string | null | undefined) || null;
-    const senderEmail = (gmailData.metadata as any)?.senderEmail || null;
-
+export async function getJobScoutStatusForPhone(phoneInput: string) {
+  const phone = normalizePhone(phoneInput);
+  const hash = whatsappPhoneHash(phone);
+  const db = getFirestoreDb();
+  const [deliveryDoc, phoneDoc] = await Promise.all([
+    db.collection("jobScoutDeliveryByPhone").doc(hash).get(),
+    db.collection("phoneLinksByPhone").doc(hash).get(),
+  ]);
+  const deliveryData = deliveryDoc.exists ? deliveryDoc.data() || {} : {};
+  const phoneData = phoneDoc.exists ? phoneDoc.data() || {} : {};
+  const uid = deliveryData.status === "active" && deliveryData.userId
+    ? deliveryData.userId
+    : isActivePhoneLink(phoneData) ? phoneData.userId : null;
+  if (!uid) {
     return {
-      ...profile,
-      whatsappPhone: phone,
-      whatsappPhoneHash: hash,
-      senderEmail,
-      profile: {
-        email: (userData.profile as any)?.email || null,
-        displayName: (userData.profile as any)?.displayName || null,
-      },
+      configured: false,
+      linked: false,
+      gmailConnected: false,
+      cvAvailable: false,
+      profileConfirmed: false,
+      safetyAcknowledged: false,
+      setupStatus: "draft",
+      ready: false,
+      missingRequirements: [
+        "phone_link",
+        "gmail_connection",
+        "sender_email",
+        "cv",
+        "target_roles",
+        "locations",
+        "profile_confirmation",
+        "safety_acknowledgement",
+      ],
     };
-  }));
+  }
+
+  const profileDoc = await db.collection("jobScoutProfiles").doc(validateFirebaseUid(uid)).get();
+  const subscriber = await buildJobScoutSubscriber(uid, profileDoc.exists ? profileDoc.data() || {} : {});
+  const preferences = subscriber.preferences && typeof subscriber.preferences === "object"
+    ? subscriber.preferences
+    : {};
+  return {
+    configured: profileDoc.exists,
+    linked: Boolean(subscriber.whatsappPhone),
+    gmailConnected: subscriber.gmailConnected,
+    senderEmail: subscriber.senderEmail,
+    cvAvailable: subscriber.cvAvailable,
+    onboardingVersion: subscriber.onboardingVersion,
+    legacyProfile: subscriber.legacyProfile,
+    profileConfirmed: subscriber.profileConfirmed,
+    safetyAcknowledged: subscriber.safetyAcknowledged,
+    setupStatus: subscriber.setupStatus,
+    ready: subscriber.ready,
+    missingRequirements: subscriber.missingRequirements,
+    profile: {
+      displayName: subscriber.profile.displayName,
+    },
+    preferences: {
+      targetRoles: preferences.targetRoles || [],
+      locations: preferences.locations || [],
+      country: preferences.country || null,
+      language: preferences.language || null,
+      autoApply: preferences.autoApply !== false,
+      maxApplicationsPerRun: preferences.maxApplicationsPerRun ?? 2,
+    },
+  };
 }
 
 export async function listJobApplications(userIdInput: string) {
