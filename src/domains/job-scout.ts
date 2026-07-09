@@ -125,6 +125,34 @@ export async function findJobScoutUserByPhone(phoneInput: string) {
   return deliveryDoc.data()!.userId;
 }
 
+async function resolveJobScoutUserByPhone(phoneInput: string) {
+  const phone = normalizePhone(phoneInput);
+  const hash = whatsappPhoneHash(phone);
+  const db = getFirestoreDb();
+  const [deliveryDoc, phoneDoc] = await Promise.all([
+    db.collection("jobScoutDeliveryByPhone").doc(hash).get(),
+    db.collection("phoneLinksByPhone").doc(hash).get(),
+  ]);
+  const deliveryData = deliveryDoc.exists ? deliveryDoc.data() || {} : {};
+  const phoneData = phoneDoc.exists ? phoneDoc.data() || {} : {};
+  const userId = deliveryData.status === "active" && deliveryData.userId
+    ? deliveryData.userId
+    : isActivePhoneLink(phoneData) ? phoneData.userId : null;
+  return { phone, hash, userId: userId ? validateFirebaseUid(userId) : null };
+}
+
+async function deleteDocumentRefs(refs: FirebaseFirestore.DocumentReference[]) {
+  let deleted = 0;
+  for (let i = 0; i < refs.length; i += 450) {
+    const chunk = refs.slice(i, i + 450);
+    const batch = getFirestoreDb().batch();
+    for (const ref of chunk) batch.delete(ref);
+    await batch.commit();
+    deleted += chunk.length;
+  }
+  return deleted;
+}
+
 export async function saveJobScoutProfile(
   body: any,
   dependencies: { objectExists: typeof objectExists } = { objectExists },
@@ -278,6 +306,51 @@ export async function deleteJobScoutCv(userIdInput: string) {
     updatedAt: FieldValue.serverTimestamp(),
   });
   return { ok: true };
+}
+
+export async function resetJobScoutProfileForPhone(
+  phoneInput: string,
+  dependencies: { deleteObject: typeof deleteObject } = { deleteObject },
+) {
+  const { phone, hash, userId } = await resolveJobScoutUserByPhone(phoneInput);
+  if (!userId) throw httpError(404, "Linked Job Scout user not found.");
+
+  const db = getFirestoreDb();
+  const profileRef = db.collection("jobScoutProfiles").doc(userId);
+  const profileDoc = await profileRef.get();
+  let profileDeleted = false;
+  let cvDeleted = false;
+
+  if (profileDoc.exists) {
+    const cvFileRef = String(profileDoc.data()?.cvFileRef || "").trim();
+    if (cvFileRef) {
+      await dependencies.deleteObject(cvFileRef);
+      cvDeleted = true;
+    }
+    await profileRef.delete();
+    profileDeleted = true;
+  }
+
+  const [applicationSnap, inviteSnap] = await Promise.all([
+    db.collection("jobApplications").where("userId", "==", userId).get(),
+    db.collection("jobScoutInvites").where("phoneHash", "==", hash).get(),
+  ]);
+  const applicationsDeleted = await deleteDocumentRefs(applicationSnap.docs.map((doc) => doc.ref));
+  const pendingInviteRefs = inviteSnap.docs
+    .filter((doc) => doc.data()?.status === "pending")
+    .map((doc) => doc.ref);
+  const invitesDeleted = await deleteDocumentRefs(pendingInviteRefs);
+
+  return {
+    ok: true,
+    userId,
+    phone,
+    phoneHash: hash,
+    profileDeleted,
+    cvDeleted,
+    applicationsDeleted,
+    invitesDeleted,
+  };
 }
 
 async function getGmailConnection(db: FirebaseFirestore.Firestore, uid: string) {

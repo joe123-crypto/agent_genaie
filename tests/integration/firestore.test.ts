@@ -10,6 +10,7 @@ import {
   getJobScoutInvite,
   recordJobApplication,
   listJobApplications,
+  resetJobScoutProfileForPhone,
 } from "@/src/domains/job-scout";
 
 // Live round-trip against the Firestore emulator (started by CI via
@@ -128,4 +129,79 @@ test("recordJobApplication uses jobApplicationId as the doc ID and a valid statu
   const listed = await listJobApplications(uid);
   assert.equal(listed.length, 1);
   assert.equal((listed[0] as any).id, result.id);
+});
+
+test("resetJobScoutProfileForPhone deletes only Job Scout setup data", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-reset-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const otherUid = `${uid}-other`;
+  const phone = "+213600000004";
+  const hash = whatsappPhoneHash(phone);
+  const cvFileRef = `${uid}/cv/cv.pdf`;
+  const deletedObjects: string[] = [];
+
+  await Promise.all([
+    db.collection("users").doc(uid).set({
+      profile: { email: "reset@example.com", displayName: "Reset User" },
+    }),
+    db.collection("phoneLinksByUser").doc(uid).set({
+      userId: uid,
+      phone,
+      phoneHash: hash,
+      status: "active",
+    }),
+    db.collection("phoneLinksByPhone").doc(hash).set({
+      userId: uid,
+      phone,
+      phoneHash: hash,
+      status: "active",
+    }),
+    db.collection("jobScoutDeliveryByPhone").doc(hash).set({
+      userId: uid,
+      phone,
+      phoneHash: hash,
+      status: "active",
+    }),
+    db.collection("jobScoutProfiles").doc(uid).set({
+      userId: uid,
+      cvFileRef,
+      cvParsedText: "parsed CV text",
+      preferences: { targetRoles: ["Any"], locations: ["Nationwide, Zimbabwe"], country: "zw" },
+      setupStatus: "ready",
+    }),
+    db.collection("jobApplications").doc(`${uid}-app-1`).set({ userId: uid, company: "A", role: "One" }),
+    db.collection("jobApplications").doc(`${uid}-app-2`).set({ userId: uid, company: "B", role: "Two" }),
+    db.collection("jobApplications").doc(`${uid}-other-app`).set({ userId: otherUid, company: "C", role: "Three" }),
+    db.collection("jobScoutInvites").doc(`${uid}-pending`).set({ phoneHash: hash, status: "pending" }),
+    db.collection("jobScoutInvites").doc(`${uid}-completed`).set({ phoneHash: hash, status: "completed" }),
+    db.collection("jobScoutInvites").doc(`${uid}-other-pending`).set({
+      phoneHash: whatsappPhoneHash("+213600000005"),
+      status: "pending",
+    }),
+  ]);
+
+  const result = await resetJobScoutProfileForPhone(phone, {
+    deleteObject: async (key: string) => {
+      deletedObjects.push(key);
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.userId, uid);
+  assert.equal(result.profileDeleted, true);
+  assert.equal(result.cvDeleted, true);
+  assert.equal(result.applicationsDeleted, 2);
+  assert.equal(result.invitesDeleted, 1);
+  assert.deepEqual(deletedObjects, [cvFileRef]);
+
+  assert.equal((await db.collection("jobScoutProfiles").doc(uid).get()).exists, false);
+  assert.equal((await db.collection("jobApplications").where("userId", "==", uid).get()).size, 0);
+  assert.equal((await db.collection("jobApplications").where("userId", "==", otherUid).get()).size, 1);
+  assert.equal((await db.collection("jobScoutInvites").doc(`${uid}-pending`).get()).exists, false);
+  assert.equal((await db.collection("jobScoutInvites").doc(`${uid}-completed`).get()).exists, true);
+  assert.equal((await db.collection("jobScoutInvites").doc(`${uid}-other-pending`).get()).exists, true);
+  assert.equal((await db.collection("users").doc(uid).get()).exists, true);
+  assert.equal((await db.collection("phoneLinksByUser").doc(uid).get()).exists, true);
+  assert.equal((await db.collection("phoneLinksByPhone").doc(hash).get()).exists, true);
+  assert.equal((await db.collection("jobScoutDeliveryByPhone").doc(hash).get()).exists, true);
 });
