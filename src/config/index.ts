@@ -78,6 +78,7 @@ export const config = {
     process.env.OAUTH_STATE_SECRET ??
     process.env.TOKEN_ENCRYPTION_SECRET ??
     "",
+  whatsappBotPhone: process.env.WHATSAPP_BOT_PHONE ?? "",
   pendingLinksCachePath: path.resolve(process.env.PENDING_LINKS_CACHE_PATH ?? DEFAULT_PENDING_LINKS_CACHE_PATH),
   r2AccountId: process.env.R2_ACCOUNT_ID ?? "",
   r2AccessKeyId: process.env.R2_ACCESS_KEY_ID ?? "",
@@ -116,6 +117,7 @@ export function requireConfig(keys: (keyof typeof config)[]) {
       if (key === "centralDataEncryptionSecret") return "CENTRAL_DATA_ENCRYPTION_SECRET";
       if (key === "jobScoutSetupSecret") return "JOB_SCOUT_SETUP_SECRET";
       if (key === "accountLinkSetupSecret") return "ACCOUNT_LINK_SETUP_SECRET";
+      if (key === "whatsappBotPhone") return "WHATSAPP_BOT_PHONE";
       if (key === "r2AccountId") return "R2_ACCOUNT_ID";
       if (key === "r2AccessKeyId") return "R2_ACCESS_KEY_ID";
       if (key === "r2SecretAccessKey") return "R2_SECRET_ACCESS_KEY";

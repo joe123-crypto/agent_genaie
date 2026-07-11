@@ -325,8 +325,8 @@ export function normalizeAccountLinkPurpose(value: unknown) {
 export function normalizeAccountLinkNextPath(value: unknown) {
   const text = String(value ?? "/").trim();
   if (!text || !text.startsWith("/") || text.startsWith("//")) return "/";
-  if (text === "/" || text === "/connect-gmail" || text === "/vault") return text;
-  const match = text.match(/^\/(connect-gmail|vault)\/?(\?.*)?$/);
+  if (text === "/" || text === "/connect-gmail" || text === "/vault" || text === "/whatsapp") return text;
+  const match = text.match(/^\/(connect-gmail|vault|whatsapp)\/?(\?.*)?$/);
   if (match) return `/${match[1]}${match[2] ?? ""}`;
   return "/";
 }
@@ -337,6 +337,7 @@ export function scopedPathForAccountLink(nextPath: string, publicUserId: string)
   if (normalized === "/") return `/${id}`;
   if (normalized === "/connect-gmail") return `/${id}/connect-gmail`;
   if (normalized === "/vault") return `/${id}/vault`;
+  if (normalized === "/whatsapp") return `/${id}/whatsapp`;
   return `/${id}`;
 }
 

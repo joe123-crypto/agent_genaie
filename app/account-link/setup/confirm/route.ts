@@ -24,7 +24,7 @@ function purposeLabel(purpose: string) {
 function normalizeNextPath(value: string | null | undefined) {
   const text = String(value ?? "").trim();
   if (!text || text === "/") return "/";
-  if (text === "/connect-gmail" || text === "/vault") return text;
+  if (text === "/connect-gmail" || text === "/vault" || text === "/whatsapp") return text;
   if (/^\/usr_[A-Za-z0-9_-]{16}(\/.*)?$/.test(text)) return text;
   return "/";
 }
@@ -34,6 +34,7 @@ function scopedPathForLink(nextPath: string, publicUserId: string) {
   const normalized = normalizeNextPath(nextPath);
   if (normalized === "/connect-gmail") return `/${id}/connect-gmail`;
   if (normalized === "/vault") return `/${id}/vault`;
+  if (normalized === "/whatsapp") return `/${id}/whatsapp`;
   if (normalized === "/" || !normalized) return `/${id}`;
   return normalized;
 }
