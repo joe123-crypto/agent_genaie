@@ -23,11 +23,14 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `/{publicUserId}/vault` signed-in Webetu credential vault.
 - `/{publicUserId}/connect-gmail` authenticated Gmail connect/disconnect page.
 - `/{publicUserId}/job-scout` signed-in Job Scout setup page for CV, target role, target location, and acknowledgements.
+- `/{publicUserId}/whatsapp` signed-in WhatsApp linking and revocation page.
 - `/`, `/connect-gmail`, and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail OAuth for the signed-in Firebase user.
 - `GET /auth/google/status` checks Gmail connection for the signed-in Firebase user.
 - `POST /auth/google/revoke` revokes and removes stored Gmail tokens for the signed-in Firebase user.
 - `GET /account/status` returns the signed-in user's WhatsApp link and service status.
+- `POST /account/whatsapp/link-request` creates a pending WhatsApp link request for the signed-in Firebase user.
+- `POST /account/whatsapp/revoke` revokes the signed-in user's active WhatsApp link.
 - `GET /webetu/credentials/status` checks whether the signed-in user has saved Webetu credentials.
 - `POST /webetu/credentials` encrypts and saves the signed-in user's Webetu username/password.
 - `POST /webetu/credentials/revoke` revokes the signed-in user's stored Webetu credentials.
@@ -133,6 +136,7 @@ export FIREBASE_EMAIL_LINK_URL="https://your-agent-genaie-domain.example/auth/fi
 export FIREBASE_SERVICE_ACCOUNT_JSON_BASE64="..."
 export OWNER_FIREBASE_UID="..."
 export AGENT_GENAI_INTERNAL_API_KEY="$(openssl rand -base64 32)"
+export WHATSAPP_BOT_PHONE="+213600000000"
 export R2_ACCOUNT_ID="..."
 export R2_ACCESS_KEY_ID="..."
 export R2_SECRET_ACCESS_KEY="..."
