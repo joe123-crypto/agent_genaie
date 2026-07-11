@@ -121,6 +121,24 @@ export async function getSignedInAccountStatus(uid: string) {
   };
 }
 
+export async function updateSignedInDisplayName(uid: string, displayNameInput: unknown) {
+  const safeUid = validateFirebaseUid(uid);
+  const displayName = String(displayNameInput ?? "").replace(/\s+/g, " ").trim();
+  if (!displayName) throw httpError(400, "Display name is required.");
+  if (displayName.length > 120) throw httpError(400, "Display name is too long.");
+  if (displayName.includes("\0")) throw httpError(400, "Display name is invalid.");
+
+  const db = getFirestoreDb();
+  await getFirebaseAdminAuth().updateUser(safeUid, { displayName });
+  await db.collection("users").doc(safeUid).set({
+    profile: {
+      displayName,
+    },
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { displayName };
+}
+
 export function scopedRouteForPath(pathname: string) {
   if (!pathname || pathname === "/") return null;
   const parts = pathname.split("/").filter(Boolean);

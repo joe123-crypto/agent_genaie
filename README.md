@@ -22,6 +22,7 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `/{publicUserId}` signed-in dashboard launcher with service tabs.
 - `/{publicUserId}/vault` signed-in Webetu credential vault.
 - `/{publicUserId}/connect-gmail` authenticated Gmail connect/disconnect page.
+- `/{publicUserId}/job-scout` signed-in Job Scout setup page for CV, target role, target location, and acknowledgements.
 - `/`, `/connect-gmail`, and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail OAuth for the signed-in Firebase user.
 - `GET /auth/google/status` checks Gmail connection for the signed-in Firebase user.
@@ -33,6 +34,8 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `POST /gmail/send` sends Gmail for the signed-in Firebase user only when `confirm` is `true`.
 - `POST /account-link/setup/confirm` binds a pending account link invite to the signed-in user.
 - `POST /job-scout/setup/confirm` binds a pending Job Scout invite to the signed-in user.
+- `GET /job-scout/profile/status` returns the signed-in user's Job Scout readiness.
+- `POST /job-scout/profile` uploads or reuses the signed-in user's CV and saves a ready Job Scout profile.
 
 Internal routes require `Authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY`:
 

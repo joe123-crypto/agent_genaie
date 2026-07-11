@@ -8,6 +8,7 @@ import {
   saveJobScoutProfile,
   createJobScoutInvite,
   getJobScoutInvite,
+  getJobScoutStatusForUser,
   recordJobApplication,
   listJobApplications,
   resetJobScoutProfileForPhone,
@@ -81,6 +82,45 @@ test("createJobScoutInvite/getJobScoutInvite round-trips a pending invite", opts
   assert.match(invite.phoneHash, /^[0-9a-f]{12}$/);
   assert.equal(invite.tokenHash, jobScoutTokenHash(token));
   assert.ok(invite.expiresAt, "expiresAt present");
+});
+
+test("getJobScoutStatusForUser evaluates signed-in Job Scout readiness", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-status-${Date.now()}`;
+  const phone = "+213600000006";
+  await Promise.all([
+    db.collection("users").doc(uid).set({
+      profile: { email: "status@example.com", displayName: "Status User" },
+    }),
+    db.collection("phoneLinksByUser").doc(uid).set({
+      userId: uid,
+      phone,
+      phoneHash: whatsappPhoneHash(phone),
+      status: "active",
+    }),
+    db.collection("credentialRefs").doc(credentialRefId(uid, "gmail", "oauth2")).set({
+      userId: uid,
+      service: "gmail",
+      purpose: "oauth2",
+      status: "active",
+    }),
+    db.collection("jobScoutProfiles").doc(uid).set({
+      userId: uid,
+      preferences: { targetRoles: ["Developer"], locations: ["Algiers, Algeria"], country: "dz" },
+      setupStatus: "draft",
+    }),
+  ]);
+
+  const status = await getJobScoutStatusForUser(uid);
+  assert.equal(status.configured, true);
+  assert.equal(status.linked, true);
+  assert.equal(status.gmailConnected, true);
+  assert.equal(status.profile.displayName, "Status User");
+  assert.deepEqual(status.preferences.targetRoles, ["Developer"]);
+  assert.equal(status.ready, false);
+  assert.ok(status.missingRequirements.includes("cv"));
+  assert.ok(status.missingRequirements.includes("profile_confirmation"));
+  assert.ok(status.missingRequirements.includes("safety_acknowledgement"));
 });
 
 test("getJobScoutInvite rejects a tampered token", opts, async () => {

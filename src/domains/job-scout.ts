@@ -287,6 +287,14 @@ export async function getJobScoutCvUrl(userIdInput: string) {
   return { url, key: cvFileRef, expiresIn };
 }
 
+export async function getJobScoutCvFileRef(userIdInput: string) {
+  const safeUid = validateFirebaseUid(userIdInput);
+  const db = getFirestoreDb();
+  const doc = await db.collection("jobScoutProfiles").doc(safeUid).get();
+  const cvFileRef = doc.exists ? String(doc.data()?.cvFileRef || "").trim() : "";
+  return cvFileRef || null;
+}
+
 export async function deleteJobScoutCv(userIdInput: string) {
   const safeUid = validateFirebaseUid(userIdInput);
   const db = getFirestoreDb();
@@ -428,6 +436,42 @@ export async function listJobScoutSubscribers(limitInput: number) {
     snap.docs.map((doc) => buildJobScoutSubscriber(doc.id, doc.data())),
   );
   return subscribers.filter((subscriber) => subscriber.ready);
+}
+
+export async function getJobScoutStatusForUser(userIdInput: string) {
+  const uid = validateFirebaseUid(userIdInput);
+  const db = getFirestoreDb();
+  const profileDoc = await db.collection("jobScoutProfiles").doc(uid).get();
+  const subscriber = await buildJobScoutSubscriber(uid, profileDoc.exists ? profileDoc.data() || {} : {});
+  const preferences = subscriber.preferences && typeof subscriber.preferences === "object"
+    ? subscriber.preferences
+    : {};
+  return {
+    configured: profileDoc.exists,
+    linked: Boolean(subscriber.whatsappPhone),
+    gmailConnected: subscriber.gmailConnected,
+    senderEmail: subscriber.senderEmail,
+    cvAvailable: subscriber.cvAvailable,
+    onboardingVersion: subscriber.onboardingVersion,
+    legacyProfile: subscriber.legacyProfile,
+    profileConfirmed: subscriber.profileConfirmed,
+    safetyAcknowledged: subscriber.safetyAcknowledged,
+    setupStatus: subscriber.setupStatus,
+    ready: subscriber.ready,
+    missingRequirements: subscriber.missingRequirements,
+    profile: {
+      email: subscriber.profile.email,
+      displayName: subscriber.profile.displayName,
+    },
+    preferences: {
+      targetRoles: preferences.targetRoles || [],
+      locations: preferences.locations || [],
+      country: preferences.country || null,
+      language: preferences.language || null,
+      autoApply: preferences.autoApply !== false,
+      maxApplicationsPerRun: preferences.maxApplicationsPerRun ?? 2,
+    },
+  };
 }
 
 export async function getJobScoutStatusForPhone(phoneInput: string) {
