@@ -93,7 +93,7 @@ signOutButton.addEventListener("click", signOutDashboard);
         h1{margin:0;font-size:1.85rem;line-height:1.15;letter-spacing:0}
         h2{margin:0;font-size:1.12rem;line-height:1.25;letter-spacing:0}
         p{margin:0;color:var(--muted);line-height:1.5}
-        .tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+        .tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
         .tab{display:grid;gap:8px;min-height:132px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px;text-decoration:none;color:var(--text);box-shadow:0 14px 36px rgba(22,28,36,.08)}
         .tab:hover{border-color:#9eb6d6;box-shadow:0 18px 42px rgba(22,28,36,.12)}
         .tab:focus-visible{outline:3px solid rgba(47,116,208,.28);outline-offset:2px}
@@ -138,6 +138,10 @@ signOutButton.addEventListener("click", signOutDashboard);
             <a className="tab" href={`${homePath}/vault`}>
               <strong>Credentials Vault</strong>
               <span>Save, update, or remove encrypted Webetu credentials.</span>
+            </a>
+            <a className="tab" href={`${homePath}/job-scout`}>
+              <strong>Job Scout Setup</strong>
+              <span>Set your CV, target role, target location, and readiness for Job Scout.</span>
             </a>
           </div>
         </div>
