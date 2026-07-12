@@ -7,6 +7,8 @@ import { getSignedInAccountStatus } from "@/src/domains/users";
 
 export const runtime = "nodejs";
 
+const CALLBACK_HTML_CSS = `:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f7f8fa;color:#17191d;line-height:1.5;min-height:100vh;display:grid;place-items:center;padding:24px}.card{width:min(520px,100%);background:#fff;border:1px solid #d8dde5;border-radius:8px;padding:24px;box-shadow:0 10px 26px rgba(22,28,36,.06);text-align:center;display:grid;gap:12px}h2{margin:0;font-size:1.5rem;line-height:1.2}p{margin:0;color:#626b78}a{color:#256fca;text-decoration:none;font-weight:720}a:hover{text-decoration:underline}`;
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -47,10 +49,7 @@ export async function GET(req: NextRequest) {
   <meta charset="UTF-8">
   <title>Gmail Connected</title>
   <meta http-equiv="refresh" content="2;url=${escapeHtmlAttribute(redirectUrl)}">
-  <style>
-    body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f6f7f9; }
-    .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; }
-  </style>
+  <style>${CALLBACK_HTML_CSS}</style>
 </head>
 <body>
   <div class="card">
@@ -73,11 +72,7 @@ export async function GET(req: NextRequest) {
 <head>
   <meta charset="UTF-8">
   <title>Connection Error</title>
-  <style>
-    body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #fdf5f5; color: #b42318; }
-    .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 400px; }
-    a { color: #2f74d0; text-decoration: none; }
-  </style>
+  <style>${CALLBACK_HTML_CSS}.card{border-color:#f1a7a1}h2{color:#9f2419}</style>
 </head>
 <body>
   <div class="card">

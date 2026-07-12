@@ -7,6 +7,8 @@ import { maskPhone, validatePublicUserId, httpError, escapeHtml } from "@/src/li
 
 export const runtime = "nodejs";
 
+const MINIMAL_HTML_CSS = `:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f7f8fa;color:#17191d;line-height:1.5}main{min-height:100vh;display:grid;place-items:center;padding:24px}section{width:min(560px,100%);background:#fff;border:1px solid #d8dde5;border-radius:8px;padding:24px;box-shadow:0 10px 26px rgba(22,28,36,.06);display:grid;gap:16px}h1{margin:0;font-size:1.85rem;line-height:1.15;letter-spacing:0}p{margin:0;color:#626b78;line-height:1.55}.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}button,a.button{display:inline-flex;min-height:42px;align-items:center;justify-content:center;border:0;border-radius:7px;background:#256fca;color:#fff;font:inherit;font-weight:720;text-decoration:none;padding:0 14px;cursor:pointer}button.secondary,a.secondary{background:#eef2f7;color:#263142;border:1px solid #cbd5e1}button:disabled{opacity:.55;cursor:not-allowed}.meta{display:grid;gap:8px;padding:14px;border-radius:7px;background:#fbfcfd;border:1px solid #d8dde5;color:#303846}.meta strong{color:#17191d}.toplink{display:inline-flex;width:fit-content;color:#256fca;text-decoration:none;font-weight:720}.toplink:hover{text-decoration:underline}`;
+
 function normalizeAccountLinkPurpose(purpose: string) {
   const text = String(purpose ?? "").toLowerCase().trim();
   return text || "account";
@@ -45,18 +47,7 @@ function conflictHtml(details: { email: string | null; maskedPhone: string; purp
   return `<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WhatsApp already linked</title>
-<style>
-:root{color-scheme:light}*{box-sizing:border-box}
-body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f6f7f9;color:#15171a}
-main{min-height:100vh;display:grid;place-items:center;padding:24px}
-section{width:min(560px,100%);background:#fff;border:1px solid #d8dee7;border-radius:8px;padding:26px;box-shadow:0 18px 45px rgba(22,28,36,.11)}
-h1{margin:0 0 8px;font-size:2rem;line-height:1.08;letter-spacing:0}p{margin:0 0 18px;color:#5f6875;font-size:1rem;line-height:1.55}
-.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:18px}
-button,a.button{display:inline-flex;min-height:44px;align-items:center;justify-content:center;border:0;border-radius:7px;background:#2f74d0;color:#fff;font:inherit;font-weight:750;text-decoration:none;padding:0 16px;cursor:pointer}
-button.secondary,a.secondary{background:#eef2f7;color:#263142;border:1px solid #cbd5e1}
-button:disabled{opacity:.55;cursor:not-allowed}.meta{display:grid;gap:8px;margin:18px 0 0;padding:14px;border-radius:7px;background:#f8fafc;border:1px solid #d8dee7;color:#303846}.meta strong{color:#15171a}
-.toplink{display:inline-flex;margin-bottom:18px;color:#2f74d0;text-decoration:none;font-weight:750}
-</style></head>
+<style>${MINIMAL_HTML_CSS}</style></head>
 <body><main><section>
 <a class="toplink" href="/">Back to app</a>
 <h1>WhatsApp already linked</h1>
@@ -144,7 +135,7 @@ export async function POST(req: NextRequest) {
 
   const successHtml = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Account linked</title>
-<style>:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f6f7f9;color:#15171a}main{min-height:100vh;display:grid;place-items:center;padding:24px}section{width:min(560px,100%);background:#fff;border:1px solid #d8dee7;border-radius:8px;padding:26px;box-shadow:0 18px 45px rgba(22,28,36,.11)}h1{margin:0 0 8px;font-size:2rem;line-height:1.08}p{margin:0 0 18px;color:#5f6875}button,a.button{display:inline-flex;min-height:44px;align-items:center;justify-content:center;border:0;border-radius:7px;background:#2f74d0;color:#fff;font:inherit;font-weight:750;text-decoration:none;padding:0 16px;cursor:pointer}.meta{display:grid;gap:8px;margin:18px 0 0;padding:14px;border-radius:7px;background:#f8fafc;border:1px solid #d8dee7;color:#303846}.meta strong{color:#15171a}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.toplink{display:inline-flex;margin-bottom:18px;color:#2f74d0;text-decoration:none;font-weight:750}</style>
+<style>${MINIMAL_HTML_CSS}</style>
 </head><body><main><section>
 <a class="toplink" href="/">Back to app</a>
 <h1>Account linked</h1>

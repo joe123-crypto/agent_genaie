@@ -114,38 +114,15 @@ start().catch(function(err) {
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: `
-        :root{color-scheme:light}
-        *{box-sizing:border-box}
-        body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f6f7f9;color:#15171a}
-        main{min-height:100vh;display:grid;place-items:center;padding:24px}
-        section{width:min(560px,100%);background:#fff;border:1px solid #d8dee7;border-radius:8px;padding:26px;box-shadow:0 18px 45px rgba(22,28,36,.11)}
-        h1{margin:0 0 8px;font-size:2rem;line-height:1.08;letter-spacing:0}
-        p{margin:0 0 18px;color:#5f6875;font-size:1rem;line-height:1.55}
-        label{display:block;margin:0 0 8px;font-weight:750;color:#303846}
-        input{width:100%;min-height:46px;border:1px solid #b9c3d1;border-radius:7px;padding:0 12px;font:inherit;background:#fff;color:#15171a}
-        input:focus{outline:3px solid rgba(47,116,208,.18);border-color:#2f74d0}
-        .actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:18px}
-        button,a.button{display:inline-flex;min-height:44px;align-items:center;justify-content:center;border:0;border-radius:7px;background:#2f74d0;color:#fff;font:inherit;font-weight:750;text-decoration:none;padding:0 16px;cursor:pointer}
-        button.secondary,a.secondary{background:#eef2f7;color:#263142;border:1px solid #cbd5e1}
-        button:disabled{opacity:.55;cursor:not-allowed}
-        button:focus-visible,a.button:focus-visible,input:focus-visible{outline:3px solid rgba(47,116,208,.28);outline-offset:2px}
-        button:hover:not(:disabled),a.button:hover{filter:brightness(.94)}
-        [hidden]{display:none!important}
-        .status{margin-top:18px;padding:12px 14px;border-radius:7px;border:1px solid #cbd5e1;background:#f8fafc;color:#303846;line-height:1.45}
-        .status[data-tone="success"]{border-color:#7fc9a2;background:#eefaf3;color:#11603a}
-        .status[data-tone="error"]{border-color:#f1a7a1;background:#fff1f0;color:#9f2419}
-        .toplink{display:inline-flex;margin-bottom:18px;color:#2f74d0;text-decoration:none;font-weight:750}
-      `}} />
-      <main>
-        <section>
+      <main className="app-main app-main-center">
+        <section className="panel panel-narrow">
           <a className="toplink" href="/login">Back to sign in</a>
           <h1>Finish sign in</h1>
           <p>The app is completing your email-link sign-in.</p>
-          <form data-email-form hidden ref={formRef}>
-            <label htmlFor="email">Confirm email address</label>
+          <form className="form-stack" data-email-form hidden ref={formRef}>
+            <label className="field" htmlFor="email">Confirm email address</label>
             <input id="email" data-email type="email" autoComplete="email" required ref={emailRef} />
-            <div className="actions">
+            <div className="actions actions-spaced">
               <button data-submit type="submit" ref={submitRef}>Finish sign in</button>
             </div>
           </form>

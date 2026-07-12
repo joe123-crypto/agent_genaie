@@ -172,41 +172,7 @@ webetuPasswordToggle.addEventListener("click", function() {
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: `
-        :root{color-scheme:light;--bg:#f6f7f9;--panel:#fff;--border:#d8dee7;--text:#15171a;--muted:#5f6875;--blue:#2f74d0;--green:#11603a;--red:#b42318}
-        *{box-sizing:border-box}
-        body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
-        main{min-height:100vh;padding:28px}
-        .shell{width:min(760px,100%);margin:0 auto;display:grid;gap:18px}
-        .panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:22px;box-shadow:0 14px 36px rgba(22,28,36,.08);display:grid;gap:16px}
-        .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-        h1{margin:0;font-size:1.85rem;line-height:1.15;letter-spacing:0}
-        p{margin:0;color:var(--muted);line-height:1.5}
-        label{display:grid;gap:7px;font-weight:750;color:#303846}
-        form{display:grid;gap:12px}
-        input{width:100%;min-height:44px;border:1px solid #b9c3d1;border-radius:7px;padding:0 12px;font:inherit;background:#fff;color:var(--text)}
-        input:focus{outline:3px solid rgba(47,116,208,.18);border-color:var(--blue)}
-        .password-field{position:relative;display:block}
-        .password-field input{padding-right:82px}
-        button.password-toggle{position:absolute;right:6px;top:50%;transform:translateY(-50%);min-height:32px;border-radius:6px;background:#eef2f7;color:#263142;border:1px solid #cbd5e1;padding:0 10px;font-size:.88rem;font-weight:800}
-        .actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-        button,a.button{display:inline-flex;min-height:42px;align-items:center;justify-content:center;border:0;border-radius:7px;background:var(--blue);color:#fff;font:inherit;font-weight:750;text-decoration:none;padding:0 14px;cursor:pointer}
-        button.secondary,a.secondary{background:#eef2f7;color:#263142;border:1px solid #cbd5e1}
-        button.danger{background:var(--red)}
-        button:disabled{opacity:.55;cursor:not-allowed}
-        button:hover:not(:disabled),a.button:hover{filter:brightness(.94)}
-        button:focus-visible,a.button:focus-visible,input:focus-visible{outline:3px solid rgba(47,116,208,.28);outline-offset:2px}
-        .message{min-height:22px;color:var(--muted);font-size:.95rem;line-height:1.45}
-        .message[data-tone="success"]{color:var(--green)}
-        .message[data-tone="error"]{color:#9f2419}
-        .status-pill{display:inline-flex;align-items:center;min-height:30px;border-radius:999px;border:1px solid #cbd5e1;background:#f8fafc;color:#303846;padding:0 10px;font-size:.88rem;font-weight:800;white-space:nowrap}
-        .status-pill[data-tone="success"]{border-color:#7fc9a2;background:#eefaf3;color:var(--green)}
-        .status-pill[data-tone="error"]{border-color:#f1a7a1;background:#fff1f0;color:#9f2419}
-        .account-meta{display:flex;flex-wrap:wrap;gap:10px;align-items:center;color:var(--muted)}
-        .button.secondary{background:#eef2f7;color:#263142;border:1px solid #cbd5e1}
-        @media (max-width:680px){main{padding:18px}.panel{padding:18px}.panel-head{flex-direction:column}}
-      `}} />
-      <main>
+      <main className="app-main">
         <div className="shell">
           <a className="button secondary" href={onboardingMode ? onboardingPath : homePath}>{onboardingMode ? "Back to onboarding" : "Back to dashboard"}</a>
           <section className="panel" aria-labelledby="vault-title">
@@ -221,7 +187,7 @@ webetuPasswordToggle.addEventListener("click", function() {
               <span className="status-pill" data-whatsapp-status data-tone={whatsappTone}>{whatsappLabel}</span>
               <span data-whatsapp-copy>{whatsappCopy}</span>
             </div>
-            <form data-webetu-form>
+            <form className="form-stack" data-webetu-form>
               <label>
                 Webetu username
                 <input data-webetu-username name="username" autoComplete="username" maxLength={120} required />
