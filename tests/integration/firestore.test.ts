@@ -2,8 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { getFirestoreDb } from "@/src/firebase/admin";
+import { config } from "@/src/config";
 import { credentialRefId, jobApplicationId, whatsappPhoneHash } from "@/src/lib/utils";
 import { jobScoutTokenHash } from "@/src/security/crypto";
+import {
+  bindAccountLinkInviteToUser,
+  createAccountLinkInvite,
+  createSignedInWhatsAppLinkRequest,
+  revokeSignedInWhatsAppLink,
+} from "@/src/domains/account-link";
 import {
   saveJobScoutProfile,
   createJobScoutInvite,
@@ -21,6 +28,8 @@ import {
 // `npm test` never touches a real database.
 const skip = !process.env.FIRESTORE_EMULATOR_HOST;
 const opts = { skip: skip && "FIRESTORE_EMULATOR_HOST not set" };
+
+config.whatsappBotPhone = "+213600099999";
 
 test("saveJobScoutProfile writes the expected jobScoutProfiles document shape", opts, async () => {
   const db = getFirestoreDb();
@@ -82,6 +91,104 @@ test("createJobScoutInvite/getJobScoutInvite round-trips a pending invite", opts
   assert.match(invite.phoneHash, /^[0-9a-f]{12}$/);
   assert.equal(invite.tokenHash, jobScoutTokenHash(token));
   assert.ok(invite.expiresAt, "expiresAt present");
+});
+
+test("createSignedInWhatsAppLinkRequest creates a pending account invite and bot handoff", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-wa-request-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await db.collection("users").doc(uid).set({
+    profile: { email: "wa-request@example.com", displayName: "WA Request" },
+    publicUserId: "usr_abcdefghijklmnop",
+  });
+
+  const result = await createSignedInWhatsAppLinkRequest(uid, "+213600000101");
+  assert.equal(result.pending, true);
+  assert.equal(result.whatsappLinked, false);
+  assert.match(result.setupUrl, /\/account-link\/setup\?token=/);
+  assert.ok(result.whatsappBotUrl);
+  assert.match(result.whatsappBotUrl, /^https:\/\/wa\.me\/213600099999\?text=/);
+
+  const snap = await db.collection("accountLinkInvites").where("phoneHash", "==", whatsappPhoneHash("+213600000101")).get();
+  assert.equal(snap.size, 1);
+  assert.equal(snap.docs[0].data().purpose, "account");
+  assert.equal(snap.docs[0].data().nextPath, "/whatsapp");
+});
+
+test("createSignedInWhatsAppLinkRequest requires revoke before a different active number", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-wa-conflict-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const phone = "+213600000102";
+  await Promise.all([
+    db.collection("users").doc(uid).set({
+      profile: { email: "wa-conflict@example.com", displayName: "WA Conflict" },
+      publicUserId: "usr_bcdefghijklmnopq",
+    }),
+    db.collection("phoneLinksByUser").doc(uid).set({
+      userId: uid,
+      phone,
+      phoneHash: whatsappPhoneHash(phone),
+      status: "active",
+    }),
+  ]);
+
+  await assert.rejects(
+    () => createSignedInWhatsAppLinkRequest(uid, "+213600000103"),
+    (err: any) => err.status === 409,
+  );
+});
+
+test("bindAccountLinkInviteToUser does not overwrite an existing user phone link", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-wa-bind-user-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const currentPhone = "+213600000104";
+  const nextPhone = "+213600000105";
+  await Promise.all([
+    db.collection("users").doc(uid).set({
+      profile: { email: "wa-bind-user@example.com", displayName: "WA Bind User" },
+      publicUserId: "usr_cdefghijklmnopqr",
+    }),
+    db.collection("phoneLinksByUser").doc(uid).set({
+      userId: uid,
+      phone: currentPhone,
+      phoneHash: whatsappPhoneHash(currentPhone),
+      status: "active",
+    }),
+  ]);
+  const { token } = await createAccountLinkInvite({ phone: nextPhone, purpose: "account", nextPath: "/whatsapp" });
+
+  await assert.rejects(
+    () => bindAccountLinkInviteToUser(token, { uid }),
+    (err: any) => err.status === 409,
+  );
+  const link = (await db.collection("phoneLinksByUser").doc(uid).get()).data()!;
+  assert.equal(link.phoneHash, whatsappPhoneHash(currentPhone));
+});
+
+test("bindAccountLinkInviteToUser rejects phones already linked to another user", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-wa-bind-phone-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const otherUid = `${uid}-other`;
+  const phone = "+213600000106";
+  const hash = whatsappPhoneHash(phone);
+  await Promise.all([
+    db.collection("users").doc(uid).set({
+      profile: { email: "wa-bind-phone@example.com", displayName: "WA Bind Phone" },
+      publicUserId: "usr_defghijklmnopqrs",
+    }),
+    db.collection("phoneLinksByPhone").doc(hash).set({
+      userId: otherUid,
+      phone,
+      phoneHash: hash,
+      status: "active",
+    }),
+  ]);
+  const { token } = await createAccountLinkInvite({ phone, purpose: "account", nextPath: "/whatsapp" });
+
+  await assert.rejects(
+    () => bindAccountLinkInviteToUser(token, { uid }),
+    (err: any) => err.status === 409,
+  );
+  assert.equal((await db.collection("phoneLinksByUser").doc(uid).get()).exists, false);
 });
 
 test("getJobScoutStatusForUser evaluates signed-in Job Scout readiness", opts, async () => {
@@ -244,4 +351,47 @@ test("resetJobScoutProfileForPhone deletes only Job Scout setup data", opts, asy
   assert.equal((await db.collection("phoneLinksByUser").doc(uid).get()).exists, true);
   assert.equal((await db.collection("phoneLinksByPhone").doc(hash).get()).exists, true);
   assert.equal((await db.collection("jobScoutDeliveryByPhone").doc(hash).get()).exists, true);
+});
+
+test("revokeSignedInWhatsAppLink marks active link and delivery records revoked", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-wa-revoke-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const phone = "+213600000107";
+  const hash = whatsappPhoneHash(phone);
+  await Promise.all([
+    db.collection("users").doc(uid).set({
+      profile: { email: "wa-revoke@example.com", displayName: "WA Revoke" },
+    }),
+    db.collection("phoneLinksByUser").doc(uid).set({
+      userId: uid,
+      phone,
+      phoneHash: hash,
+      status: "active",
+    }),
+    db.collection("phoneLinksByPhone").doc(hash).set({
+      userId: uid,
+      phone,
+      phoneHash: hash,
+      status: "active",
+    }),
+    db.collection("webetuDeliveryByPhone").doc(hash).set({
+      userId: uid,
+      phone,
+      phoneHash: hash,
+      status: "active",
+    }),
+    db.collection("jobScoutDeliveryByPhone").doc(hash).set({
+      userId: uid,
+      phone,
+      phoneHash: hash,
+      status: "active",
+    }),
+  ]);
+
+  const result = await revokeSignedInWhatsAppLink(uid);
+  assert.equal(result.revoked, true);
+  assert.equal((await db.collection("phoneLinksByUser").doc(uid).get()).data()!.status, "revoked");
+  assert.equal((await db.collection("phoneLinksByPhone").doc(hash).get()).data()!.status, "revoked");
+  assert.equal((await db.collection("webetuDeliveryByPhone").doc(hash).get()).data()!.status, "revoked");
+  assert.equal((await db.collection("jobScoutDeliveryByPhone").doc(hash).get()).data()!.status, "revoked");
 });

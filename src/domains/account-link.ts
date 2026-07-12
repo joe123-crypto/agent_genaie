@@ -108,7 +108,9 @@ export async function bindAccountLinkInviteToUser(token: string, firebaseUser: a
   const inviteRef = db.collection("accountLinkInvites").doc(invite.id);
   const now = FieldValue.serverTimestamp();
   const phoneInput = invite.phone;
+  const phoneHash = whatsappPhoneHash(phoneInput);
   let nextPath = invite.nextPath || "/";
+  let publicUserId: string | null = null;
   await db.runTransaction(async (t) => {
     const inviteCheck = await t.get(inviteRef);
     if (!inviteCheck.exists || inviteCheck.data()?.status !== "pending") {
@@ -118,14 +120,30 @@ export async function bindAccountLinkInviteToUser(token: string, firebaseUser: a
     if (!userDoc.exists) {
       throw httpError(404, "User profile not found. Please sign in again.");
     }
+    const byUserRef = db.collection("phoneLinksByUser").doc(safeUid);
+    const byPhoneRef = db.collection("phoneLinksByPhone").doc(phoneHash);
+    const [existingUserLinkDoc, existingPhoneLinkDoc] = await Promise.all([
+      t.get(byUserRef),
+      t.get(byPhoneRef),
+    ]);
+    const existingUserLink = existingUserLinkDoc.exists ? existingUserLinkDoc.data() || {} : {};
+    const existingPhoneLink = existingPhoneLinkDoc.exists ? existingPhoneLinkDoc.data() || {} : {};
+    const existingUserHash = existingUserLink.phoneHash || (existingUserLink.phone ? whatsappPhoneHash(existingUserLink.phone) : null);
+    if (isActivePhoneLink(existingUserLink) && existingUserHash !== phoneHash) {
+      throw httpError(409, "Revoke the current WhatsApp link before linking a new number.");
+    }
+    if (isActivePhoneLink(existingPhoneLink) && existingPhoneLink.userId !== safeUid) {
+      throw httpError(409, "This WhatsApp phone is already linked to another app account.");
+    }
     const userData = userDoc.data() || {};
     const existingPublicId = userData.publicUserId;
     const publicId = await ensurePublicUserId(db, safeUid, existingPublicId, t);
+    publicUserId = publicId;
     const phoneLink = {
       userId: safeUid,
       publicUserId: publicId,
       phone: phoneInput,
-      phoneHash: whatsappPhoneHash(phoneInput),
+      phoneHash,
       verifiedAt: now,
       status: "active",
       services: {
@@ -159,7 +177,7 @@ export async function bindAccountLinkInviteToUser(token: string, firebaseUser: a
   } catch (err) {
     console.error("Failed to remove pending link from cache after successful bind:", err);
   }
-  return { success: true, nextPath };
+  return { success: true, nextPath, publicUserId };
 }
 
 export function queuePhoneLinkCoreWrites(batch: any, db: any, userId: string, phoneLink: any, now: any) {
@@ -222,6 +240,107 @@ export async function writePhoneLinkForUser(db: any, user: any, phoneInput: stri
   if (options.updateJobScoutDelivery) queueJobScoutPhoneDeliveryUpdate(batch, db, phoneLink);
   await batch.commit();
   return phoneLink;
+}
+
+export function whatsappBotLinkForRequest(setupUrl: string) {
+  if (!config.whatsappBotPhone.trim()) throw httpError(500, "WHATSAPP_BOT_PHONE is not configured.");
+  const botPhone = normalizePhone(config.whatsappBotPhone);
+  const botDigits = botPhone.replace(/\D/g, "");
+  const message = `Link my WhatsApp to Genaie: ${setupUrl}`;
+  return `https://wa.me/${botDigits}?text=${encodeURIComponent(message)}`;
+}
+
+export async function createSignedInWhatsAppLinkRequest(uid: string, phoneInput: string) {
+  const safeUid = validateFirebaseUid(uid);
+  const phone = normalizePhone(phoneInput);
+  const phoneHash = whatsappPhoneHash(phone);
+  const db = getFirestoreDb();
+  const [userDoc, byUserDoc, byPhoneDoc] = await Promise.all([
+    db.collection("users").doc(safeUid).get(),
+    db.collection("phoneLinksByUser").doc(safeUid).get(),
+    db.collection("phoneLinksByPhone").doc(phoneHash).get(),
+  ]);
+  if (!userDoc.exists) throw httpError(404, "User profile not found. Please sign in again.");
+
+  const existingUserLink = byUserDoc.exists ? byUserDoc.data() || {} : {};
+  const existingPhoneLink = byPhoneDoc.exists ? byPhoneDoc.data() || {} : {};
+  if (isActivePhoneLink(existingUserLink)) {
+    const existingUserHash = existingUserLink.phoneHash || (existingUserLink.phone ? whatsappPhoneHash(existingUserLink.phone) : null);
+    if (existingUserHash === phoneHash) {
+      const setupUrl = "";
+      return {
+        pending: false,
+        alreadyLinked: true,
+        whatsappLinked: true,
+        maskedPhone: maskPhone(phone),
+        phoneHash: String(phoneHash).slice(0, 12),
+        setupUrl,
+        whatsappBotUrl: null,
+      };
+    }
+    throw httpError(409, "Revoke the current WhatsApp link before linking a new number.");
+  }
+  if (isActivePhoneLink(existingPhoneLink) && existingPhoneLink.userId !== safeUid) {
+    throw httpError(409, "This WhatsApp phone is already linked to another app account.");
+  }
+  if (!config.whatsappBotPhone.trim()) throw httpError(500, "WHATSAPP_BOT_PHONE is not configured.");
+
+  const invite = await createAccountLinkInvite({
+    phone,
+    purpose: "account",
+    nextPath: "/whatsapp",
+  });
+  return {
+    pending: true,
+    alreadyLinked: false,
+    whatsappLinked: false,
+    maskedPhone: maskPhone(phone),
+    phoneHash: String(phoneHash).slice(0, 12),
+    setupUrl: invite.setupUrl,
+    expiresAt: invite.expiresAt,
+    whatsappBotUrl: whatsappBotLinkForRequest(invite.setupUrl),
+  };
+}
+
+export async function revokeSignedInWhatsAppLink(uid: string) {
+  const safeUid = validateFirebaseUid(uid);
+  const db = getFirestoreDb();
+  const byUserRef = db.collection("phoneLinksByUser").doc(safeUid);
+  const now = FieldValue.serverTimestamp();
+  let phoneHash: string | null = null;
+  await db.runTransaction(async (t) => {
+    const byUserDoc = await t.get(byUserRef);
+    if (!byUserDoc.exists || !isActivePhoneLink(byUserDoc.data())) return;
+    const data = byUserDoc.data() || {};
+    const phone = data.phone ? normalizePhone(data.phone) : null;
+    phoneHash = data.phoneHash || (phone ? whatsappPhoneHash(phone) : null);
+    const byPhoneRef = phoneHash ? db.collection("phoneLinksByPhone").doc(phoneHash) : null;
+    const webetuRef = phoneHash ? db.collection("webetuDeliveryByPhone").doc(phoneHash) : null;
+    const jobScoutRef = phoneHash ? db.collection("jobScoutDeliveryByPhone").doc(phoneHash) : null;
+    const [byPhoneDoc, webetuDoc, jobScoutDoc] = await Promise.all([
+      byPhoneRef ? t.get(byPhoneRef) : Promise.resolve(null),
+      webetuRef ? t.get(webetuRef) : Promise.resolve(null),
+      jobScoutRef ? t.get(jobScoutRef) : Promise.resolve(null),
+    ]);
+    const update = {
+      status: "revoked",
+      revokedAt: now,
+      updatedAt: now,
+    };
+    t.set(byUserRef, update, { merge: true });
+    if (!phoneHash) return;
+    if (byPhoneRef && byPhoneDoc?.exists && byPhoneDoc.data()?.userId === safeUid) t.set(byPhoneRef, update, { merge: true });
+    if (webetuRef && webetuDoc?.exists && webetuDoc.data()?.userId === safeUid) t.set(webetuRef, update, { merge: true });
+    if (jobScoutRef && jobScoutDoc?.exists && jobScoutDoc.data()?.userId === safeUid) t.set(jobScoutRef, update, { merge: true });
+  });
+  if (phoneHash) {
+    try {
+      removePendingLinksFromCache({ phoneHash });
+    } catch (err) {
+      console.error("Failed to remove pending links from cache after WhatsApp revoke:", err);
+    }
+  }
+  return { revoked: true };
 }
 
 function whatsAppLinkResult(phoneInput: string | null | undefined, phoneHashInput: string | null | undefined) {
