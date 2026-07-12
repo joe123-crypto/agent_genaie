@@ -26,8 +26,16 @@ function missingCopy(missing: unknown) {
   return `Missing: ${missing.map((item) => labels[String(item)] || String(item)).join(", ")}.`;
 }
 
-export default async function JobScoutSetupPage({ params }: { params: Promise<{ publicUserId: string }> }) {
+export default async function JobScoutSetupPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ publicUserId: string }>;
+  searchParams: Promise<{ onboarding?: string }>;
+}) {
   const { publicUserId } = await params;
+  const query = await searchParams;
+  const onboardingMode = query.onboarding === "1" || query.onboarding === "true";
 
   if (!/^usr_[A-Za-z0-9_-]{16}$/.test(publicUserId)) notFound();
 
@@ -61,7 +69,8 @@ export default async function JobScoutSetupPage({ params }: { params: Promise<{ 
   ]);
 
   const homePath = `/${publicUserId}`;
-  const connectPath = `${homePath}/connect-gmail`;
+  const onboardingPath = `/${publicUserId}/onboarding`;
+  const connectPath = `${homePath}/connect-gmail${onboardingMode ? "?onboarding=1" : ""}`;
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? verified.email ?? "signed-in user";
   const displayName =
     jobScoutStatus?.profile?.displayName
@@ -187,7 +196,7 @@ form.addEventListener("submit", async function(event) {
       `}} />
       <main>
         <div className="shell">
-          <a className="button secondary" href={homePath}>Back to dashboard</a>
+          <a className="button secondary" href={onboardingMode ? onboardingPath : homePath}>{onboardingMode ? "Back to onboarding" : "Back to dashboard"}</a>
           <section className="panel" aria-labelledby="job-scout-title">
             <div className="panel-head">
               <div>
@@ -244,6 +253,7 @@ form.addEventListener("submit", async function(event) {
               <div className="actions">
                 <button data-save type="submit">Save Job Scout setup</button>
                 <a className="button secondary" href={connectPath}>Connect Google</a>
+                {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
                 <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
               </div>
             </form>

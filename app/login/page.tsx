@@ -39,6 +39,13 @@ function LoginContent() {
       const provider = new GoogleAuthProvider();
       provider.addScope("email");
 
+      function destinationForSession(session) {
+        if (session && session.onboardingRequired && session.publicUserId) {
+          return "/" + session.publicUserId + "/onboarding";
+        }
+        return ${JSON.stringify(nextParam)};
+      }
+
       window.__handleGoogleSignIn = async () => {
         try {
           const result = await signInWithPopup(auth, provider);
@@ -48,10 +55,10 @@ function LoginContent() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ idToken })
           });
+          const data = await response.json().catch(function() { return {}; });
           if (response.ok) {
-            window.location.href = ${JSON.stringify(nextParam)};
+            window.location.href = destinationForSession(data);
           } else {
-            const data = await response.json();
             alert("Session error: " + (data.error || "Unknown"));
             auth.signOut();
           }

@@ -6,8 +6,16 @@ import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } fr
 
 export const runtime = "nodejs";
 
-export default async function ConnectGmailPage({ params }: { params: Promise<{ publicUserId: string }> }) {
+export default async function ConnectGmailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ publicUserId: string }>;
+  searchParams: Promise<{ onboarding?: string }>;
+}) {
   const { publicUserId } = await params;
+  const query = await searchParams;
+  const onboardingMode = query.onboarding === "1" || query.onboarding === "true";
 
   if (!/^usr_[A-Za-z0-9_-]{16}$/.test(publicUserId)) notFound();
 
@@ -36,6 +44,7 @@ export default async function ConnectGmailPage({ params }: { params: Promise<{ p
   }
 
   const homePath = `/${publicUserId}`;
+  const onboardingPath = `/${publicUserId}/onboarding`;
 
   // The user doc (already fetched above) records connection state — no extra query needed.
   const gmailConnected = (routeUser as { services?: { gmail?: string } }).services?.gmail === "connected";
@@ -95,7 +104,7 @@ connectButton.addEventListener("click", async function() {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
-      body: "{}"
+      body: JSON.stringify(${JSON.stringify(onboardingMode ? { next: "/onboarding" } : {})})
     }));
     window.location.href = payload.url;
   } catch (err) {
@@ -169,7 +178,7 @@ signOutButton.addEventListener("click", async function() {
       `}} />
       <main>
         <section>
-          <a className="toplink" href={homePath}>Back to app</a>
+          <a className="toplink" href={onboardingMode ? onboardingPath : homePath}>{onboardingMode ? "Back to onboarding" : "Back to app"}</a>
           <h1>Connect Google</h1>
           <p>Grant Google access for this account — send job application emails (Gmail) and add calendar events. You can revoke it at any time, which removes both permissions.</p>
           <div data-signed-in>
@@ -181,6 +190,7 @@ signOutButton.addEventListener("click", async function() {
             <div className="actions">
               <button data-connect type="button">{gmailConnected ? "Reconnect Google" : "Connect Google"}</button>
               <button className="danger" data-disconnect type="button" hidden={!gmailConnected}>Disconnect Google</button>
+              {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
               <button className="secondary" data-sign-out type="button">Sign out</button>
             </div>
           </div>

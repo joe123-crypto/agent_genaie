@@ -174,6 +174,7 @@ test("normalizeAccountLinkNextPath enforces the redirect allow-list", () => {
   assert.equal(normalizeAccountLinkNextPath("/"), "/");
   assert.equal(normalizeAccountLinkNextPath("/vault"), "/vault");
   assert.equal(normalizeAccountLinkNextPath("/connect-gmail"), "/connect-gmail");
+  assert.equal(normalizeAccountLinkNextPath("/onboarding"), "/onboarding");
   assert.equal(normalizeAccountLinkNextPath("//evil.com"), "/");
   assert.equal(normalizeAccountLinkNextPath("/somewhere-else"), "/");
 });

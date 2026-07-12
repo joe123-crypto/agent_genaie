@@ -6,8 +6,16 @@ import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } fr
 
 export const runtime = "nodejs";
 
-export default async function WhatsAppLinkingPage({ params }: { params: Promise<{ publicUserId: string }> }) {
+export default async function WhatsAppLinkingPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ publicUserId: string }>;
+  searchParams: Promise<{ onboarding?: string }>;
+}) {
   const { publicUserId } = await params;
+  const query = await searchParams;
+  const onboardingMode = query.onboarding === "1" || query.onboarding === "true";
 
   if (!/^usr_[A-Za-z0-9_-]{16}$/.test(publicUserId)) notFound();
 
@@ -35,6 +43,7 @@ export default async function WhatsAppLinkingPage({ params }: { params: Promise<
   }
 
   const homePath = `/${publicUserId}`;
+  const onboardingPath = `/${publicUserId}/onboarding`;
   const accountStatus = await getSignedInAccountStatus(uid).catch(() => null);
   const whatsappLinked = !!accountStatus?.whatsappLinked;
   const email = accountStatus?.profile?.email ?? (routeUser as { profile?: { email?: string } }).profile?.email ?? "signed-in user";
@@ -99,7 +108,7 @@ form.addEventListener("submit", async function(event) {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ phone: phoneInput.value })
+      body: JSON.stringify({ phone: phoneInput.value, onboarding: ${JSON.stringify(onboardingMode)} })
     }));
     if (result.alreadyLinked) {
       setLinked(result.maskedPhone);
@@ -176,7 +185,7 @@ revokeButton.addEventListener("click", async function() {
       `}} />
       <main>
         <div className="shell">
-          <a className="button secondary" href={homePath}>Back to dashboard</a>
+          <a className="button secondary" href={onboardingMode ? onboardingPath : homePath}>{onboardingMode ? "Back to onboarding" : "Back to dashboard"}</a>
           <section className="panel" aria-labelledby="whatsapp-title">
             <div className="panel-head">
               <div>
@@ -201,6 +210,7 @@ revokeButton.addEventListener("click", async function() {
             </form>
             <div className="actions">
               <button className="danger" data-whatsapp-revoke type="button" hidden={!whatsappLinked}>Revoke WhatsApp link</button>
+              {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
               <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
             </div>
             <div className="message" data-whatsapp-message></div>

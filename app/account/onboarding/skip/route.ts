@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyFirebaseRequest } from "@/src/security/session";
-import { createSignedInWhatsAppLinkRequest } from "@/src/domains/account-link";
+import { skipOnboarding } from "@/src/domains/onboarding";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
     const decoded = await verifyFirebaseRequest(req);
-    const body = await req.json().catch(() => ({}));
-    const result = await createSignedInWhatsAppLinkRequest(decoded.uid, body.phone, {
-      nextPath: body.onboarding === true ? "/onboarding" : undefined,
-    });
-    return NextResponse.json(result);
+    const status = await skipOnboarding(decoded.uid);
+    return NextResponse.json(status);
   } catch (err: unknown) {
     const error = err as Error & { status?: number };
     const status = error.status ?? 500;

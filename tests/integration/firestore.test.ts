@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { getFirestoreDb } from "@/src/firebase/admin";
+import { getFirebaseAdminAuth, getFirestoreDb } from "@/src/firebase/admin";
 import { config } from "@/src/config";
 import { credentialRefId, jobApplicationId, whatsappPhoneHash } from "@/src/lib/utils";
 import { jobScoutTokenHash } from "@/src/security/crypto";
@@ -20,6 +20,7 @@ import {
   listJobApplications,
   resetJobScoutProfileForPhone,
 } from "@/src/domains/job-scout";
+import { syncUserToCentralData } from "@/src/domains/users";
 
 // Live round-trip against the Firestore emulator (started by CI via
 // `firebase emulators:exec`, which sets FIRESTORE_EMULATOR_HOST). This proves the
@@ -28,8 +29,43 @@ import {
 // `npm test` never touches a real database.
 const skip = !process.env.FIRESTORE_EMULATOR_HOST;
 const opts = { skip: skip && "FIRESTORE_EMULATOR_HOST not set" };
+const authOpts = {
+  skip: (!process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_AUTH_EMULATOR_HOST)
+    && "FIRESTORE_EMULATOR_HOST and FIREBASE_AUTH_EMULATOR_HOST not set",
+};
 
 config.whatsappBotPhone = "+213600099999";
+
+test("syncUserToCentralData reports new vs existing onboarding state", authOpts, async () => {
+  const db = getFirestoreDb();
+  const auth = getFirebaseAdminAuth();
+  const uid = `it-sync-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await auth.createUser({
+    uid,
+    email: `${uid}@example.com`,
+    emailVerified: true,
+    displayName: "Sync User",
+  });
+
+  const first = await syncUserToCentralData(uid);
+  assert.equal(first.isNewUser, true);
+  assert.equal(first.onboardingRequired, true);
+  assert.ok(first.publicUserId);
+  assert.match(first.publicUserId, /^usr_[A-Za-z0-9_-]{16}$/);
+
+  const doc = await db.collection("users").doc(uid).get();
+  assert.equal(doc.data()?.onboarding?.status, "required");
+
+  const second = await syncUserToCentralData(uid);
+  assert.equal(second.isNewUser, false);
+  assert.equal(second.onboardingRequired, true);
+  assert.equal(second.publicUserId, first.publicUserId);
+
+  await db.collection("users").doc(uid).set({ onboarding: { status: "skipped" } }, { merge: true });
+  const skipped = await syncUserToCentralData(uid);
+  assert.equal(skipped.isNewUser, false);
+  assert.equal(skipped.onboardingRequired, false);
+});
 
 test("saveJobScoutProfile writes the expected jobScoutProfiles document shape", opts, async () => {
   const db = getFirestoreDb();
@@ -112,6 +148,21 @@ test("createSignedInWhatsAppLinkRequest creates a pending account invite and bot
   assert.equal(snap.size, 1);
   assert.equal(snap.docs[0].data().purpose, "account");
   assert.equal(snap.docs[0].data().nextPath, "/whatsapp");
+});
+
+test("createSignedInWhatsAppLinkRequest can return to onboarding", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-wa-onboarding-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await db.collection("users").doc(uid).set({
+    profile: { email: "wa-onboarding@example.com", displayName: "WA Onboarding" },
+    publicUserId: "usr_onboarding0000",
+  });
+
+  await createSignedInWhatsAppLinkRequest(uid, "+213600000111", { nextPath: "/onboarding" });
+
+  const snap = await db.collection("accountLinkInvites").where("phoneHash", "==", whatsappPhoneHash("+213600000111")).get();
+  assert.equal(snap.size, 1);
+  assert.equal(snap.docs[0].data().nextPath, "/onboarding");
 });
 
 test("createSignedInWhatsAppLinkRequest requires revoke before a different active number", opts, async () => {
