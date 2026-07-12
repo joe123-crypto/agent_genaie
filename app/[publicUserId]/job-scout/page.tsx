@@ -206,11 +206,11 @@ form.addEventListener("submit", async function(event) {
               </label>
               <label className="check">
                 <input name="profileConfirmed" type="checkbox" defaultChecked={!!jobScoutStatus?.profileConfirmed} required />
-                <span>I confirm these profile details and job preferences are accurate.</span>
+                <span>I confirm my profile and job preferences are accurate.</span>
               </label>
               <label className="check">
                 <input name="safetyAcknowledged" type="checkbox" defaultChecked={!!jobScoutStatus?.safetyAcknowledged} required />
-                <span>I agree that I will not pay money upfront to anyone, I understand scammers may target job seekers, and I acknowledge Genaie is not accountable if I am scammed.</span>
+                <span>I will not pay upfront, I understand job scams exist, and Genaie is not accountable if I am scammed.</span>
               </label>
               <div className="actions">
                 <button data-save type="submit">Save Job Scout setup</button>

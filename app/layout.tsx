@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Agent Genaie",
-  description: "Genaie service dashboard – manage Gmail, Webetu credentials, Job Scout, and WhatsApp links.",
+  description: "Genaie service dashboard. Manage Gmail, Webetu credentials, Job Scout, and WhatsApp links.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -163,7 +163,7 @@ revokeButton.addEventListener("click", async function() {
             <div className="panel-head">
               <div>
                 <h1 id="whatsapp-title">WhatsApp Linking</h1>
-                <p>Manage the WhatsApp number connected to this Genaie account.</p>
+                <p>Link your WhatsApp number to this account.</p>
               </div>
               <span className="status-pill" data-whatsapp-status data-tone={statusTone}>{statusLabel}</span>
             </div>
