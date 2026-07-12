@@ -8,7 +8,7 @@ Public routes:
 
 - `/login` supports Firebase Google Sign-In and passwordless email-link sign-in.
 - `/auth/firebase/finish` completes Firebase email-link sign-in and creates the server session cookie.
-- `/auth/session` creates or checks the Firebase-backed server session.
+- `/auth/session` creates or checks the Firebase-backed server session. `POST` also returns `publicUserId`, `isNewUser`, and `onboardingRequired`.
 - `/auth/session/logout` clears the server session cookie.
 - `/config/firebase` exposes the non-secret Firebase browser config.
 - `/auth/google/callback` receives the Google OAuth callback.
@@ -23,12 +23,17 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `/{publicUserId}/vault` signed-in Webetu credential vault.
 - `/{publicUserId}/connect-gmail` authenticated Gmail connect/disconnect page.
 - `/{publicUserId}/job-scout` signed-in Job Scout setup page for CV, target role, target location, and acknowledgements.
+- `/{publicUserId}/onboarding` one-time signup onboarding controller.
 - `/{publicUserId}/whatsapp` signed-in WhatsApp linking and revocation page.
 - `/`, `/connect-gmail`, and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail OAuth for the signed-in Firebase user.
 - `GET /auth/google/status` checks Gmail connection for the signed-in Firebase user.
 - `POST /auth/google/revoke` revokes and removes stored Gmail tokens for the signed-in Firebase user.
 - `GET /account/status` returns the signed-in user's WhatsApp link and service status.
+- `GET /account/onboarding/status` returns the signed-in user's onboarding selection, state, and next required step.
+- `POST /account/onboarding/select` starts onboarding for `jobs` or `webetu`.
+- `POST /account/onboarding/skip` marks onboarding skipped.
+- `POST /account/onboarding/complete` marks onboarding complete once the selected service requirements are satisfied.
 - `POST /account/whatsapp/link-request` creates a pending WhatsApp link request for the signed-in Firebase user.
 - `POST /account/whatsapp/revoke` revokes the signed-in user's active WhatsApp link.
 - `GET /webetu/credentials/status` checks whether the signed-in user has saved Webetu credentials.

@@ -35,9 +35,14 @@ export async function POST(req: NextRequest) {
     const expiresIn = SESSION_COOKIE_MAX_AGE_SECONDS * 1000;
     const sessionCookie = await auth.createSessionCookie(body.idToken, { expiresIn });
 
-    await syncUserToCentralData(decoded.uid);
+    const syncResult = await syncUserToCentralData(decoded.uid);
 
-    const response = NextResponse.json({ ok: true });
+    const response = NextResponse.json({
+      ok: true,
+      publicUserId: syncResult.publicUserId,
+      isNewUser: syncResult.isNewUser,
+      onboardingRequired: syncResult.onboardingRequired,
+    });
     response.headers.set("Set-Cookie", sessionCookieHeader(sessionCookie));
     return response;
   } catch (err: unknown) {

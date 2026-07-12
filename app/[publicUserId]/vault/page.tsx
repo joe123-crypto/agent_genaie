@@ -7,8 +7,16 @@ import { getWebetuCredentialStatus } from "@/src/domains/webetu";
 
 export const runtime = "nodejs";
 
-export default async function VaultPage({ params }: { params: Promise<{ publicUserId: string }> }) {
+export default async function VaultPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ publicUserId: string }>;
+  searchParams: Promise<{ onboarding?: string }>;
+}) {
   const { publicUserId } = await params;
+  const query = await searchParams;
+  const onboardingMode = query.onboarding === "1" || query.onboarding === "true";
 
   if (!/^usr_[A-Za-z0-9_-]{16}$/.test(publicUserId)) notFound();
 
@@ -36,6 +44,7 @@ export default async function VaultPage({ params }: { params: Promise<{ publicUs
   }
 
   const homePath = `/${publicUserId}`;
+  const onboardingPath = `/${publicUserId}/onboarding`;
 
   const webetuStatus = await getWebetuCredentialStatus(uid).catch(() => null);
   const webetuConfigured = !!webetuStatus?.configured;
@@ -199,7 +208,7 @@ webetuPasswordToggle.addEventListener("click", function() {
       `}} />
       <main>
         <div className="shell">
-          <a className="button secondary" href={homePath}>Back to dashboard</a>
+          <a className="button secondary" href={onboardingMode ? onboardingPath : homePath}>{onboardingMode ? "Back to onboarding" : "Back to dashboard"}</a>
           <section className="panel" aria-labelledby="vault-title">
             <div className="panel-head">
               <div>
@@ -227,6 +236,7 @@ webetuPasswordToggle.addEventListener("click", function() {
               <div className="actions">
                 <button data-webetu-save type="submit">{webetuSaveLabel}</button>
                 <button className="danger" data-webetu-revoke type="button" hidden={!webetuConfigured}>Revoke</button>
+                {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
                 <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
               </div>
             </form>

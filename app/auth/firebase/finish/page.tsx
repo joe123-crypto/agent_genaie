@@ -30,6 +30,7 @@ const nextPath = safeNext(params.get("next"));
 function destinationForSession(session) {
   const publicUserId = session && session.publicUserId;
   if (!publicUserId) return nextPath || "/";
+  if (session && session.onboardingRequired) return "/" + publicUserId + "/onboarding";
   if (!nextPath || nextPath === "/") return "/" + publicUserId;
   const genericScopedMatch = nextPath.match(/^\\/(connect-gmail|vault)\\/?(\?.*)?$/);
   if (genericScopedMatch) {

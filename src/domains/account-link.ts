@@ -250,7 +250,7 @@ export function whatsappBotLinkForRequest(setupUrl: string) {
   return `https://wa.me/${botDigits}?text=${encodeURIComponent(message)}`;
 }
 
-export async function createSignedInWhatsAppLinkRequest(uid: string, phoneInput: string) {
+export async function createSignedInWhatsAppLinkRequest(uid: string, phoneInput: string, options: { nextPath?: string } = {}) {
   const safeUid = validateFirebaseUid(uid);
   const phone = normalizePhone(phoneInput);
   const phoneHash = whatsappPhoneHash(phone);
@@ -288,7 +288,7 @@ export async function createSignedInWhatsAppLinkRequest(uid: string, phoneInput:
   const invite = await createAccountLinkInvite({
     phone,
     purpose: "account",
-    nextPath: "/whatsapp",
+    nextPath: options.nextPath === "/onboarding" ? "/onboarding" : "/whatsapp",
   });
   return {
     pending: true,

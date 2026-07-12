@@ -9,13 +9,24 @@ export async function syncUserToCentralData(uid: string) {
   const user = await auth.getUser(safeUid);
   const data = userProfileFromRecord(user);
   const centralRef = db.collection("users").doc(safeUid);
+  let publicUserId: string | null = null;
+  let isNewUser = false;
+  let onboardingRequired = false;
   await db.runTransaction(async (t) => {
     const existing = await t.get(centralRef);
     if (!existing.exists) {
+      const newPublicUserId = generatePublicUserId();
+      publicUserId = newPublicUserId;
+      isNewUser = true;
+      onboardingRequired = true;
       t.set(centralRef, {
         ...data,
         createdAt: FieldValue.serverTimestamp(),
-        publicUserId: generatePublicUserId(),
+        publicUserId: newPublicUserId,
+        onboarding: {
+          status: "required",
+          createdAt: FieldValue.serverTimestamp(),
+        },
         services: {
           gmail: "not_connected",
           calendar: "not_connected",
@@ -27,6 +38,8 @@ export async function syncUserToCentralData(uid: string) {
     } else {
       const current = existing.data() || {};
       const newPublicId = await ensurePublicUserId(db, safeUid, current.publicUserId, t);
+      publicUserId = newPublicId;
+      onboardingRequired = onboardingStatusRequiresAttention(current.onboarding);
       t.update(centralRef, {
         "profile.email": data.profile.email,
         "profile.emailLower": data.profile.emailLower,
@@ -42,6 +55,12 @@ export async function syncUserToCentralData(uid: string) {
       });
     }
   });
+  return { publicUserId, isNewUser, onboardingRequired };
+}
+
+function onboardingStatusRequiresAttention(onboarding: any) {
+  const status = String(onboarding?.status ?? "").trim();
+  return status === "required" || status === "in_progress";
 }
 
 export async function ensurePublicUserId(db: any, firebaseUid: string, existingPublicUserId: string | null | undefined, transaction?: any) {
