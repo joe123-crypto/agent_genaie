@@ -103,19 +103,19 @@ signOutButton.addEventListener("click", signOutDashboard);
           <div className="tabs" aria-label="Dashboard tabs">
             <a className="tab" href={`${homePath}/connect-gmail`}>
               <strong>Connect Google</strong>
-              <span>Approve or revoke Google access — send job application emails (Gmail) and add calendar events.</span>
+              <span>Manage Gmail and Calendar access.</span>
             </a>
             <a className="tab" href={`${homePath}/vault`}>
               <strong>Credentials Vault</strong>
-              <span>Save, update, or remove encrypted Webetu credentials.</span>
+              <span>Manage Webetu credentials.</span>
             </a>
             <a className="tab" href={`${homePath}/job-scout`}>
               <strong>Job Scout Setup</strong>
-              <span>Set your CV, target role, target location, and readiness for Job Scout.</span>
+              <span>Manage your job profile and CV.</span>
             </a>
             <a className="tab" href={`${homePath}/whatsapp`}>
               <strong>WhatsApp Linking</strong>
-              <span>Connect, verify, or revoke the WhatsApp number linked to this email account.</span>
+              <span>Manage your linked WhatsApp number.</span>
             </a>
           </div>
         </div>

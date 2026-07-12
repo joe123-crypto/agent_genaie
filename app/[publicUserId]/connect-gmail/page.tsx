@@ -26,7 +26,7 @@ export default async function ConnectGmailPage({
 
   if (!sessionCookie) redirect(`/login?next=${encodeURIComponent(connectPath)}`);
 
-  // Verify the session and resolve the route's user in parallel — they're independent.
+  // Verify the session and resolve the route's user in parallel. They are independent.
   const [verified, routeUser] = await Promise.all([
     verifyFirebaseSessionCookie(sessionCookie).catch(() => null),
     resolvePublicUser(publicUserId).catch(() => null),
@@ -47,7 +47,7 @@ export default async function ConnectGmailPage({
   const homePath = `/${publicUserId}`;
   const onboardingPath = `/${publicUserId}/onboarding`;
 
-  // The user doc (already fetched above) records connection state — no extra query needed.
+  // The user doc already fetched above records connection state.
   const gmailConnected = (routeUser as { services?: { gmail?: string } }).services?.gmail === "connected";
   const calendarConnected = (routeUser as { services?: { calendar?: string } }).services?.calendar === "connected";
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? "signed-in user";
@@ -161,7 +161,7 @@ signOutButton.addEventListener("click", async function() {
           <section className="panel panel-narrow">
             {!onboardingMode ? <a className="toplink" href={homePath}>Back to app</a> : null}
             <h1>Connect Google</h1>
-            <p>Grant Google access for this account — send job application emails (Gmail) and add calendar events. You can revoke it at any time, which removes both permissions.</p>
+            <p>Connect Gmail and Calendar for job applications.</p>
             <div data-signed-in>
               <div className="meta">
                 <span>Signed in as <strong data-user-email>{email}</strong></span>
