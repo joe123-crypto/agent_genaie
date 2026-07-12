@@ -144,8 +144,8 @@ form.addEventListener("submit", async function(event) {
     setPill(readyStatus, payload.ready ? "Ready" : "Draft", payload.ready ? "complete" : "pending");
     setPill(cvStatus, payload.cvAvailable ? "CV: Uploaded" : "CV: Missing", payload.cvAvailable ? "complete" : "pending");
     missingStatus.querySelector("[data-status-label]").textContent = missingCopy(payload.missingRequirements);
-    missingStatus.dataset.statusKind = payload.ready ? "complete" : "pending";
-    setMessage(payload.ready ? "Job Scout setup saved and ready." : "Setup saved, but requirements are still missing.", payload.ready ? "complete" : "pending");
+    missingStatus.dataset.statusKind = payload.ready ? "complete" : "warning";
+    setMessage(payload.ready ? "Job Scout setup saved and ready." : "Setup saved, but requirements are still missing.", payload.ready ? "complete" : "warning");
     cvInput.value = "";
     cvName.textContent = "No new file selected";
   } catch (err) {
@@ -174,7 +174,7 @@ form.addEventListener("submit", async function(event) {
               <StatusPill kind={googleConnected ? "complete" : "unlinked"}>{googleConnected ? "Google: Connected" : "Google: Not connected"}</StatusPill>
               <StatusPill data-cv-status kind={cvAvailable ? "complete" : "pending"}>{cvAvailable ? "CV: Uploaded" : "CV: Missing"}</StatusPill>
             </div>
-            <StatusNotice className="missing" data-missing kind={ready ? "complete" : "pending"}>{missingCopy(jobScoutStatus?.missingRequirements)}</StatusNotice>
+            <StatusNotice className="missing" data-missing kind={ready ? "complete" : "warning"}>{missingCopy(jobScoutStatus?.missingRequirements)}</StatusNotice>
             <form className="form-stack" data-job-scout-form>
               <div className="grid">
                 <label>

@@ -13,6 +13,7 @@ export type StatusKind =
   | "complete"
   | "unlinked"
   | "pending"
+  | "warning"
   | "revoked"
   | "loading"
   | "error"
@@ -24,6 +25,7 @@ function StatusGlyph() {
       <CheckCircle2 data-status-icon="complete" />
       <Unlink data-status-icon="unlinked" />
       <CircleDashed data-status-icon="pending" />
+      <CircleAlert data-status-icon="warning" />
       <Ban data-status-icon="revoked" />
       <LoaderCircle data-status-icon="loading" />
       <CircleAlert data-status-icon="error" />
