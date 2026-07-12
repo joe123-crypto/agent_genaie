@@ -83,40 +83,9 @@ signOutButton.addEventListener("click", signOutDashboard);
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: `
-        :root{color-scheme:light;--bg:#f6f7f9;--panel:#fff;--border:#d8dee7;--text:#15171a;--muted:#5f6875;--blue:#2f74d0}
-        *{box-sizing:border-box}
-        body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
-        main{min-height:100vh;padding:28px}
-        .shell{width:min(1120px,100%);margin:0 auto;display:grid;gap:18px}
-        header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:6px 0 8px}
-        h1{margin:0;font-size:1.85rem;line-height:1.15;letter-spacing:0}
-        h2{margin:0;font-size:1.12rem;line-height:1.25;letter-spacing:0}
-        p{margin:0;color:var(--muted);line-height:1.5}
-        .tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
-        .tab{display:grid;gap:8px;min-height:132px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px;text-decoration:none;color:var(--text);box-shadow:0 14px 36px rgba(22,28,36,.08)}
-        .tab:hover{border-color:#9eb6d6;box-shadow:0 18px 42px rgba(22,28,36,.12)}
-        .tab:focus-visible{outline:3px solid rgba(47,116,208,.28);outline-offset:2px}
-        .tab strong{font-size:1.08rem}
-        .tab span{color:var(--muted);line-height:1.45}
-        .status-strip{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
-        .status-pill{display:inline-flex;align-items:center;min-height:30px;border-radius:999px;border:1px solid #cbd5e1;background:#f8fafc;color:#303846;padding:0 10px;font-size:.88rem;font-weight:800;white-space:nowrap}
-        .status-pill[data-tone="success"]{border-color:#7fc9a2;background:#eefaf3;color:#11603a}
-        .status-pill[data-tone="error"]{border-color:#f1a7a1;background:#fff1f0;color:#9f2419}
-        .header-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
-        .toplink{display:inline-flex;color:var(--blue);font-weight:750;text-decoration:none}
-        .toplink:hover{text-decoration:underline}
-        button.secondary{display:inline-flex;min-height:38px;align-items:center;justify-content:center;border:1px solid #cbd5e1;border-radius:7px;background:#eef2f7;color:#263142;font:inherit;font-weight:750;padding:0 12px;cursor:pointer}
-        button.secondary:hover:not(:disabled){filter:brightness(.96)}
-        button.secondary:disabled{opacity:.55;cursor:not-allowed}
-        button.secondary:focus-visible{outline:3px solid rgba(47,116,208,.28);outline-offset:2px}
-        .account-error{color:#9f2419;font-size:.95rem}
-        @media (max-width:980px){.tabs{grid-template-columns:repeat(2,minmax(0,1fr))}}
-        @media (max-width:760px){main{padding:18px}.tabs{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}}
-      `}} />
-      <main>
-        <div className="shell">
-          <header>
+      <main className="app-main">
+        <div className="shell shell-wide">
+          <header className="app-header">
             <div>
               <h1>Genaie Dashboard</h1>
               <p>Choose the service area you want to manage.</p>
