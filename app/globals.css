@@ -12,13 +12,36 @@
   --selected-background: #fffff6;
   --danger: #b94a48;
   --danger-soft: #fbedec;
-  --danger-border: #e8b9b6;
+  --danger-border: #e6aaa3;
   --warning: #b7791f;
   --warning-soft: #fff6e5;
-  --warning-border: #e8c98e;
+  --warning-border: #e7c97a;
   --info: #3e6f8e;
   --info-soft: #eaf2f7;
   --info-border: #b8cfdd;
+  --warning-bg: #fff9e8;
+  --warning-icon: #9a6b12;
+  --warning-text: #3f3216;
+  --warning-muted: #705f36;
+  --danger-bg: #fff1ef;
+  --danger-icon: #a8453c;
+  --danger-text: #4a211d;
+  --danger-muted: #7d4a45;
+  --success-bg: #eef7f2;
+  --success-border: #a9cfbc;
+  --success-icon: #39755a;
+  --success-text: #203e31;
+  --success-muted: #527061;
+  --status-info-bg: #f0f4f6;
+  --status-info-border: #b9c9d1;
+  --status-info-icon: #486a78;
+  --status-info-text: #263c45;
+  --status-info-muted: #607680;
+  --pending-bg: #f6f2fa;
+  --pending-border: #cbbbdd;
+  --pending-icon: #715a89;
+  --pending-text: #392d46;
+  --pending-muted: #756782;
   --radius: 8px;
 }
 
@@ -368,66 +391,141 @@ form {
   display: inline-flex;
   min-height: 30px;
   align-items: center;
-  border: 1px solid var(--info-border);
+  gap: 7px;
+  border: 1px solid var(--status-border);
   border-radius: 999px;
-  background: var(--info-soft);
-  color: var(--info);
+  background: var(--status-bg);
+  color: var(--status-text);
   font-size: 0.88rem;
   font-weight: 700;
   padding: 0 10px;
   white-space: nowrap;
 }
 
-.status-pill[data-tone="success"],
-.status[data-tone="success"] {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
+.status-ui {
+  --status-bg: var(--status-info-bg);
+  --status-border: var(--status-info-border);
+  --status-icon: var(--status-info-icon);
+  --status-text: var(--status-info-text);
+  --status-muted: var(--status-info-muted);
+  color: var(--status-text);
 }
 
-.status-pill[data-tone="error"],
-.status[data-tone="error"] {
-  border-color: var(--danger-border);
-  background: var(--danger-soft);
-  color: var(--danger);
+.status-ui[data-status-kind="complete"] {
+  --status-bg: var(--success-bg);
+  --status-border: var(--success-border);
+  --status-icon: var(--success-icon);
+  --status-text: var(--success-text);
+  --status-muted: var(--success-muted);
 }
 
-.status-pill[data-tone="warning"],
-.status[data-tone="warning"] {
-  border-color: var(--warning-border);
-  background: var(--warning-soft);
-  color: var(--warning);
+.status-ui[data-status-kind="unlinked"],
+.status-ui[data-status-kind="pending"] {
+  --status-bg: var(--pending-bg);
+  --status-border: var(--pending-border);
+  --status-icon: var(--pending-icon);
+  --status-text: var(--pending-text);
+  --status-muted: var(--pending-muted);
+}
+
+.status-ui[data-status-kind="warning"] {
+  --status-bg: var(--warning-bg);
+  --status-border: var(--warning-border);
+  --status-icon: var(--warning-icon);
+  --status-text: var(--warning-text);
+  --status-muted: var(--warning-muted);
+}
+
+.status-ui[data-status-kind="revoked"],
+.status-ui[data-status-kind="error"] {
+  --status-bg: var(--danger-bg);
+  --status-border: var(--danger-border);
+  --status-icon: var(--danger-icon);
+  --status-text: var(--danger-text);
+  --status-muted: var(--danger-muted);
+}
+
+.status-icon-set {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  place-items: center;
+  color: var(--status-icon);
+}
+
+.status-icon-set svg {
+  display: none;
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+}
+
+.status-ui[data-status-kind="complete"] [data-status-icon="complete"],
+.status-ui[data-status-kind="unlinked"] [data-status-icon="unlinked"],
+.status-ui[data-status-kind="pending"] [data-status-icon="pending"],
+.status-ui[data-status-kind="warning"] [data-status-icon="warning"],
+.status-ui[data-status-kind="revoked"] [data-status-icon="revoked"],
+.status-ui[data-status-kind="loading"] [data-status-icon="loading"],
+.status-ui[data-status-kind="error"] [data-status-icon="error"],
+.status-ui[data-status-kind="info"] [data-status-icon="info"] {
+  display: block;
+}
+
+.status-ui[data-status-kind="loading"] [data-status-icon="loading"] {
+  animation: status-spin 900ms linear infinite;
+}
+
+@keyframes status-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .status {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
   margin-top: 18px;
   padding: 12px 14px;
-  border: 1px solid var(--info-border);
+  border: 1px solid var(--status-border);
   border-radius: var(--radius);
-  background: var(--info-soft);
-  color: var(--info);
+  background: var(--status-bg);
+  color: var(--status-text);
   line-height: 1.45;
 }
 
 .message {
-  min-height: 22px;
-  color: var(--info);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid var(--status-border);
+  border-radius: var(--radius);
+  background: var(--status-bg);
+  color: var(--status-muted);
   font-size: 0.95rem;
   line-height: 1.45;
+  padding: 9px 11px;
 }
 
-.message[data-tone="success"] {
-  color: var(--accent);
+.message.status-ui:has([data-status-label]:empty) {
+  min-height: 22px;
+  border-color: transparent;
+  background: transparent;
+  padding: 0;
 }
 
-.message[data-tone="error"],
+.message.status-ui:has([data-status-label]:empty) .status-icon-set {
+  display: none;
+}
+
 .account-error {
-  color: var(--danger);
+  color: var(--status-muted);
 }
 
-.message[data-tone="warning"],
 .missing {
-  color: var(--warning);
+  color: var(--status-muted);
 }
 
 .tabs {

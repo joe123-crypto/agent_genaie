@@ -5,6 +5,7 @@ import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
 import { getOnboardingStatus } from "@/src/domains/onboarding";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
+import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
 export const runtime = "nodejs";
 
@@ -52,7 +53,6 @@ export default async function WhatsAppLinkingPage({
   const whatsappLinked = !!accountStatus?.whatsappLinked;
   const email = accountStatus?.profile?.email ?? (routeUser as { profile?: { email?: string } }).profile?.email ?? "signed-in user";
   const statusLabel = whatsappLinked ? "Linked" : "Not linked";
-  const statusTone = whatsappLinked ? "success" : "error";
   const statusCopy = whatsappLinked
     ? `This account is linked to ${accountStatus?.maskedPhone || "your WhatsApp number"}. Revoke it before linking a different number.`
     : "Enter a WhatsApp number, then open the bot link to complete verification.";
@@ -68,19 +68,19 @@ const messageEl = document.querySelector("[data-whatsapp-message]");
 const botLink = document.querySelector("[data-whatsapp-bot-link]");
 
 function setMessage(message, tone) {
-  messageEl.textContent = message || "";
-  messageEl.dataset.tone = tone || "info";
+  messageEl.querySelector("[data-status-label]").textContent = message || "";
+  messageEl.dataset.statusKind = tone || "info";
 }
-function setPill(label, tone) {
-  statusPill.textContent = label;
-  statusPill.dataset.tone = tone || "info";
+function setPill(label, kind) {
+  statusPill.querySelector("[data-status-label]").textContent = label;
+  statusPill.dataset.statusKind = kind || "info";
 }
 function setBusy(value) {
   submitButton.disabled = value;
   revokeButton.disabled = value;
 }
 function setLinked(maskedPhone) {
-  setPill("Linked", "success");
+  setPill("Linked", "complete");
   copyEl.textContent = "This account is linked to " + (maskedPhone || "your WhatsApp number") + ". Revoke it before linking a different number.";
   form.hidden = true;
   revokeButton.hidden = false;
@@ -88,7 +88,7 @@ function setLinked(maskedPhone) {
   botLink.removeAttribute("href");
 }
 function setUnlinked() {
-  setPill("Not linked", "error");
+  setPill("Not linked", "unlinked");
   copyEl.textContent = "Enter a WhatsApp number, then open the bot link to complete verification.";
   form.hidden = false;
   revokeButton.hidden = true;
@@ -116,13 +116,13 @@ form.addEventListener("submit", async function(event) {
     }));
     if (result.alreadyLinked) {
       setLinked(result.maskedPhone);
-      setMessage("This number is already linked to your account.", "success");
+      setMessage("This number is already linked to your account.", "complete");
       return;
     }
     if (result.whatsappBotUrl) {
       botLink.href = result.whatsappBotUrl;
       botLink.hidden = false;
-      setMessage("Pending request created for " + (result.maskedPhone || "that number") + ". Open the bot link to complete verification.", "success");
+      setMessage("Pending request created for " + (result.maskedPhone || "that number") + ". Open the bot link to complete verification.", "pending");
       return;
     }
     setMessage("Pending request created, but the WhatsApp bot link is unavailable.", "error");
@@ -145,7 +145,7 @@ revokeButton.addEventListener("click", async function() {
     }));
     phoneInput.value = "";
     setUnlinked();
-    setMessage("WhatsApp link revoked.", "success");
+    setMessage("WhatsApp link revoked.", "complete");
   } catch (err) {
     setMessage(err.message || "Could not revoke WhatsApp link.", "error");
   } finally {
@@ -165,7 +165,7 @@ revokeButton.addEventListener("click", async function() {
                 <h1 id="whatsapp-title">WhatsApp Linking</h1>
                 <p>Link your WhatsApp number to this account.</p>
               </div>
-              <span className="status-pill" data-whatsapp-status data-tone={statusTone}>{statusLabel}</span>
+              <StatusPill data-whatsapp-status kind={whatsappLinked ? "complete" : "unlinked"}>{statusLabel}</StatusPill>
             </div>
             <div className="meta">
               <span>Signed in as <strong>{email}</strong></span>
@@ -186,7 +186,7 @@ revokeButton.addEventListener("click", async function() {
               {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
               <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
             </div>
-            <div className="message" data-whatsapp-message></div>
+            <StatusNotice data-whatsapp-message />
           </section>
         </div>
       </main>

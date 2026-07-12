@@ -5,6 +5,7 @@ import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
 import { completeOnboarding, getOnboardingStatus, type OnboardingStep } from "@/src/domains/onboarding";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
+import { StatusNotice } from "@/app/_components/status-ui";
 
 export const runtime = "nodejs";
 
@@ -61,8 +62,8 @@ const onboardingPath = ${JSON.stringify(onboardingPath)};
 const homePath = ${JSON.stringify(homePath)};
 
 function setMessage(text, tone) {
-  message.textContent = text || "";
-  message.dataset.tone = tone || "info";
+  message.querySelector("[data-status-label]").textContent = text || "";
+  message.dataset.statusKind = tone || "info";
 }
 function setBusy(value) {
   buttons.forEach(function(button) { button.disabled = value; });
@@ -79,7 +80,7 @@ form.addEventListener("submit", async function(event) {
   const service = submitter && submitter.value;
   if (!service) return;
   setBusy(true);
-  setMessage("Saving selection...", "info");
+  setMessage("Saving selection...", "loading");
   try {
     await readJson(await fetch("/account/onboarding/select", {
       method: "POST",
@@ -96,7 +97,7 @@ form.addEventListener("submit", async function(event) {
 
 skipButton.addEventListener("click", async function() {
   setBusy(true);
-  setMessage("Skipping onboarding...", "info");
+  setMessage("Skipping onboarding...", "loading");
   try {
     await readJson(await fetch("/account/onboarding/skip", {
       method: "POST",
@@ -137,7 +138,7 @@ skipButton.addEventListener("click", async function() {
               <button className="secondary" data-skip type="button">Skip onboarding</button>
               <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
             </div>
-            <div className="message" data-message></div>
+            <StatusNotice data-message />
           </section>
         </div>
       </main>

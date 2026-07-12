@@ -5,6 +5,7 @@ import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
 import { getWebetuCredentialStatus } from "@/src/domains/webetu";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
+import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
 export const runtime = "nodejs";
 
@@ -56,12 +57,11 @@ export default async function VaultPage({
     : webetuStatus
     ? "Not saved"
     : "Unavailable";
-  const webetuTone = webetuConfigured ? "success" : webetuStatus?.status === "revoked" ? "error" : "info";
+  const webetuKind = webetuConfigured ? "complete" : webetuStatus?.status === "revoked" ? "revoked" : webetuStatus ? "pending" : "error";
   const webetuSaveLabel = webetuConfigured ? "Update credentials" : "Save credentials";
 
   const whatsappLinked = !!webetuStatus?.whatsappLinked;
   const whatsappLabel = whatsappLinked ? "WhatsApp: Linked" : "WhatsApp: Not linked";
-  const whatsappTone = whatsappLinked ? "success" : "error";
   const whatsappCopy = whatsappLinked
     ? `Reservations will report to ${webetuStatus?.maskedPhone || "the linked WhatsApp chat"}.`
     : "Open a service setup link from WhatsApp first, then return here.";
@@ -79,12 +79,12 @@ const whatsappStatus = document.querySelector("[data-whatsapp-status]");
 const whatsappCopy = document.querySelector("[data-whatsapp-copy]");
 
 function setMessage(el, message, tone) {
-  el.textContent = message || "";
-  el.dataset.tone = tone || "info";
+  el.querySelector("[data-status-label]").textContent = message || "";
+  el.dataset.statusKind = tone || "info";
 }
-function setPill(el, label, tone) {
-  el.textContent = label;
-  el.dataset.tone = tone || "info";
+function setPill(el, label, kind) {
+  el.querySelector("[data-status-label]").textContent = label;
+  el.dataset.statusKind = kind || "info";
 }
 function setBusy(value) {
   webetuSaveButton.disabled = value;
@@ -109,18 +109,18 @@ function webetuLabel(status) {
 }
 function updateWhatsAppStatus(status) {
   if (status && status.whatsappLinked) {
-    setPill(whatsappStatus, "WhatsApp: Linked", "success");
+    setPill(whatsappStatus, "WhatsApp: Linked", "complete");
     whatsappCopy.textContent = "Reservations will report to " + (status.maskedPhone || "the linked WhatsApp chat") + ".";
     return;
   }
-  setPill(whatsappStatus, "WhatsApp: Not linked", "error");
+  setPill(whatsappStatus, "WhatsApp: Not linked", "unlinked");
   whatsappCopy.textContent = "Open a service setup link from WhatsApp first, then return here.";
 }
 async function loadWebetuStatus() {
-  setPill(webetuStatus, "Checking...");
+  setPill(webetuStatus, "Checking...", "loading");
   const status = await readJson(await fetch("/webetu/credentials/status", { method: "GET", credentials: "same-origin" }));
   const label = webetuLabel(status);
-  setPill(webetuStatus, label, status.configured ? "success" : status.status === "revoked" ? "error" : "info");
+  setPill(webetuStatus, label, status.configured ? "complete" : status.status === "revoked" ? "revoked" : status.status === "not_saved" ? "pending" : "error");
   updateWhatsAppStatus(status);
   webetuSaveButton.textContent = status.configured ? "Update credentials" : "Save credentials";
   webetuRevokeButton.hidden = !status.configured;
@@ -139,7 +139,7 @@ webetuForm.addEventListener("submit", async function(event) {
     }));
     webetuPassword.value = "";
     setPasswordVisible(false);
-    setMessage(webetuMessage, "Webetu credentials saved.", "success");
+    setMessage(webetuMessage, "Webetu credentials saved.", "complete");
     await loadWebetuStatus();
   } catch (err) {
     setMessage(webetuMessage, err.message || "Could not save Webetu credentials.", "error");
@@ -158,7 +158,7 @@ webetuRevokeButton.addEventListener("click", async function() {
     }));
     webetuPassword.value = "";
     setPasswordVisible(false);
-    setMessage(webetuMessage, "Webetu credentials revoked.", "success");
+    setMessage(webetuMessage, "Webetu credentials revoked.", "complete");
     await loadWebetuStatus();
   } catch (err) {
     setMessage(webetuMessage, err.message || "Could not revoke Webetu credentials.", "error");
@@ -182,10 +182,10 @@ webetuPasswordToggle.addEventListener("click", function() {
                 <h1 id="vault-title">Credentials Vault</h1>
                 <p>Save the Webetu account used for meal reservations.</p>
               </div>
-              <span className="status-pill" data-webetu-status data-tone={webetuTone}>{webetuLabel}</span>
+              <StatusPill data-webetu-status kind={webetuKind}>{webetuLabel}</StatusPill>
             </div>
             <div className="account-meta">
-              <span className="status-pill" data-whatsapp-status data-tone={whatsappTone}>{whatsappLabel}</span>
+              <StatusPill data-whatsapp-status kind={whatsappLinked ? "complete" : "unlinked"}>{whatsappLabel}</StatusPill>
               <span data-whatsapp-copy>{whatsappCopy}</span>
             </div>
             <form className="form-stack" data-webetu-form>
@@ -207,7 +207,7 @@ webetuPasswordToggle.addEventListener("click", function() {
                 <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
               </div>
             </form>
-            <div className="message" data-webetu-message></div>
+            <StatusNotice data-webetu-message />
           </section>
         </div>
       </main>

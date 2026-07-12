@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { StatusNotice } from "@/app/_components/status-ui";
 
 export default function FirebaseFinishPage() {
   const statusRef = useRef<HTMLDivElement>(null);
@@ -52,8 +53,8 @@ async function createSession(user) {
 }
 
 function setStatus(message, tone) {
-  statusEl.textContent = message;
-  statusEl.dataset.tone = tone || "info";
+  statusEl.querySelector("[data-status-label]").textContent = message;
+  statusEl.dataset.statusKind = tone || "info";
   statusEl.hidden = false;
 }
 function setBusy(value) {
@@ -67,7 +68,7 @@ async function finish(email) {
     const result = await signInWithEmailLink(auth, email, window.location.href);
     const session = await createSession(result.user);
     window.localStorage.removeItem(emailStorageKey);
-    setStatus("Signed in. Opening app.", "success");
+    setStatus("Signed in. Opening app.", "complete");
     window.location.assign(destinationForSession(session));
   } catch (err) {
     setStatus(err.message || "Could not finish sign-in.", "error");
@@ -126,7 +127,7 @@ start().catch(function(err) {
               <button data-submit type="submit" ref={submitRef}>Finish sign in</button>
             </div>
           </form>
-          <div className="status" data-status ref={statusRef}>Checking sign-in link...</div>
+          <StatusNotice data-status kind="loading" ref={statusRef} variant="block">Checking sign-in link...</StatusNotice>
         </section>
       </main>
     </>

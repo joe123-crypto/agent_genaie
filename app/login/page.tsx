@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { StatusNotice } from "@/app/_components/status-ui";
 
 function LoginContent() {
   const [config, setConfig] = useState<any>(null);
@@ -92,8 +93,8 @@ function LoginContent() {
     };
   }, [config, nextParam]);
 
-  if (error) return <main className="app-main app-main-center"><div className="status" data-tone="error">{error}</div></main>;
-  if (!config) return <main className="app-main app-main-center"><div className="status">Loading...</div></main>;
+  if (error) return <main className="app-main app-main-center"><StatusNotice kind="error" variant="block">{error}</StatusNotice></main>;
+  if (!config) return <main className="app-main app-main-center"><StatusNotice kind="loading" variant="block">Loading...</StatusNotice></main>;
 
   return (
     <main className="app-main app-main-center">
@@ -144,7 +145,7 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<main className="app-main app-main-center"><div className="status">Loading...</div></main>}>
+    <Suspense fallback={<main className="app-main app-main-center"><StatusNotice kind="loading" variant="block">Loading...</StatusNotice></main>}>
       <LoginContent />
     </Suspense>
   );

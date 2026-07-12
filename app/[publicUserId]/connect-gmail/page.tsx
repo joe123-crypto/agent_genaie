@@ -4,6 +4,7 @@ import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
+import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
 export const runtime = "nodejs";
 
@@ -61,13 +62,17 @@ const disconnectButton = document.querySelector("[data-disconnect]");
 const signOutButton = document.querySelector("[data-sign-out]");
 
 function setStatus(message, tone) {
-  statusEl.textContent = message;
-  statusEl.dataset.tone = tone || "info";
+  statusEl.querySelector("[data-status-label]").textContent = message;
+  statusEl.dataset.statusKind = tone || "info";
   statusEl.hidden = false;
 }
 function clearStatus() {
-  statusEl.textContent = "";
+  statusEl.querySelector("[data-status-label]").textContent = "";
   statusEl.hidden = true;
+}
+function setPill(el, label, kind) {
+  el.querySelector("[data-status-label]").textContent = label;
+  el.dataset.statusKind = kind;
 }
 function setBusy(value) {
   connectButton.disabled = value;
@@ -82,19 +87,19 @@ async function readJson(response) {
 }
 
 async function loadGoogleStatus() {
-  gmailStatusEl.textContent = "Checking...";
-  calendarStatusEl.textContent = "Checking...";
+  setPill(gmailStatusEl, "Gmail: Checking...", "loading");
+  setPill(calendarStatusEl, "Calendar: Checking...", "loading");
   const status = await readJson(await fetch("/auth/google/status", { method: "GET", credentials: "same-origin" }));
   if (status.connected) {
-    gmailStatusEl.textContent = "Connected";
+    setPill(gmailStatusEl, "Gmail: Connected", "complete");
     connectButton.textContent = "Reconnect Google";
     disconnectButton.hidden = false;
   } else {
-    gmailStatusEl.textContent = "Not connected";
+    setPill(gmailStatusEl, "Gmail: Not connected", "unlinked");
     connectButton.textContent = "Connect Google";
     disconnectButton.hidden = true;
   }
-  calendarStatusEl.textContent = status.calendarConnected ? "Connected" : "Not connected";
+  setPill(calendarStatusEl, status.calendarConnected ? "Calendar: Connected" : "Calendar: Not connected", status.calendarConnected ? "complete" : "unlinked");
 }
 
 connectButton.addEventListener("click", async function() {
@@ -124,7 +129,7 @@ disconnectButton.addEventListener("click", async function() {
       credentials: "same-origin",
       body: "{}"
     }));
-    setStatus("Google access disconnected.", "success");
+    setStatus("Google access disconnected.", "complete");
     await loadGoogleStatus();
   } catch (err) {
     setStatus(err.message || "Could not disconnect Google access.", "error");
@@ -165,8 +170,10 @@ signOutButton.addEventListener("click", async function() {
             <div data-signed-in>
               <div className="meta">
                 <span>Signed in as <strong data-user-email>{email}</strong></span>
-                <span>Gmail status: <strong data-gmail-status>{gmailConnected ? "Connected" : "Not connected"}</strong></span>
-                <span>Calendar status: <strong data-calendar-status>{calendarConnected ? "Connected" : "Not connected"}</strong></span>
+                <div className="status-row" aria-label="Google connection status">
+                  <StatusPill data-gmail-status kind={gmailConnected ? "complete" : "unlinked"}>{gmailConnected ? "Gmail: Connected" : "Gmail: Not connected"}</StatusPill>
+                  <StatusPill data-calendar-status kind={calendarConnected ? "complete" : "unlinked"}>{calendarConnected ? "Calendar: Connected" : "Calendar: Not connected"}</StatusPill>
+                </div>
               </div>
               <div className="actions actions-spaced">
                 <button data-connect type="button">{gmailConnected ? "Reconnect Google" : "Connect Google"}</button>
@@ -175,7 +182,7 @@ signOutButton.addEventListener("click", async function() {
                 <button className="secondary" data-sign-out type="button">Sign out</button>
               </div>
             </div>
-            <div className="status" data-status hidden suppressHydrationWarning></div>
+            <StatusNotice data-status hidden suppressHydrationWarning variant="block" />
           </section>
         </div>
       </main>
