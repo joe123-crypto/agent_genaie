@@ -368,66 +368,89 @@ form {
   display: inline-flex;
   min-height: 30px;
   align-items: center;
-  border: 1px solid var(--info-border);
+  gap: 7px;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background: var(--info-soft);
-  color: var(--info);
+  background: var(--surface);
+  color: var(--text-primary);
   font-size: 0.88rem;
   font-weight: 700;
   padding: 0 10px;
   white-space: nowrap;
 }
 
-.status-pill[data-tone="success"],
-.status[data-tone="success"] {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
+.status-ui {
+  color: var(--text-primary);
 }
 
-.status-pill[data-tone="error"],
-.status[data-tone="error"] {
-  border-color: var(--danger-border);
-  background: var(--danger-soft);
-  color: var(--danger);
+.status-icon-set {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  place-items: center;
 }
 
-.status-pill[data-tone="warning"],
-.status[data-tone="warning"] {
-  border-color: var(--warning-border);
-  background: var(--warning-soft);
-  color: var(--warning);
+.status-icon-set svg {
+  display: none;
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+}
+
+.status-ui[data-status-kind="complete"] [data-status-icon="complete"],
+.status-ui[data-status-kind="unlinked"] [data-status-icon="unlinked"],
+.status-ui[data-status-kind="pending"] [data-status-icon="pending"],
+.status-ui[data-status-kind="revoked"] [data-status-icon="revoked"],
+.status-ui[data-status-kind="loading"] [data-status-icon="loading"],
+.status-ui[data-status-kind="error"] [data-status-icon="error"],
+.status-ui[data-status-kind="info"] [data-status-icon="info"] {
+  display: block;
+}
+
+.status-ui[data-status-kind="loading"] [data-status-icon="loading"] {
+  animation: status-spin 900ms linear infinite;
+}
+
+@keyframes status-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .status {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
   margin-top: 18px;
   padding: 12px 14px;
-  border: 1px solid var(--info-border);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--info-soft);
-  color: var(--info);
+  background: var(--surface);
+  color: var(--text-primary);
   line-height: 1.45;
 }
 
 .message {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   min-height: 22px;
-  color: var(--info);
+  color: var(--text-secondary);
   font-size: 0.95rem;
   line-height: 1.45;
 }
 
-.message[data-tone="success"] {
-  color: var(--accent);
+.message.status-ui:has([data-status-label]:empty) .status-icon-set {
+  visibility: hidden;
 }
 
-.message[data-tone="error"],
 .account-error {
-  color: var(--danger);
+  color: var(--text-secondary);
 }
 
-.message[data-tone="warning"],
 .missing {
-  color: var(--warning);
+  color: var(--text-secondary);
 }
 
 .tabs {

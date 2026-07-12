@@ -5,6 +5,7 @@ import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
 import { getJobScoutStatusForUser } from "@/src/domains/job-scout";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
+import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
 export const runtime = "nodejs";
 
@@ -108,12 +109,12 @@ const labels = {
 };
 
 function setMessage(text, tone) {
-  message.textContent = text || "";
-  message.dataset.tone = tone || "info";
+  message.querySelector("[data-status-label]").textContent = text || "";
+  message.dataset.statusKind = tone || "info";
 }
-function setPill(el, text, tone) {
-  el.textContent = text;
-  el.dataset.tone = tone || "info";
+function setPill(el, text, kind) {
+  el.querySelector("[data-status-label]").textContent = text;
+  el.dataset.statusKind = kind || "info";
 }
 function missingCopy(missing) {
   if (!Array.isArray(missing) || missing.length === 0) return "All requirements are complete.";
@@ -133,17 +134,18 @@ cvInput.addEventListener("change", function() {
 form.addEventListener("submit", async function(event) {
   event.preventDefault();
   saveButton.disabled = true;
-  setMessage("Saving Job Scout setup...", "info");
+  setMessage("Saving Job Scout setup...", "loading");
   try {
     const payload = await readJson(await fetch("/job-scout/profile", {
       method: "POST",
       credentials: "same-origin",
       body: new FormData(form)
     }));
-    setPill(readyStatus, payload.ready ? "Ready" : "Draft", payload.ready ? "success" : "error");
-    setPill(cvStatus, payload.cvAvailable ? "CV: Uploaded" : "CV: Missing", payload.cvAvailable ? "success" : "error");
-    missingStatus.textContent = missingCopy(payload.missingRequirements);
-    setMessage(payload.ready ? "Job Scout setup saved and ready." : "Setup saved, but requirements are still missing.", payload.ready ? "success" : "error");
+    setPill(readyStatus, payload.ready ? "Ready" : "Draft", payload.ready ? "complete" : "pending");
+    setPill(cvStatus, payload.cvAvailable ? "CV: Uploaded" : "CV: Missing", payload.cvAvailable ? "complete" : "pending");
+    missingStatus.querySelector("[data-status-label]").textContent = missingCopy(payload.missingRequirements);
+    missingStatus.dataset.statusKind = payload.ready ? "complete" : "pending";
+    setMessage(payload.ready ? "Job Scout setup saved and ready." : "Setup saved, but requirements are still missing.", payload.ready ? "complete" : "pending");
     cvInput.value = "";
     cvName.textContent = "No new file selected";
   } catch (err) {
@@ -165,14 +167,14 @@ form.addEventListener("submit", async function(event) {
                 <h1 id="job-scout-title">Job Scout Setup</h1>
                 <p>Complete the profile Job Scout uses for applications.</p>
               </div>
-              <span className="status-pill" data-ready-status data-tone={ready ? "success" : "error"}>{ready ? "Ready" : "Draft"}</span>
+              <StatusPill data-ready-status kind={ready ? "complete" : "pending"}>{ready ? "Ready" : "Draft"}</StatusPill>
             </div>
             <div className="status-row" aria-label="Job Scout requirements">
-              <span className="status-pill" data-tone={whatsappLinked ? "success" : "error"}>{whatsappLinked ? "WhatsApp: Linked" : "WhatsApp: Not linked"}</span>
-              <span className="status-pill" data-tone={googleConnected ? "success" : "error"}>{googleConnected ? "Google: Connected" : "Google: Not connected"}</span>
-              <span className="status-pill" data-cv-status data-tone={cvAvailable ? "success" : "error"}>{cvAvailable ? "CV: Uploaded" : "CV: Missing"}</span>
+              <StatusPill kind={whatsappLinked ? "complete" : "unlinked"}>{whatsappLinked ? "WhatsApp: Linked" : "WhatsApp: Not linked"}</StatusPill>
+              <StatusPill kind={googleConnected ? "complete" : "unlinked"}>{googleConnected ? "Google: Connected" : "Google: Not connected"}</StatusPill>
+              <StatusPill data-cv-status kind={cvAvailable ? "complete" : "pending"}>{cvAvailable ? "CV: Uploaded" : "CV: Missing"}</StatusPill>
             </div>
-            <p className="missing" data-missing>{missingCopy(jobScoutStatus?.missingRequirements)}</p>
+            <StatusNotice className="missing" data-missing kind={ready ? "complete" : "pending"}>{missingCopy(jobScoutStatus?.missingRequirements)}</StatusNotice>
             <form className="form-stack" data-job-scout-form>
               <div className="grid">
                 <label>
@@ -219,7 +221,7 @@ form.addEventListener("submit", async function(event) {
                 <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
               </div>
             </form>
-            <div className="message" data-message></div>
+            <StatusNotice data-message />
           </section>
         </div>
       </main>

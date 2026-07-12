@@ -27,6 +27,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1077.0",
     "@vercel/analytics": "^2.0.1",
     "firebase-admin": "^13.10.0",
+    "lucide-react": "^1.24.0",
     "next": "^15.3.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

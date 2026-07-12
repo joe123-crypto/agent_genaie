@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
 export const runtime = "nodejs";
 
@@ -38,7 +39,6 @@ export default async function DashboardPage({ params }: { params: Promise<{ publ
   const accountStatus = await getSignedInAccountStatus(uid).catch(() => null);
   const whatsappLinked = !!accountStatus?.whatsappLinked;
   const whatsappLabel = whatsappLinked ? "WhatsApp: Linked" : "WhatsApp: Not linked";
-  const whatsappTone = whatsappLinked ? "success" : "error";
   const accountCopy = whatsappLinked
     ? `This chat is linked to ${accountStatus?.maskedPhone || "your WhatsApp number"}.`
     : "Open a service link from WhatsApp to connect this login to your chat.";
@@ -48,6 +48,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
 const accountError = document.querySelector("[data-account-error]");
+const accountErrorLabel = accountError.querySelector("[data-status-label]");
 const signOutButton = document.querySelector("[data-sign-out]");
 
 async function signOutFirebase() {
@@ -72,7 +73,7 @@ async function signOutDashboard() {
     await signOutFirebase();
     window.location.assign("/login");
   } catch (err) {
-    accountError.textContent = err.message || "Could not sign out.";
+    accountErrorLabel.textContent = err.message || "Could not sign out.";
     accountError.hidden = false;
     signOutButton.disabled = false;
   }
@@ -96,9 +97,9 @@ signOutButton.addEventListener("click", signOutDashboard);
             </div>
           </header>
           <div className="status-strip" aria-label="Account status">
-            <span className="status-pill" data-whatsapp-status data-tone={whatsappTone}>{whatsappLabel}</span>
+            <StatusPill data-whatsapp-status kind={whatsappLinked ? "complete" : "unlinked"}>{whatsappLabel}</StatusPill>
             <p data-account-copy>{accountCopy}</p>
-            <p className="account-error" data-account-error hidden></p>
+            <StatusNotice className="account-error" data-account-error kind="error" hidden />
           </div>
           <div className="tabs" aria-label="Dashboard tabs">
             <a className="tab" href={`${homePath}/connect-gmail`}>
