@@ -4,6 +4,7 @@ import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
 import { completeOnboarding, getOnboardingStatus, type OnboardingStep } from "@/src/domains/onboarding";
+import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 
 export const runtime = "nodejs";
 
@@ -115,6 +116,7 @@ skipButton.addEventListener("click", async function() {
     <>
       <main className="app-main app-main-center">
         <div className="shell">
+          <OnboardingProgress backHref={homePath} current={1} total={4} />
           <section className="panel" aria-labelledby="onboarding-title">
             <div>
               <h1 id="onboarding-title">Choose your setup</h1>

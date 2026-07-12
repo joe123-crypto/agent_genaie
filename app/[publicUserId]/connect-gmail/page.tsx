@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 
 export const runtime = "nodejs";
 
@@ -155,25 +156,28 @@ signOutButton.addEventListener("click", async function() {
   return (
     <>
       <main className="app-main app-main-center">
-        <section className="panel panel-narrow">
-          <a className="toplink" href={onboardingMode ? onboardingPath : homePath}>{onboardingMode ? "Back to onboarding" : "Back to app"}</a>
-          <h1>Connect Google</h1>
-          <p>Grant Google access for this account — send job application emails (Gmail) and add calendar events. You can revoke it at any time, which removes both permissions.</p>
-          <div data-signed-in>
-            <div className="meta">
-              <span>Signed in as <strong data-user-email>{email}</strong></span>
-              <span>Gmail status: <strong data-gmail-status>{gmailConnected ? "Connected" : "Not connected"}</strong></span>
-              <span>Calendar status: <strong data-calendar-status>{calendarConnected ? "Connected" : "Not connected"}</strong></span>
+        <div className="shell shell-narrow">
+          {onboardingMode ? <OnboardingProgress backHref={onboardingPath} current={3} total={4} /> : null}
+          <section className="panel panel-narrow">
+            {!onboardingMode ? <a className="toplink" href={homePath}>Back to app</a> : null}
+            <h1>Connect Google</h1>
+            <p>Grant Google access for this account — send job application emails (Gmail) and add calendar events. You can revoke it at any time, which removes both permissions.</p>
+            <div data-signed-in>
+              <div className="meta">
+                <span>Signed in as <strong data-user-email>{email}</strong></span>
+                <span>Gmail status: <strong data-gmail-status>{gmailConnected ? "Connected" : "Not connected"}</strong></span>
+                <span>Calendar status: <strong data-calendar-status>{calendarConnected ? "Connected" : "Not connected"}</strong></span>
+              </div>
+              <div className="actions actions-spaced">
+                <button data-connect type="button">{gmailConnected ? "Reconnect Google" : "Connect Google"}</button>
+                <button className="danger" data-disconnect type="button" hidden={!gmailConnected}>Disconnect Google</button>
+                {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
+                <button className="secondary" data-sign-out type="button">Sign out</button>
+              </div>
             </div>
-            <div className="actions actions-spaced">
-              <button data-connect type="button">{gmailConnected ? "Reconnect Google" : "Connect Google"}</button>
-              <button className="danger" data-disconnect type="button" hidden={!gmailConnected}>Disconnect Google</button>
-              {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
-              <button className="secondary" data-sign-out type="button">Sign out</button>
-            </div>
-          </div>
-          <div className="status" data-status hidden suppressHydrationWarning></div>
-        </section>
+            <div className="status" data-status hidden suppressHydrationWarning></div>
+          </section>
+        </div>
       </main>
       <script type="module" dangerouslySetInnerHTML={{ __html: connectScript }} />
     </>

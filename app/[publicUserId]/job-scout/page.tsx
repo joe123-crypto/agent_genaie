@@ -4,6 +4,7 @@ import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
 import { getJobScoutStatusForUser } from "@/src/domains/job-scout";
+import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 
 export const runtime = "nodejs";
 
@@ -157,7 +158,7 @@ form.addEventListener("submit", async function(event) {
     <>
       <main className="app-main">
         <div className="shell">
-          <a className="button secondary" href={onboardingMode ? onboardingPath : homePath}>{onboardingMode ? "Back to onboarding" : "Back to dashboard"}</a>
+          {onboardingMode ? <OnboardingProgress backHref={onboardingPath} current={4} total={4} /> : <a className="toplink" href={homePath}>Back to dashboard</a>}
           <section className="panel" aria-labelledby="job-scout-title">
             <div className="panel-head">
               <div>

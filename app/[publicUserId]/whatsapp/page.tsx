@@ -3,6 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { getOnboardingStatus } from "@/src/domains/onboarding";
+import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 
 export const runtime = "nodejs";
 
@@ -45,6 +47,8 @@ export default async function WhatsAppLinkingPage({
   const homePath = `/${publicUserId}`;
   const onboardingPath = `/${publicUserId}/onboarding`;
   const accountStatus = await getSignedInAccountStatus(uid).catch(() => null);
+  const onboardingStatus = onboardingMode ? await getOnboardingStatus(uid).catch(() => null) : null;
+  const onboardingTotal = onboardingStatus?.selectedService === "webetu" ? 3 : 4;
   const whatsappLinked = !!accountStatus?.whatsappLinked;
   const email = accountStatus?.profile?.email ?? (routeUser as { profile?: { email?: string } }).profile?.email ?? "signed-in user";
   const statusLabel = whatsappLinked ? "Linked" : "Not linked";
@@ -154,7 +158,7 @@ revokeButton.addEventListener("click", async function() {
     <>
       <main className="app-main">
         <div className="shell">
-          <a className="button secondary" href={onboardingMode ? onboardingPath : homePath}>{onboardingMode ? "Back to onboarding" : "Back to dashboard"}</a>
+          {onboardingMode ? <OnboardingProgress backHref={onboardingPath} current={2} total={onboardingTotal} /> : <a className="toplink" href={homePath}>Back to dashboard</a>}
           <section className="panel" aria-labelledby="whatsapp-title">
             <div className="panel-head">
               <div>

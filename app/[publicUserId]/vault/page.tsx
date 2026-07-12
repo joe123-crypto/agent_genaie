@@ -4,6 +4,7 @@ import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
 import { getWebetuCredentialStatus } from "@/src/domains/webetu";
+import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 
 export const runtime = "nodejs";
 
@@ -174,7 +175,7 @@ webetuPasswordToggle.addEventListener("click", function() {
     <>
       <main className="app-main">
         <div className="shell">
-          <a className="button secondary" href={onboardingMode ? onboardingPath : homePath}>{onboardingMode ? "Back to onboarding" : "Back to dashboard"}</a>
+          {onboardingMode ? <OnboardingProgress backHref={onboardingPath} current={3} total={3} /> : <a className="toplink" href={homePath}>Back to dashboard</a>}
           <section className="panel" aria-labelledby="vault-title">
             <div className="panel-head">
               <div>
