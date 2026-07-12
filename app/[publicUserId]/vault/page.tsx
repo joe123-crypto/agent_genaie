@@ -173,10 +173,10 @@ webetuPasswordToggle.addEventListener("click", function() {
 
   return (
     <>
-      <main className="app-main">
-        <div className="shell">
+      <main className="app-main app-main-center">
+        <div className="shell shell-narrow">
           {onboardingMode ? <OnboardingProgress backHref={onboardingPath} current={3} total={3} /> : <a className="toplink" href={homePath}>Back to dashboard</a>}
-          <section className="panel" aria-labelledby="vault-title">
+          <section className="panel panel-narrow" aria-labelledby="vault-title">
             <div className="panel-head">
               <div>
                 <h1 id="vault-title">Credentials Vault</h1>

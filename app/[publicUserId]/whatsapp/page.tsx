@@ -156,10 +156,10 @@ revokeButton.addEventListener("click", async function() {
 
   return (
     <>
-      <main className="app-main">
-        <div className="shell">
+      <main className="app-main app-main-center">
+        <div className="shell shell-narrow">
           {onboardingMode ? <OnboardingProgress backHref={onboardingPath} current={2} total={onboardingTotal} /> : <a className="toplink" href={homePath}>Back to dashboard</a>}
-          <section className="panel" aria-labelledby="whatsapp-title">
+          <section className="panel panel-narrow" aria-labelledby="whatsapp-title">
             <div className="panel-head">
               <div>
                 <h1 id="whatsapp-title">WhatsApp Linking</h1>

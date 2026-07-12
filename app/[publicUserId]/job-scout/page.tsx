@@ -156,7 +156,7 @@ form.addEventListener("submit", async function(event) {
 
   return (
     <>
-      <main className="app-main">
+      <main className="app-main app-main-center">
         <div className="shell">
           {onboardingMode ? <OnboardingProgress backHref={onboardingPath} current={4} total={4} /> : <a className="toplink" href={homePath}>Back to dashboard</a>}
           <section className="panel" aria-labelledby="job-scout-title">
