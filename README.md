@@ -12,8 +12,7 @@ Public routes:
 - `/auth/session/logout` clears the server session cookie.
 - `/config/firebase` exposes the non-secret Firebase browser config.
 - `/auth/google/callback` receives the Google OAuth callback.
-- `/account-link/setup` shows the WhatsApp-to-login account linking page for a given invite token.
-- `/job-scout/setup` shows the WhatsApp-to-login Job Scout setup page for a given invite token.
+- `/whatsapp?token=...` preserves a WhatsApp-originated invite through sign-in and redirects to the signed-in user's scoped WhatsApp page.
 - `/privacy-policy` explains Webetu credential and Gmail permission usage.
 - `/health` checks service health.
 
@@ -24,7 +23,7 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `/{publicUserId}/connect-gmail` authenticated Gmail connect/disconnect page.
 - `/{publicUserId}/job-scout` signed-in Job Scout setup page for CV, target role, target location, and acknowledgements.
 - `/{publicUserId}/onboarding` one-time signup onboarding controller.
-- `/{publicUserId}/whatsapp` signed-in WhatsApp linking and revocation page.
+- `/{publicUserId}/whatsapp` is the canonical WhatsApp linking page. Invite mode shows the originating masked number and confirmation; direct-web mode accepts a number and starts bot verification.
 - `/`, `/connect-gmail`, and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail OAuth for the signed-in Firebase user.
 - `GET /auth/google/status` checks Gmail connection for the signed-in Firebase user.
@@ -34,14 +33,12 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `POST /account/onboarding/select` starts onboarding for `jobs` or `webetu`.
 - `POST /account/onboarding/skip` marks onboarding skipped.
 - `POST /account/onboarding/complete` marks onboarding complete once the selected service requirements are satisfied.
-- `POST /account/whatsapp/link-request` creates a pending WhatsApp link request for the signed-in Firebase user.
+- `POST /account/whatsapp/link-request` is the canonical linking handler: it confirms a WhatsApp-originated token or creates a direct-web phone verification request.
 - `POST /account/whatsapp/revoke` revokes the signed-in user's active WhatsApp link.
 - `GET /webetu/credentials/status` checks whether the signed-in user has saved Webetu credentials.
 - `POST /webetu/credentials` encrypts and saves the signed-in user's Webetu username/password.
 - `POST /webetu/credentials/revoke` revokes the signed-in user's stored Webetu credentials.
 - `POST /gmail/send` sends Gmail for the signed-in Firebase user only when `confirm` is `true`.
-- `POST /account-link/setup/confirm` binds a pending account link invite to the signed-in user.
-- `POST /job-scout/setup/confirm` binds a pending Job Scout invite to the signed-in user.
 - `GET /job-scout/profile/status` returns the signed-in user's Job Scout readiness.
 - `POST /job-scout/profile` uploads or reuses the signed-in user's CV and saves a ready Job Scout profile.
 
@@ -51,7 +48,7 @@ Internal routes require `Authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY`:
 - `GET /internal/gmail/senders` lists registered users who have connected Gmail, without returning token data.
 - `POST /internal/account-link/invite` creates a short-lived WhatsApp-to-login account link setup URL.
 - `GET /internal/account-link/status` checks the current account link status for a phone number.
-- `POST /internal/job-scout/invite` creates a short-lived WhatsApp-to-login Job Scout setup link.
+- `POST /internal/onboarding/start` starts or resumes one service's web or chat onboarding route and creates the canonical link only when the phone is not linked.
 - `POST /internal/job-scout/profile` saves WhatsApp-collected Job Scout preferences and a CV file reference.
 - `GET /internal/job-scout/status?phone=...` returns one requester's Job Scout readiness and missing requirements.
 - `POST /internal/job-scout/cv` uploads a user's CV PDF to R2 (multipart `file` + `userId` or `phone`); stored at `<uid>/cv/cv.pdf`.
@@ -112,7 +109,6 @@ Enable Firestore for the same Firebase project. Agent Genaie writes central reco
 - `phoneLinksByUser` — active WhatsApp-to-user links keyed by Firebase UID
 - `phoneLinksByPhone` — active WhatsApp-to-user links keyed by phone hash
 - `accountLinkInvites` — short-lived account link setup tokens
-- `jobScoutInvites` — short-lived Job Scout setup tokens
 - `jobScoutProfiles` — Job Scout preferences and CV references; `cvFileRef` is the R2 object key `<uid>/cv/cv.pdf` (the CV itself lives in the R2 bucket, not Firestore)
 - `jobScoutDeliveryByPhone` — Job Scout delivery records keyed by phone hash
 - `jobApplications` — recorded Job Scout application outcomes
@@ -164,7 +160,7 @@ Set **all** secrets to distinct random values. If any are omitted they fall back
 
 `OAUTH_STATE_SECRET` signs short-lived (10-minute) OAuth state parameters. Changing it only breaks in-flight OAuth flows.
 
-`JOB_SCOUT_SETUP_SECRET` and `ACCOUNT_LINK_SETUP_SECRET` sign setup invite tokens (24-hour TTL). Changing them invalidates pending invites; the agent can issue fresh links.
+`ACCOUNT_LINK_SETUP_SECRET` signs all setup invite tokens (24-hour TTL). `JOB_SCOUT_SETUP_SECRET` is accepted only as a configuration fallback for older deployments; there is no separate Job Scout invite route or collection in the active flow.
 
 `OWNER_FIREBASE_UID` must be the Firebase UID of the fallback owner account whose Gmail is connected at `/{publicUserId}/connect-gmail`.
 

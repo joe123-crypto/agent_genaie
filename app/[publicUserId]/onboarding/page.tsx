@@ -3,19 +3,11 @@ import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
-import { completeOnboarding, getOnboardingStatus, type OnboardingStep } from "@/src/domains/onboarding";
+import { completeOnboarding, getOnboardingStatus, scopedPathForOnboardingStep } from "@/src/domains/onboarding";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 import { StatusNotice } from "@/app/_components/status-ui";
 
 export const runtime = "nodejs";
-
-function onboardingStepPath(publicUserId: string, step: OnboardingStep) {
-  if (step === "whatsapp") return `/${publicUserId}/whatsapp?onboarding=1`;
-  if (step === "connect_google") return `/${publicUserId}/connect-gmail?onboarding=1`;
-  if (step === "job_scout") return `/${publicUserId}/job-scout?onboarding=1`;
-  if (step === "vault") return `/${publicUserId}/vault?onboarding=1`;
-  return `/${publicUserId}`;
-}
 
 export default async function OnboardingPage({ params }: { params: Promise<{ publicUserId: string }> }) {
   const { publicUserId } = await params;
@@ -49,7 +41,7 @@ export default async function OnboardingPage({ params }: { params: Promise<{ pub
     await completeOnboarding(uid);
     redirect(homePath);
   }
-  if (status.nextStep !== "service_selection") redirect(onboardingStepPath(publicUserId, status.nextStep));
+  if (status.nextStep !== "service_selection") redirect(scopedPathForOnboardingStep(publicUserId, status.nextStep));
 
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? verified.email ?? "signed-in user";
 

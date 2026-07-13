@@ -15,7 +15,6 @@ export const DEFAULT_PUBLIC_BASE_URL = "http://localhost:3010";
 export const DEFAULT_PENDING_LINKS_CACHE_PATH = "/tmp/pending-links.json";
 export const SESSION_COOKIE_NAME = "agent_genaie_session";
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
-export const JOB_SCOUT_SETUP_TTL_SECONDS = 24 * 60 * 60;
 export const ACCOUNT_LINK_SETUP_TTL_SECONDS = 24 * 60 * 60;
 
 export function loadDotEnv() {
@@ -67,11 +66,6 @@ export const config = {
   ownerFirebaseUid: process.env.OWNER_FIREBASE_UID ?? "",
   centralDataEncryptionSecret: process.env.CENTRAL_DATA_ENCRYPTION_SECRET ?? process.env.TOKEN_ENCRYPTION_SECRET ?? "",
   centralDataKeyVersion: process.env.CENTRAL_DATA_KEY_VERSION ?? "v1",
-  jobScoutSetupSecret:
-    process.env.JOB_SCOUT_SETUP_SECRET ??
-    process.env.OAUTH_STATE_SECRET ??
-    process.env.TOKEN_ENCRYPTION_SECRET ??
-    "",
   accountLinkSetupSecret:
     process.env.ACCOUNT_LINK_SETUP_SECRET ??
     process.env.JOB_SCOUT_SETUP_SECRET ??
@@ -115,7 +109,6 @@ export function requireConfig(keys: (keyof typeof config)[]) {
       if (key === "internalApiKey") return "AGENT_GENAI_INTERNAL_API_KEY";
       if (key === "ownerFirebaseUid") return "OWNER_FIREBASE_UID";
       if (key === "centralDataEncryptionSecret") return "CENTRAL_DATA_ENCRYPTION_SECRET";
-      if (key === "jobScoutSetupSecret") return "JOB_SCOUT_SETUP_SECRET";
       if (key === "accountLinkSetupSecret") return "ACCOUNT_LINK_SETUP_SECRET";
       if (key === "whatsappBotPhone") return "WHATSAPP_BOT_PHONE";
       if (key === "r2AccountId") return "R2_ACCOUNT_ID";

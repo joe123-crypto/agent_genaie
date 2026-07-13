@@ -66,13 +66,17 @@ export function destinationForSession(session: SessionResult, nextPath: string) 
   const safePath = safeNext(nextPath);
   const publicUserId = session.publicUserId;
 
+  const whatsappInviteMatch = safePath.match(/^\/whatsapp\/?(\?token=[^#]+)$/);
+  if (publicUserId && whatsappInviteMatch) {
+    return `/${publicUserId}/whatsapp${whatsappInviteMatch[1]}`;
+  }
   if (session.onboardingRequired && publicUserId) {
     return `/${publicUserId}/onboarding`;
   }
   if (!publicUserId) return safePath;
   if (safePath === "/") return `/${publicUserId}`;
 
-  const genericScopedMatch = safePath.match(/^\/(connect-gmail|vault)\/?(\?.*)?$/);
+  const genericScopedMatch = safePath.match(/^\/(connect-gmail|vault|whatsapp)\/?(\?.*)?$/);
   if (genericScopedMatch) {
     return `/${publicUserId}/${genericScopedMatch[1]}${genericScopedMatch[2] || ""}`;
   }

@@ -58,17 +58,47 @@ export async function createAccountLinkInvite(body: any) {
   const token = docRef.id;
   const hashedToken = accountLinkTokenHash(token);
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
-  await docRef.set({
+  const onboardingService = body.onboardingService === "jobs" || body.onboardingService === "webetu"
+    ? body.onboardingService
+    : null;
+  const onboardingChannel = body.onboardingChannel === "web" || body.onboardingChannel === "chat"
+    ? body.onboardingChannel
+    : null;
+  const record = {
     phone,
     phoneHash: whatsappPhoneHash(phone),
     tokenHash: hashedToken,
     purpose,
     nextPath,
+    onboardingService,
+    onboardingChannel,
     status: "pending",
     createdAt: FieldValue.serverTimestamp(),
     expiresAt,
-  });
-  const setupUrl = `${config.publicBaseUrl}/account-link/setup?token=${token}`;
+  };
+  if (body.supersedePending === true) {
+    const existing = await db.collection("accountLinkInvites").where("phoneHash", "==", record.phoneHash).get();
+    const batch = db.batch();
+    for (const doc of existing.docs.slice(0, 400)) {
+      const data = doc.data() || {};
+      if (data.status === "pending" && data.purpose === purpose) {
+        batch.set(doc.ref, {
+          status: "superseded",
+          supersededAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+    }
+    batch.set(docRef, record);
+    await batch.commit();
+    try {
+      removePendingLinksFromCache({ phoneHash: record.phoneHash, purpose });
+    } catch (err) {
+      console.error("Failed to remove superseded pending links from cache:", err);
+    }
+  } else {
+    await docRef.set(record);
+  }
+  const setupUrl = `${config.publicBaseUrl}/whatsapp?token=${token}`;
   const cacheEntry = {
     phone,
     phoneHash: whatsappPhoneHash(phone),
@@ -157,17 +187,41 @@ export async function bindAccountLinkInviteToUser(token: string, firebaseUser: a
       usedBy: safeUid,
       usedAt: now,
     });
-    if (invite.purpose === "webetu" && userData.services?.webetu !== "subscribed") {
-      t.update(centralRef, {
-        "services.webetu": "subscribed",
+    const onboardingService = invite.onboardingService === "jobs" || invite.onboardingService === "webetu"
+      ? invite.onboardingService
+      : null;
+    const onboardingChannel = invite.onboardingChannel === "web" || invite.onboardingChannel === "chat"
+      ? invite.onboardingChannel
+      : null;
+    if (onboardingService && onboardingChannel) {
+      const currentStatus = String(userData.onboarding?.status ?? "required");
+      const finished = currentStatus === "completed" || currentStatus === "skipped";
+      t.set(centralRef, {
+        onboarding: {
+          selectedService: onboardingService,
+          channel: onboardingChannel,
+          status: finished ? currentStatus : "in_progress",
+          startedAt: userData.onboarding?.startedAt || now,
+          updatedAt: now,
+        },
         updatedAt: now,
-      });
+      }, { merge: true });
+    }
+    if (invite.purpose === "webetu") {
+      if (userData.services?.webetu !== "subscribed") {
+        t.set(centralRef, {
+          services: { webetu: "subscribed" },
+          updatedAt: now,
+        }, { merge: true });
+      }
       queueWebetuPhoneDeliveryUpdate(t as any, db, phoneLink);
-    } else if (invite.purpose === "jobs" && userData.services?.jobs !== "subscribed") {
-      t.update(centralRef, {
-        "services.jobs": "subscribed",
-        updatedAt: now,
-      });
+    } else if (invite.purpose === "jobs") {
+      if (userData.services?.jobs !== "subscribed") {
+        t.set(centralRef, {
+          services: { jobs: "subscribed" },
+          updatedAt: now,
+        }, { merge: true });
+      }
       queueJobScoutPhoneDeliveryUpdate(t as any, db, phoneLink);
     }
     nextPath = invite.nextPath;
@@ -177,7 +231,13 @@ export async function bindAccountLinkInviteToUser(token: string, firebaseUser: a
   } catch (err) {
     console.error("Failed to remove pending link from cache after successful bind:", err);
   }
-  return { success: true, nextPath, publicUserId };
+  return {
+    success: true,
+    nextPath,
+    publicUserId,
+    onboardingService: invite.onboardingService ?? null,
+    onboardingChannel: invite.onboardingChannel ?? null,
+  };
 }
 
 export function queuePhoneLinkCoreWrites(batch: any, db: any, userId: string, phoneLink: any, now: any) {
@@ -242,12 +302,15 @@ export async function writePhoneLinkForUser(db: any, user: any, phoneInput: stri
   return phoneLink;
 }
 
-export function whatsappBotLinkForRequest(setupUrl: string) {
+export function whatsappBotLink(message: string) {
   if (!config.whatsappBotPhone.trim()) throw httpError(500, "WHATSAPP_BOT_PHONE is not configured.");
   const botPhone = normalizePhone(config.whatsappBotPhone);
   const botDigits = botPhone.replace(/\D/g, "");
-  const message = `Link my WhatsApp to Genaie: ${setupUrl}`;
   return `https://wa.me/${botDigits}?text=${encodeURIComponent(message)}`;
+}
+
+export function whatsappBotLinkForRequest(setupUrl: string) {
+  return whatsappBotLink(`Link my WhatsApp to Genaie: ${setupUrl}`);
 }
 
 export async function createSignedInWhatsAppLinkRequest(uid: string, phoneInput: string, options: { nextPath?: string } = {}) {

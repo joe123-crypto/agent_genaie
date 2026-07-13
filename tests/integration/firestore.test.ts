@@ -4,18 +4,16 @@ import assert from "node:assert/strict";
 import { getFirebaseAdminAuth, getFirestoreDb } from "@/src/firebase/admin";
 import { config } from "@/src/config";
 import { credentialRefId, jobApplicationId, tokenStoreKeyForUid, whatsappPhoneHash } from "@/src/lib/utils";
-import { jobScoutTokenHash } from "@/src/security/crypto";
 import { saveUserTokens } from "@/src/domains/local-store";
 import {
   bindAccountLinkInviteToUser,
   createAccountLinkInvite,
   createSignedInWhatsAppLinkRequest,
+  getAccountLinkInvite,
   revokeSignedInWhatsAppLink,
 } from "@/src/domains/account-link";
 import {
   saveJobScoutProfile,
-  createJobScoutInvite,
-  getJobScoutInvite,
   getJobScoutStatusForUser,
   recordJobApplication,
   listJobApplications,
@@ -81,6 +79,7 @@ test("saveJobScoutProfile writes the expected jobScoutProfiles document shape", 
     }),
     db.collection("users").doc(uid).set({
       profile: { email: "applicant@example.com", displayName: "Applicant" },
+      onboarding: { selectedService: "jobs", channel: "chat", status: "in_progress" },
     }),
     db.collection("credentialRefs").doc(credentialRefId(uid, "gmail", "oauth2")).set({
       userId: uid,
@@ -123,16 +122,77 @@ test("saveJobScoutProfile writes the expected jobScoutProfiles document shape", 
   assert.ok(data.safetyAcknowledgedAt, "safety acknowledgement timestamp present");
   assert.ok(data.createdAt, "createdAt server timestamp present");
   assert.ok(data.updatedAt, "updatedAt server timestamp present");
+  assert.equal((await db.collection("users").doc(uid).get()).data()?.onboarding?.status, "completed");
 });
 
-test("createJobScoutInvite/getJobScoutInvite round-trips a pending invite", opts, async () => {
-  const { token } = await createJobScoutInvite("+213600000001");
-  const invite = await getJobScoutInvite(token);
+test("Job Scout uses the canonical account-link invite and WhatsApp page", opts, async () => {
+  const { token, setupUrl } = await createAccountLinkInvite({
+    phone: "+213600000001",
+    purpose: "jobs",
+    nextPath: "/onboarding",
+    onboardingService: "jobs",
+    onboardingChannel: "web",
+  });
+  const invite = await getAccountLinkInvite(token);
   assert.equal(invite.status, "pending");
   assert.equal(invite.phone, "+213600000001");
   assert.match(invite.phoneHash, /^[0-9a-f]{12}$/);
-  assert.equal(invite.tokenHash, jobScoutTokenHash(token));
+  assert.equal(invite.onboardingService, "jobs");
+  assert.equal(invite.onboardingChannel, "web");
+  assert.match(setupUrl, /\/whatsapp\?token=/);
   assert.ok(invite.expiresAt, "expiresAt present");
+});
+
+test("account-link confirmation selects the requested onboarding branch without reopening finished onboarding", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-onboarding-link-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const phone = "+213600000112";
+  await db.collection("users").doc(uid).set({
+    profile: { email: "finished@example.com" },
+    publicUserId: "usr_finished00000000",
+    onboarding: { selectedService: "webetu", status: "completed" },
+    services: { jobs: "not_subscribed" },
+  });
+  const { token } = await createAccountLinkInvite({
+    phone,
+    purpose: "jobs",
+    nextPath: "/onboarding",
+    onboardingService: "jobs",
+    onboardingChannel: "chat",
+  });
+
+  const result = await bindAccountLinkInviteToUser(token, { uid });
+  const user = (await db.collection("users").doc(uid).get()).data()!;
+  assert.equal(result.onboardingChannel, "chat");
+  assert.equal(user.onboarding.status, "completed");
+  assert.equal(user.onboarding.selectedService, "jobs");
+  assert.equal(user.onboarding.channel, "chat");
+  assert.equal(user.services.jobs, "subscribed");
+});
+
+test("a newer onboarding channel supersedes the older pending invite", opts, async () => {
+  const phone = "+213600000113";
+  const first = await createAccountLinkInvite({
+    phone,
+    purpose: "jobs",
+    nextPath: "/onboarding",
+    onboardingService: "jobs",
+    onboardingChannel: "chat",
+  });
+  const second = await createAccountLinkInvite({
+    phone,
+    purpose: "jobs",
+    nextPath: "/onboarding",
+    onboardingService: "jobs",
+    onboardingChannel: "web",
+    supersedePending: true,
+  });
+
+  await assert.rejects(
+    () => getAccountLinkInvite(first.token),
+    (err: any) => err.status === 410,
+  );
+  assert.equal((await getAccountLinkInvite(second.token)).onboardingChannel, "web");
 });
 
 test("createSignedInWhatsAppLinkRequest creates a pending account invite and bot handoff", opts, async () => {
@@ -146,7 +206,7 @@ test("createSignedInWhatsAppLinkRequest creates a pending account invite and bot
   const result = await createSignedInWhatsAppLinkRequest(uid, "+213600000101");
   assert.equal(result.pending, true);
   assert.equal(result.whatsappLinked, false);
-  assert.match(result.setupUrl, /\/account-link\/setup\?token=/);
+  assert.match(result.setupUrl, /\/whatsapp\?token=/);
   assert.ok(result.whatsappBotUrl);
   assert.match(result.whatsappBotUrl, /^https:\/\/wa\.me\/213600099999\?text=/);
 
@@ -332,24 +392,25 @@ test("getJobScoutStatusForUser rejects tokenless Gmail refs", opts, async () => 
   assert.ok(status.missingRequirements.includes("sender_email"));
 });
 
-test("getJobScoutInvite rejects a tampered token", opts, async () => {
-  const { token } = await createJobScoutInvite("+213600000002");
-  await assert.rejects(() => getJobScoutInvite(`${token}tampered`));
+test("getAccountLinkInvite rejects a tampered token", opts, async () => {
+  const { token } = await createAccountLinkInvite({ phone: "+213600000002" });
+  await assert.rejects(() => getAccountLinkInvite(`${token}tampered`));
 });
 
-test("getJobScoutInvite rejects an expired invite (410)", opts, async () => {
+test("getAccountLinkInvite rejects an expired invite (410)", opts, async () => {
   const db = getFirestoreDb();
-  const ref = db.collection("jobScoutInvites").doc();
+  const ref = db.collection("accountLinkInvites").doc();
   const token = ref.id;
+  const { accountLinkTokenHash } = await import("@/src/security/crypto");
   await ref.set({
     phone: "+213600000003",
     phoneHash: "abcabcabcabc",
-    tokenHash: jobScoutTokenHash(token),
+    tokenHash: accountLinkTokenHash(token),
     status: "pending",
     expiresAt: new Date(Date.now() - 60_000), // already expired
   });
   await assert.rejects(
-    () => getJobScoutInvite(token),
+    () => getAccountLinkInvite(token),
     (err: any) => err.status === 410,
   );
 });
@@ -380,7 +441,7 @@ test("recordJobApplication uses jobApplicationId as the doc ID and a valid statu
   assert.equal((listed[0] as any).id, result.id);
 });
 
-test("resetJobScoutProfileForPhone deletes only Job Scout setup data", opts, async () => {
+test("resetJobScoutProfileForPhone leaves inert legacy invite documents untouched", opts, async () => {
   const db = getFirestoreDb();
   const uid = `it-reset-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const otherUid = `${uid}-other`;
@@ -421,6 +482,8 @@ test("resetJobScoutProfileForPhone deletes only Job Scout setup data", opts, asy
     db.collection("jobApplications").doc(`${uid}-app-1`).set({ userId: uid, company: "A", role: "One" }),
     db.collection("jobApplications").doc(`${uid}-app-2`).set({ userId: uid, company: "B", role: "Two" }),
     db.collection("jobApplications").doc(`${uid}-other-app`).set({ userId: otherUid, company: "C", role: "Three" }),
+    // The legacy collection has no active route or reader. Historical documents
+    // are deliberately left untouched rather than destructively migrated here.
     db.collection("jobScoutInvites").doc(`${uid}-pending`).set({ phoneHash: hash, status: "pending" }),
     db.collection("jobScoutInvites").doc(`${uid}-completed`).set({ phoneHash: hash, status: "completed" }),
     db.collection("jobScoutInvites").doc(`${uid}-other-pending`).set({
@@ -440,13 +503,13 @@ test("resetJobScoutProfileForPhone deletes only Job Scout setup data", opts, asy
   assert.equal(result.profileDeleted, true);
   assert.equal(result.cvDeleted, true);
   assert.equal(result.applicationsDeleted, 2);
-  assert.equal(result.invitesDeleted, 1);
+  assert.equal(Object.hasOwn(result, "invitesDeleted"), false);
   assert.deepEqual(deletedObjects, [cvFileRef]);
 
   assert.equal((await db.collection("jobScoutProfiles").doc(uid).get()).exists, false);
   assert.equal((await db.collection("jobApplications").where("userId", "==", uid).get()).size, 0);
   assert.equal((await db.collection("jobApplications").where("userId", "==", otherUid).get()).size, 1);
-  assert.equal((await db.collection("jobScoutInvites").doc(`${uid}-pending`).get()).exists, false);
+  assert.equal((await db.collection("jobScoutInvites").doc(`${uid}-pending`).get()).exists, true);
   assert.equal((await db.collection("jobScoutInvites").doc(`${uid}-completed`).get()).exists, true);
   assert.equal((await db.collection("jobScoutInvites").doc(`${uid}-other-pending`).get()).exists, true);
   assert.equal((await db.collection("users").doc(uid).get()).exists, true);

@@ -1,36 +1,31 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { getFirestoreDb } from "@/src/firebase/admin";
 import { httpError, validateFirebaseUid } from "@/src/lib/utils";
-import { getSignedInAccountStatus } from "./users";
+import { ensurePublicUserId, getSignedInAccountStatus } from "./users";
 import { getJobScoutStatusForUser } from "./job-scout";
 import { getWebetuCredentialStatus } from "./webetu";
+import {
+  calculateOnboardingNextStep,
+  normalizeOnboardingChannel,
+  normalizeOnboardingService,
+  scopedPathForOnboardingStep,
+  storedOnboardingChannel,
+  type OnboardingChannel,
+  type OnboardingService,
+} from "./onboarding-flow";
+import {
+  createAccountLinkInvite,
+  getAccountLinkStatusForPhone,
+  queueJobScoutPhoneDeliveryUpdate,
+} from "./account-link";
 
-export type OnboardingService = "jobs" | "webetu";
-export type OnboardingStep = "service_selection" | "whatsapp" | "connect_google" | "job_scout" | "vault" | "dashboard";
-
-export function normalizeOnboardingService(value: unknown): OnboardingService {
-  const service = String(value ?? "").trim().toLowerCase();
-  if (service === "jobs" || service === "webetu") return service;
-  throw httpError(400, "service must be jobs or webetu.");
-}
-
-export function calculateOnboardingNextStep(input: {
-  selectedService: OnboardingService | null;
-  whatsappLinked: boolean;
-  gmailConnected: boolean;
-  jobScoutReady: boolean;
-  webetuConfigured: boolean;
-}): OnboardingStep {
-  if (!input.selectedService) return "service_selection";
-  if (!input.whatsappLinked) return "whatsapp";
-  if (input.selectedService === "jobs") {
-    if (!input.gmailConnected) return "connect_google";
-    if (!input.jobScoutReady) return "job_scout";
-    return "dashboard";
-  }
-  if (!input.webetuConfigured) return "vault";
-  return "dashboard";
-}
+export {
+  calculateOnboardingNextStep,
+  normalizeOnboardingChannel,
+  normalizeOnboardingService,
+  scopedPathForOnboardingStep,
+};
+export type { OnboardingChannel, OnboardingService, OnboardingStep } from "./onboarding-flow";
 
 function onboardingRequiresAttention(onboarding: any) {
   const status = String(onboarding?.status ?? "").trim();
@@ -65,9 +60,11 @@ export async function getOnboardingStatus(uidInput: string) {
   const onboarding = user.onboarding || {};
   const rawService = onboarding.selectedService ?? null;
   const selectedService = rawService === "jobs" || rawService === "webetu" ? rawService : null;
+  const channel = storedOnboardingChannel(onboarding.channel);
   const dependencies = await loadOnboardingDependencies(uid, selectedService);
   const nextStep = calculateOnboardingNextStep({
     selectedService,
+    channel,
     whatsappLinked: dependencies.whatsappLinked,
     gmailConnected: dependencies.gmailConnected,
     jobScoutReady: dependencies.jobScoutReady,
@@ -78,6 +75,7 @@ export async function getOnboardingStatus(uidInput: string) {
   return {
     publicUserId: dependencies.publicUserId ?? user.publicUserId ?? null,
     selectedService,
+    channel,
     status,
     onboardingRequired: onboardingRequiresAttention(onboarding),
     skipped: status === "skipped",
@@ -118,6 +116,105 @@ export async function selectOnboardingService(uidInput: string, serviceInput: un
     }, { merge: true });
   });
   return getOnboardingStatus(uid);
+}
+
+async function saveOnboardingRouteForUser(
+  uidInput: string,
+  serviceInput: unknown,
+  channelInput: unknown,
+) {
+  const uid = validateFirebaseUid(uidInput);
+  const service = normalizeOnboardingService(serviceInput);
+  const channel = normalizeOnboardingChannel(channelInput);
+  const db = getFirestoreDb();
+  const userRef = db.collection("users").doc(uid);
+  const phoneRef = db.collection("phoneLinksByUser").doc(uid);
+
+  await db.runTransaction(async (t) => {
+    const [userDoc, phoneDoc] = await Promise.all([t.get(userRef), t.get(phoneRef)]);
+    if (!userDoc.exists) throw httpError(404, "User profile not found.");
+    const user = userDoc.data() || {};
+    const phoneLink = phoneDoc.exists ? phoneDoc.data() || {} : {};
+    const existingStatus = String(user.onboarding?.status ?? "required");
+    const finished = existingStatus === "completed" || existingStatus === "skipped";
+    const now = FieldValue.serverTimestamp();
+
+    t.set(userRef, {
+      onboarding: {
+        selectedService: service,
+        channel,
+        status: finished ? existingStatus : "in_progress",
+        startedAt: user.onboarding?.startedAt || now,
+        updatedAt: now,
+      },
+      services: {
+        [service]: "subscribed",
+      },
+      updatedAt: now,
+    }, { merge: true });
+
+    if (service === "jobs" && phoneDoc.exists && phoneLink.status === "active" && phoneLink.userId === uid) {
+      queueJobScoutPhoneDeliveryUpdate(t as any, db, phoneLink);
+    }
+  });
+
+  return { uid, service, channel };
+}
+
+export async function startOrResumeOnboardingForPhone(
+  phoneInput: unknown,
+  serviceInput: unknown,
+  channelInput: unknown,
+) {
+  const service = normalizeOnboardingService(serviceInput);
+  const channel = normalizeOnboardingChannel(channelInput);
+  const linkStatus = await getAccountLinkStatusForPhone(String(phoneInput ?? ""));
+
+  if (!linkStatus.linked || !linkStatus.userId) {
+    const invite = await createAccountLinkInvite({
+      phone: phoneInput,
+      purpose: service,
+      nextPath: "/onboarding",
+      onboardingService: service,
+      onboardingChannel: channel,
+      supersedePending: true,
+    });
+    return {
+      ok: true,
+      linked: false,
+      service,
+      channel,
+      nextStep: "whatsapp",
+      ...invite,
+    };
+  }
+
+  const route = await saveOnboardingRouteForUser(linkStatus.userId, service, channel);
+  let publicUserId = linkStatus.publicUserId;
+  if (!publicUserId) {
+    const db = getFirestoreDb();
+    const userDoc = await db.collection("users").doc(route.uid).get();
+    publicUserId = await ensurePublicUserId(db, route.uid, userDoc.data()?.publicUserId);
+  }
+  const status = await getOnboardingStatus(route.uid);
+  const nextStep = calculateOnboardingNextStep({
+    selectedService: service,
+    channel,
+    whatsappLinked: status.requirements.whatsappLinked,
+    gmailConnected: status.requirements.gmailConnected,
+    jobScoutReady: status.requirements.jobScoutReady,
+    webetuConfigured: status.requirements.webetuConfigured,
+  });
+
+  return {
+    ok: true,
+    linked: true,
+    service,
+    channel,
+    publicUserId,
+    nextStep,
+    nextUrl: scopedPathForOnboardingStep(publicUserId, nextStep),
+  };
 }
 
 export async function skipOnboarding(uidInput: string) {

@@ -106,11 +106,6 @@ export function verifyState(state: string) {
   }
 }
 
-export function jobScoutTokenHash(token: string) {
-  requireConfig(["jobScoutSetupSecret"]);
-  return crypto.createHmac("sha256", config.jobScoutSetupSecret).update(String(token)).digest("base64url");
-}
-
 export function accountLinkTokenHash(token: string) {
   requireConfig(["accountLinkSetupSecret"]);
   return crypto.createHmac("sha256", config.accountLinkSetupSecret).update(String(token)).digest("base64url");

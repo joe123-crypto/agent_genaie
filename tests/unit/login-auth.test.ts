@@ -22,7 +22,11 @@ test("destinationForSession routes onboarding and user-scoped pages", () => {
   assert.equal(destinationForSession(session, "/"), "/usr_123");
   assert.equal(destinationForSession(session, "/vault?tab=cv"), "/usr_123/vault?tab=cv");
   assert.equal(destinationForSession(session, "/connect-gmail"), "/usr_123/connect-gmail");
-  assert.equal(destinationForSession(session, "/job-scout/setup?token=abc"), "/job-scout/setup?token=abc");
+  assert.equal(destinationForSession(session, "/whatsapp?token=abc"), "/usr_123/whatsapp?token=abc");
+  assert.equal(
+    destinationForSession({ ...session, onboardingRequired: true }, "/whatsapp?token=abc"),
+    "/usr_123/whatsapp?token=abc",
+  );
   assert.equal(
     destinationForSession({ ...session, onboardingRequired: true }, "/vault"),
     "/usr_123/onboarding",

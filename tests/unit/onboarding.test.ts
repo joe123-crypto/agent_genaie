@@ -37,6 +37,15 @@ test("Job Scout onboarding chooses the first incomplete requirement", () => {
 
   assert.equal(calculateOnboardingNextStep({
     selectedService: "jobs",
+    channel: "chat",
+    whatsappLinked: true,
+    gmailConnected: true,
+    jobScoutReady: false,
+    webetuConfigured: false,
+  }), "whatsapp_chat");
+
+  assert.equal(calculateOnboardingNextStep({
+    selectedService: "jobs",
     whatsappLinked: true,
     gmailConnected: true,
     jobScoutReady: true,

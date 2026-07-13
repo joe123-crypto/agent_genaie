@@ -3,7 +3,12 @@ import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import {
+  getAccountLinkInvite,
+  whatsappBotLink,
+} from "@/src/domains/account-link";
 import { getOnboardingStatus } from "@/src/domains/onboarding";
+import { maskPhone, setupPurposeLabel } from "@/src/lib/utils";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
@@ -14,54 +19,82 @@ export default async function WhatsAppLinkingPage({
   searchParams,
 }: {
   params: Promise<{ publicUserId: string }>;
-  searchParams: Promise<{ onboarding?: string }>;
+  searchParams: Promise<{ onboarding?: string; token?: string; handoff?: string }>;
 }) {
   const { publicUserId } = await params;
   const query = await searchParams;
+  const token = String(query.token ?? "").trim();
+  const tokenMode = Boolean(token);
   const onboardingMode = query.onboarding === "1" || query.onboarding === "true";
 
   if (!/^usr_[A-Za-z0-9_-]{16}$/.test(publicUserId)) notFound();
 
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const pagePath = `/${publicUserId}/whatsapp`;
-
+  const queryString = new URLSearchParams();
+  if (token) queryString.set("token", token);
+  if (onboardingMode) queryString.set("onboarding", "1");
+  if (query.handoff === "1") queryString.set("handoff", "1");
+  const pagePath = `/${publicUserId}/whatsapp${queryString.size ? `?${queryString}` : ""}`;
+  const sessionCookie = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (!sessionCookie) redirect(`/login?next=${encodeURIComponent(pagePath)}`);
 
   const [verified, routeUser] = await Promise.all([
     verifyFirebaseSessionCookie(sessionCookie).catch(() => null),
     resolvePublicUser(publicUserId).catch(() => null),
   ]);
-
   if (!verified) redirect(`/login?next=${encodeURIComponent(pagePath)}`);
-  const uid = verified.uid;
-
   if (!routeUser) notFound();
 
+  const uid = verified.uid;
   if (uid !== routeUser.id) {
-    await syncUserToCentralData(uid);
-    const myStatus = await getSignedInAccountStatus(uid).catch(() => null);
-    if (myStatus?.publicUserId) redirect(`/${myStatus.publicUserId}/whatsapp`);
+    const synced = await syncUserToCentralData(uid);
+    if (synced.publicUserId) {
+      redirect(`/${synced.publicUserId}/whatsapp${queryString.size ? `?${queryString}` : ""}`);
+    }
     redirect("/login");
   }
 
+  const [accountStatus, invite, onboardingStatus] = await Promise.all([
+    getSignedInAccountStatus(uid).catch(() => null),
+    tokenMode ? getAccountLinkInvite(token) : Promise.resolve(null),
+    onboardingMode ? getOnboardingStatus(uid).catch(() => null) : Promise.resolve(null),
+  ]);
   const homePath = `/${publicUserId}`;
   const onboardingPath = `/${publicUserId}/onboarding`;
-  const accountStatus = await getSignedInAccountStatus(uid).catch(() => null);
-  const onboardingStatus = onboardingMode ? await getOnboardingStatus(uid).catch(() => null) : null;
   const onboardingTotal = onboardingStatus?.selectedService === "webetu" ? 3 : 4;
   const whatsappLinked = !!accountStatus?.whatsappLinked;
-  const email = accountStatus?.profile?.email ?? (routeUser as { profile?: { email?: string } }).profile?.email ?? "signed-in user";
-  const statusLabel = whatsappLinked ? "Linked" : "Not linked";
-  const statusCopy = whatsappLinked
-    ? `This account is linked to ${accountStatus?.maskedPhone || "your WhatsApp number"}. Revoke it before linking a different number.`
-    : "Enter a WhatsApp number, then open the bot link to complete verification.";
+  const email = accountStatus?.profile?.email
+    ?? (routeUser as { profile?: { email?: string } }).profile?.email
+    ?? "signed-in user";
+  const chatHandoff = Boolean(
+    onboardingMode
+      && onboardingStatus?.channel === "chat"
+      && onboardingStatus.nextStep === "whatsapp_chat",
+  );
+  let chatHandoffUrl: string | null = null;
+  if (chatHandoff) {
+    try {
+      chatHandoffUrl = whatsappBotLink("Continue my Job Scout setup in this chat.");
+    } catch {
+      chatHandoffUrl = null;
+    }
+  }
+
+  const statusLabel = tokenMode ? "Ready to link" : whatsappLinked ? "Linked" : "Not linked";
+  const statusKind = tokenMode ? "pending" : whatsappLinked ? "complete" : "unlinked";
+  const statusCopy = tokenMode
+    ? "Confirm this link to use the WhatsApp chat shown below with your signed-in account."
+    : whatsappLinked
+      ? `This account is linked to ${accountStatus?.maskedPhone || "your WhatsApp number"}. Revoke it before linking a different number.`
+      : "Enter a WhatsApp number, then open the bot link to complete verification.";
 
   const whatsappScript = `
-const form = document.querySelector("[data-whatsapp-form]");
+const inviteForm = document.querySelector("[data-whatsapp-invite-form]");
+const directForm = document.querySelector("[data-whatsapp-form]");
 const phoneInput = document.querySelector("[data-whatsapp-phone]");
 const submitButton = document.querySelector("[data-whatsapp-submit]");
+const confirmButton = document.querySelector("[data-whatsapp-confirm]");
 const revokeButton = document.querySelector("[data-whatsapp-revoke]");
+const switchButton = document.querySelector("[data-switch-account]");
 const statusPill = document.querySelector("[data-whatsapp-status]");
 const copyEl = document.querySelector("[data-whatsapp-copy]");
 const messageEl = document.querySelector("[data-whatsapp-message]");
@@ -76,24 +109,30 @@ function setPill(label, kind) {
   statusPill.dataset.statusKind = kind || "info";
 }
 function setBusy(value) {
-  submitButton.disabled = value;
-  revokeButton.disabled = value;
+  if (submitButton) submitButton.disabled = value;
+  if (confirmButton) confirmButton.disabled = value;
+  if (revokeButton) revokeButton.disabled = value;
+  if (switchButton) switchButton.disabled = value;
 }
 function setLinked(maskedPhone) {
   setPill("Linked", "complete");
   copyEl.textContent = "This account is linked to " + (maskedPhone || "your WhatsApp number") + ". Revoke it before linking a different number.";
-  form.hidden = true;
-  revokeButton.hidden = false;
-  botLink.hidden = true;
-  botLink.removeAttribute("href");
+  if (directForm) directForm.hidden = true;
+  if (revokeButton) revokeButton.hidden = false;
+  if (botLink) {
+    botLink.hidden = true;
+    botLink.removeAttribute("href");
+  }
 }
 function setUnlinked() {
   setPill("Not linked", "unlinked");
   copyEl.textContent = "Enter a WhatsApp number, then open the bot link to complete verification.";
-  form.hidden = false;
-  revokeButton.hidden = true;
-  botLink.hidden = true;
-  botLink.removeAttribute("href");
+  if (directForm) directForm.hidden = false;
+  if (revokeButton) revokeButton.hidden = true;
+  if (botLink) {
+    botLink.hidden = true;
+    botLink.removeAttribute("href");
+  }
 }
 async function readJson(response) {
   const body = await response.json().catch(function() { return {}; });
@@ -101,12 +140,33 @@ async function readJson(response) {
   return body;
 }
 
-form.addEventListener("submit", async function(event) {
+if (inviteForm) inviteForm.addEventListener("submit", async function(event) {
+  event.preventDefault();
+  setBusy(true);
+  setMessage("Linking this WhatsApp chat...", "loading");
+  try {
+    const result = await readJson(await fetch("/account/whatsapp/link-request", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ token: ${JSON.stringify(token)} })
+    }));
+    setMessage("WhatsApp linked. Continuing setup...", "complete");
+    window.location.assign(result.destination || ${JSON.stringify(onboardingPath)});
+  } catch (err) {
+    setMessage(err.message || "Could not link this WhatsApp chat.", "error");
+    setBusy(false);
+  }
+});
+
+if (directForm) directForm.addEventListener("submit", async function(event) {
   event.preventDefault();
   setBusy(true);
   setMessage("");
-  botLink.hidden = true;
-  botLink.removeAttribute("href");
+  if (botLink) {
+    botLink.hidden = true;
+    botLink.removeAttribute("href");
+  }
   try {
     const result = await readJson(await fetch("/account/whatsapp/link-request", {
       method: "POST",
@@ -119,13 +179,13 @@ form.addEventListener("submit", async function(event) {
       setMessage("This number is already linked to your account.", "complete");
       return;
     }
-    if (result.whatsappBotUrl) {
+    if (result.whatsappBotUrl && botLink) {
       botLink.href = result.whatsappBotUrl;
       botLink.hidden = false;
-      setMessage("Pending request created for " + (result.maskedPhone || "that number") + ". Open the bot link to complete verification.", "pending");
+      setMessage("Link request created for " + (result.maskedPhone || "that number") + ". Open WhatsApp to confirm it.", "pending");
       return;
     }
-    setMessage("Pending request created, but the WhatsApp bot link is unavailable.", "error");
+    setMessage("Link request created, but the WhatsApp bot link is unavailable.", "error");
   } catch (err) {
     setMessage(err.message || "Could not create WhatsApp link request.", "error");
   } finally {
@@ -133,7 +193,7 @@ form.addEventListener("submit", async function(event) {
   }
 });
 
-revokeButton.addEventListener("click", async function() {
+if (revokeButton) revokeButton.addEventListener("click", async function() {
   setBusy(true);
   setMessage("");
   try {
@@ -143,7 +203,7 @@ revokeButton.addEventListener("click", async function() {
       credentials: "same-origin",
       body: "{}"
     }));
-    phoneInput.value = "";
+    if (phoneInput) phoneInput.value = "";
     setUnlinked();
     setMessage("WhatsApp link revoked.", "complete");
   } catch (err) {
@@ -152,40 +212,73 @@ revokeButton.addEventListener("click", async function() {
     setBusy(false);
   }
 });
+
+if (switchButton) switchButton.addEventListener("click", async function() {
+  setBusy(true);
+  try {
+    await fetch("/auth/session/logout", { method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin", body: "{}" });
+  } catch {}
+  try {
+    const settings = await fetch("/config/firebase").then(function(response) { return response.json(); });
+    if (settings.configured) {
+      const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js");
+      const { getAuth, signOut } = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js");
+      await signOut(getAuth(initializeApp(settings.firebase)));
+    }
+  } catch {}
+  window.location.assign(${JSON.stringify(`/login?next=${encodeURIComponent(pagePath)}`)});
+});
 `;
 
   return (
     <>
       <main className="app-main app-main-center">
         <div className="shell shell-narrow">
-          {onboardingMode ? <OnboardingProgress backHref={onboardingPath} current={2} total={onboardingTotal} /> : <a className="toplink" href={homePath}>Back to dashboard</a>}
+          {onboardingMode
+            ? <OnboardingProgress backHref={onboardingPath} current={2} total={onboardingTotal} />
+            : <a className="toplink" href={homePath}>Back to dashboard</a>}
           <section className="panel panel-narrow" aria-labelledby="whatsapp-title">
             <div className="panel-head">
               <div>
-                <h1 id="whatsapp-title">WhatsApp Linking</h1>
-                <p>Link your WhatsApp number to this account.</p>
+                <h1 id="whatsapp-title">{tokenMode ? "Confirm WhatsApp link" : "WhatsApp Linking"}</h1>
+                <p>{tokenMode ? "Link the originating WhatsApp chat to this account." : "Link your WhatsApp number to this account."}</p>
               </div>
-              <StatusPill data-whatsapp-status kind={whatsappLinked ? "complete" : "unlinked"}>{statusLabel}</StatusPill>
+              <StatusPill data-whatsapp-status kind={statusKind}>{statusLabel}</StatusPill>
             </div>
             <div className="meta">
               <span>Signed in as <strong>{email}</strong></span>
               <span data-whatsapp-copy>{statusCopy}</span>
+              {invite ? <span><strong>WhatsApp:</strong> {maskPhone(invite.phone)}</span> : null}
+              {invite ? <span><strong>Purpose:</strong> {setupPurposeLabel(invite.purpose)}</span> : null}
             </div>
-            <form className="form-stack" data-whatsapp-form hidden={whatsappLinked}>
-              <label>
-                WhatsApp number
-                <input data-whatsapp-phone name="phone" type="tel" autoComplete="tel" placeholder="+213600000000" maxLength={32} required />
-              </label>
-              <div className="actions">
-                <button data-whatsapp-submit type="submit">Create link request</button>
-                <a className="button" data-whatsapp-bot-link href="#" target="_blank" rel="noreferrer" hidden>Open WhatsApp bot</a>
-              </div>
-            </form>
-            <div className="actions">
-              <button className="danger" data-whatsapp-revoke type="button" hidden={!whatsappLinked}>Revoke WhatsApp link</button>
-              {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
-              <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
-            </div>
+
+            {tokenMode ? (
+              <form className="actions actions-spaced" data-whatsapp-invite-form>
+                <button data-whatsapp-confirm type="submit">Confirm and link</button>
+                <button className="secondary" data-switch-account type="button">Use a different Google account</button>
+                <a className="button secondary" href={homePath}>Cancel</a>
+              </form>
+            ) : (
+              <>
+                <form className="form-stack" data-whatsapp-form hidden={whatsappLinked}>
+                  <label>
+                    WhatsApp number
+                    <input data-whatsapp-phone name="phone" type="tel" autoComplete="tel" placeholder="+213600000000" maxLength={32} required />
+                  </label>
+                  <div className="actions">
+                    <button data-whatsapp-submit type="submit">Create link request</button>
+                    <a className="button" data-whatsapp-bot-link href="#" target="_blank" rel="noreferrer" hidden>Open WhatsApp bot</a>
+                  </div>
+                </form>
+                <div className="actions">
+                  <button className="danger" data-whatsapp-revoke type="button" hidden={!whatsappLinked}>Revoke WhatsApp link</button>
+                  {chatHandoffUrl ? <a className="button" href={chatHandoffUrl}>Continue in WhatsApp</a> : null}
+                  {onboardingMode && !chatHandoff ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
+                  <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
+                </div>
+              </>
+            )}
+            {chatHandoff ? <p>Google is connected. Continue your Job Scout profile in WhatsApp.</p> : null}
             <StatusNotice data-whatsapp-message />
           </section>
         </div>

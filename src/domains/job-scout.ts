@@ -11,106 +11,17 @@ import {
   normalizeCvFileRef,
   isActivePhoneLink,
 } from "@/src/lib/utils";
-import { jobScoutTokenHash } from "@/src/security/crypto";
 import { putObject, getPresignedGetUrl, deleteObject, objectExists } from "./r2-storage";
-import { ensurePublicUserId } from "./users";
-import { queuePhoneLinkCoreWrites, queueJobScoutPhoneDeliveryUpdate } from "./account-link";
-import { config, assertPublicBaseUrl, JOB_SCOUT_SETUP_TTL_SECONDS } from "@/src/config";
+import {
+  calculateOnboardingNextStep,
+  storedOnboardingChannel,
+} from "./onboarding-flow";
 import {
   evaluateJobScoutReadiness,
   JOB_SCOUT_ONBOARDING_VERSION,
   JOB_SCOUT_SAFETY_ACKNOWLEDGEMENT_VERSION,
 } from "./job-scout-readiness";
 import { getSendableGmailConnection } from "./gmail";
-
-export async function createJobScoutInvite(phoneInput: string, ttlSecondsInput?: number) {
-  assertPublicBaseUrl();
-  const phone = normalizePhone(phoneInput);
-  const ttlSeconds = Number.isFinite(ttlSecondsInput)
-    ? Math.max(60, Math.min(ttlSecondsInput as number, JOB_SCOUT_SETUP_TTL_SECONDS))
-    : JOB_SCOUT_SETUP_TTL_SECONDS;
-  const db = getFirestoreDb();
-  const docRef = db.collection("jobScoutInvites").doc();
-  const token = docRef.id;
-  const hashedToken = jobScoutTokenHash(token);
-  const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
-  await docRef.set({
-    phone,
-    phoneHash: whatsappPhoneHash(phone),
-    tokenHash: hashedToken,
-    status: "pending",
-    createdAt: FieldValue.serverTimestamp(),
-    expiresAt,
-  });
-  return {
-    token,
-    setupUrl: `${config.publicBaseUrl}/job-scout/setup?token=${token}`,
-    expiresAt: expiresAt.toISOString(),
-  };
-}
-
-export async function getJobScoutInvite(token: string) {
-  if (!token || typeof token !== "string") throw httpError(400, "Token is required.");
-  const hashedToken = jobScoutTokenHash(token);
-  const db = getFirestoreDb();
-  const docRef = db.collection("jobScoutInvites").doc(token);
-  const doc = await docRef.get();
-  if (!doc.exists) throw httpError(404, "Invalid or expired invite.");
-  const data = doc.data()!;
-  if (data.tokenHash !== hashedToken) throw httpError(404, "Invalid or expired invite.");
-  if (data.status !== "pending") throw httpError(410, "This invite has already been used.");
-  if (data.expiresAt?.toDate && data.expiresAt.toDate() < new Date()) {
-    throw httpError(410, "This invite has expired.");
-  }
-  return { id: doc.id, ...data } as { id: string; [key: string]: any };
-}
-
-export async function bindJobScoutInviteToUser(token: string, firebaseUser: any) {
-  const safeUid = validateFirebaseUid(firebaseUser.uid);
-  const invite = await getJobScoutInvite(token);
-  const db = getFirestoreDb();
-  const centralRef = db.collection("users").doc(safeUid);
-  const inviteRef = db.collection("jobScoutInvites").doc(invite.id);
-  const now = FieldValue.serverTimestamp();
-  const phoneInput = invite.phone;
-  await db.runTransaction(async (t) => {
-    const inviteCheck = await t.get(inviteRef);
-    if (!inviteCheck.exists || inviteCheck.data()?.status !== "pending") {
-      throw httpError(410, "This invite has already been used.");
-    }
-    const userDoc = await t.get(centralRef);
-    if (!userDoc.exists) {
-      throw httpError(404, "User profile not found. Please sign in again.");
-    }
-    const userData = userDoc.data() || {};
-    const existingPublicId = userData.publicUserId;
-    const publicId = await ensurePublicUserId(db, safeUid, existingPublicId, t);
-    const phoneLink = {
-      userId: safeUid,
-      publicUserId: publicId,
-      phone: phoneInput,
-      phoneHash: whatsappPhoneHash(phoneInput),
-      verifiedAt: now,
-      status: "active",
-      services: {
-        webetu: userData.services?.webetu === "subscribed",
-        jobs: true,
-      },
-    };
-    queuePhoneLinkCoreWrites(t as any, db, safeUid, phoneLink, now);
-    queueJobScoutPhoneDeliveryUpdate(t as any, db, phoneLink);
-    t.update(inviteRef, {
-      status: "completed",
-      usedBy: safeUid,
-      usedAt: now,
-    });
-    t.update(centralRef, {
-      "services.jobs": "subscribed",
-      updatedAt: now,
-    });
-  });
-  return { success: true };
-}
 
 export async function findJobScoutUserByPhone(phoneInput: string) {
   const phone = normalizePhone(phoneInput);
@@ -196,7 +107,7 @@ export async function saveJobScoutProfile(
   if (!profileConfirmedAt) throw httpError(400, "Profile confirmation is required.");
   if (!safetyAcknowledgedAt) throw httpError(400, "Scam-safety acknowledgement is required.");
 
-  await profileRef.set({
+  const profilePayload = {
     userId: safeUid,
     preferences,
     cvFileRef,
@@ -210,7 +121,29 @@ export async function saveJobScoutProfile(
     completionSource: existing.completionSource || "explicit",
     createdAt: existing.createdAt || FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
+  };
+  const batch = db.batch();
+  batch.set(profileRef, profilePayload, { merge: true });
+  const onboarding = userData.onboarding || {};
+  const onboardingChannel = storedOnboardingChannel(onboarding.channel);
+  const onboardingStatus = String(onboarding.status ?? "");
+  if (
+    onboarding.selectedService === "jobs"
+    && onboardingChannel === "chat"
+    && (onboardingStatus === "required" || onboardingStatus === "in_progress")
+  ) {
+    batch.set(db.collection("users").doc(safeUid), {
+      onboarding: {
+        selectedService: "jobs",
+        channel: "chat",
+        status: "completed",
+        completedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+  await batch.commit();
   return { ok: true, setupStatus: "ready", ready: true };
 }
 
@@ -337,15 +270,8 @@ export async function resetJobScoutProfileForPhone(
     profileDeleted = true;
   }
 
-  const [applicationSnap, inviteSnap] = await Promise.all([
-    db.collection("jobApplications").where("userId", "==", userId).get(),
-    db.collection("jobScoutInvites").where("phoneHash", "==", hash).get(),
-  ]);
+  const applicationSnap = await db.collection("jobApplications").where("userId", "==", userId).get();
   const applicationsDeleted = await deleteDocumentRefs(applicationSnap.docs.map((doc) => doc.ref));
-  const pendingInviteRefs = inviteSnap.docs
-    .filter((doc) => doc.data()?.status === "pending")
-    .map((doc) => doc.ref);
-  const invitesDeleted = await deleteDocumentRefs(pendingInviteRefs);
 
   return {
     ok: true,
@@ -355,7 +281,6 @@ export async function resetJobScoutProfileForPhone(
     profileDeleted,
     cvDeleted,
     applicationsDeleted,
-    invitesDeleted,
   };
 }
 
@@ -405,6 +330,22 @@ async function buildJobScoutSubscriber(
     profileConfirmedAt: profile.profileConfirmedAt,
     safetyAcknowledgedAt: profile.safetyAcknowledgedAt,
   });
+  const onboardingChannel = (userData.onboarding as any)?.selectedService === "jobs"
+    ? storedOnboardingChannel((userData.onboarding as any)?.channel)
+    : null;
+  const onboardingStatus = String((userData.onboarding as any)?.status ?? "not_required");
+  const onboardingNextStep = readiness.ready
+    ? "dashboard"
+    : onboardingChannel
+      ? calculateOnboardingNextStep({
+          selectedService: "jobs",
+          channel: onboardingChannel,
+          whatsappLinked: Boolean(phone),
+          gmailConnected,
+          jobScoutReady: readiness.ready,
+          webetuConfigured: false,
+        })
+      : "channel_selection";
 
   return {
     ...profile,
@@ -415,6 +356,9 @@ async function buildJobScoutSubscriber(
     gmailConnected,
     senderEmail,
     cvAvailable,
+    onboardingChannel,
+    onboardingStatus,
+    onboardingNextStep,
     profile: {
       email: profileEmail,
       displayName: (userData.profile as any)?.displayName || null,
@@ -460,6 +404,9 @@ export async function getJobScoutStatusForUser(
     safetyAcknowledged: subscriber.safetyAcknowledged,
     setupStatus: subscriber.setupStatus,
     ready: subscriber.ready,
+    onboardingChannel: subscriber.onboardingChannel,
+    onboardingStatus: subscriber.onboardingStatus,
+    onboardingNextStep: subscriber.onboardingNextStep,
     missingRequirements: subscriber.missingRequirements,
     profile: {
       email: subscriber.profile.email,
@@ -499,6 +446,9 @@ export async function getJobScoutStatusForPhone(phoneInput: string) {
       safetyAcknowledged: false,
       setupStatus: "draft",
       ready: false,
+      onboardingChannel: null,
+      onboardingStatus: "not_started",
+      onboardingNextStep: "channel_selection",
       missingRequirements: [
         "phone_link",
         "gmail_connection",
@@ -529,6 +479,9 @@ export async function getJobScoutStatusForPhone(phoneInput: string) {
     safetyAcknowledged: subscriber.safetyAcknowledged,
     setupStatus: subscriber.setupStatus,
     ready: subscriber.ready,
+    onboardingChannel: subscriber.onboardingChannel,
+    onboardingStatus: subscriber.onboardingStatus,
+    onboardingNextStep: subscriber.onboardingNextStep,
     missingRequirements: subscriber.missingRequirements,
     profile: {
       displayName: subscriber.profile.displayName,
