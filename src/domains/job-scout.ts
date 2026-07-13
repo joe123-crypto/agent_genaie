@@ -363,7 +363,17 @@ async function getGmailConnection(uid: string) {
   return getSendableGmailConnection(uid);
 }
 
-async function buildJobScoutSubscriber(uidInput: string, profile: Record<string, any>): Promise<any> {
+export type JobScoutStatusDependencies = {
+  objectExists: typeof objectExists;
+};
+
+const defaultJobScoutStatusDependencies: JobScoutStatusDependencies = { objectExists };
+
+async function buildJobScoutSubscriber(
+  uidInput: string,
+  profile: Record<string, any>,
+  dependencies: JobScoutStatusDependencies = defaultJobScoutStatusDependencies,
+): Promise<any> {
   const uid = validateFirebaseUid(uidInput);
   const db = getFirestoreDb();
   const [phoneDoc, userDoc, gmailConnection] = await Promise.all([
@@ -383,7 +393,7 @@ async function buildJobScoutSubscriber(uidInput: string, profile: Record<string,
     ? profileEmail
     : null;
   const cvFileRef = String(profile.cvFileRef || "").trim();
-  const cvAvailable = Boolean(cvFileRef && await objectExists(cvFileRef));
+  const cvAvailable = Boolean(cvFileRef && await dependencies.objectExists(cvFileRef));
   const readiness = evaluateJobScoutReadiness({
     onboardingVersion: profile.onboardingVersion,
     preferences: profile.preferences,
@@ -423,11 +433,18 @@ export async function listJobScoutSubscribers(limitInput: number) {
   return subscribers.filter((subscriber) => subscriber.ready);
 }
 
-export async function getJobScoutStatusForUser(userIdInput: string) {
+export async function getJobScoutStatusForUser(
+  userIdInput: string,
+  dependencies: JobScoutStatusDependencies = defaultJobScoutStatusDependencies,
+) {
   const uid = validateFirebaseUid(userIdInput);
   const db = getFirestoreDb();
   const profileDoc = await db.collection("jobScoutProfiles").doc(uid).get();
-  const subscriber = await buildJobScoutSubscriber(uid, profileDoc.exists ? profileDoc.data() || {} : {});
+  const subscriber = await buildJobScoutSubscriber(
+    uid,
+    profileDoc.exists ? profileDoc.data() || {} : {},
+    dependencies,
+  );
   const preferences = subscriber.preferences && typeof subscriber.preferences === "object"
     ? subscriber.preferences
     : {};

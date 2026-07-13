@@ -45,6 +45,10 @@ jobs:
       FIREBASE_PROJECT_ID: demo-genaie
       # Used to hash Job Scout invite tokens; any value works against the emulator.
       JOB_SCOUT_SETUP_SECRET: ci-test-secret
+      # Job Scout Gmail readiness reads encrypted tokens from the local store.
+      # These are throwaway CI values and never contain production credentials.
+      TOKEN_ENCRYPTION_SECRET: ci-test-secret
+      TOKEN_STORE_PATH: ${{ runner.temp }}/agent-genaie-firestore-tokens.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

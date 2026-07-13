@@ -322,7 +322,9 @@ test("getJobScoutStatusForUser rejects tokenless Gmail refs", opts, async () => 
     }),
   ]);
 
-  const status = await getJobScoutStatusForUser(uid);
+  const status = await getJobScoutStatusForUser(uid, {
+    objectExists: async (key: string) => key === `${uid}/cv/cv.pdf`,
+  });
   assert.equal(status.gmailConnected, false);
   assert.equal(status.senderEmail, null);
   assert.equal(status.ready, false);
