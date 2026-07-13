@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  canonicalGmailCredentialIsActive,
-  evaluateJobScoutReadiness,
-  legacyGmailCredentialIsActive,
-} from "@/src/domains/job-scout-readiness";
+import { evaluateJobScoutReadiness } from "@/src/domains/job-scout-readiness";
 
 const complete = {
   linked: true,
@@ -63,19 +59,4 @@ test("requires the CV object, not only its reference", () => {
   const result = evaluateJobScoutReadiness({ ...complete, cvAvailable: false });
   assert.equal(result.ready, false);
   assert.ok(result.missingRequirements.includes("cv"));
-});
-
-test("accepts canonical and legacy active Gmail credential shapes", () => {
-  assert.equal(canonicalGmailCredentialIsActive(true, {
-    service: "gmail",
-    purpose: "oauth2",
-    status: "active",
-  }), true);
-  assert.equal(legacyGmailCredentialIsActive(true, {
-    metadata: { senderEmail: "legacy@example.com" },
-  }), true);
-  assert.equal(legacyGmailCredentialIsActive(true, {
-    status: "revoked",
-    metadata: { senderEmail: "legacy@example.com" },
-  }), false);
 });

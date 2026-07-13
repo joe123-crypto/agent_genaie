@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 
 import { getFirebaseAdminAuth, getFirestoreDb } from "@/src/firebase/admin";
 import { config } from "@/src/config";
-import { credentialRefId, jobApplicationId, whatsappPhoneHash } from "@/src/lib/utils";
+import { credentialRefId, jobApplicationId, tokenStoreKeyForUid, whatsappPhoneHash } from "@/src/lib/utils";
 import { jobScoutTokenHash } from "@/src/security/crypto";
+import { saveUserTokens } from "@/src/domains/local-store";
 import {
   bindAccountLinkInviteToUser,
   createAccountLinkInvite,
@@ -88,6 +89,11 @@ test("saveJobScoutProfile writes the expected jobScoutProfiles document shape", 
       status: "active",
     }),
   ]);
+  saveUserTokens(tokenStoreKeyForUid(uid), {
+    access_token: "test-access-token",
+    refresh_token: "test-refresh-token",
+    expiry_date: Date.now() + 3600_000,
+  });
   await saveJobScoutProfile({
     userId: uid,
     preferences: {
@@ -268,6 +274,11 @@ test("getJobScoutStatusForUser evaluates signed-in Job Scout readiness", opts, a
       setupStatus: "draft",
     }),
   ]);
+  saveUserTokens(tokenStoreKeyForUid(uid), {
+    access_token: "test-access-token",
+    refresh_token: "test-refresh-token",
+    expiry_date: Date.now() + 3600_000,
+  });
 
   const status = await getJobScoutStatusForUser(uid);
   assert.equal(status.configured, true);
@@ -279,6 +290,44 @@ test("getJobScoutStatusForUser evaluates signed-in Job Scout readiness", opts, a
   assert.ok(status.missingRequirements.includes("cv"));
   assert.ok(status.missingRequirements.includes("profile_confirmation"));
   assert.ok(status.missingRequirements.includes("safety_acknowledgement"));
+});
+
+test("getJobScoutStatusForUser rejects tokenless Gmail refs", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-tokenless-${Date.now()}`;
+  const phone = "+213600000016";
+  await Promise.all([
+    db.collection("users").doc(uid).set({
+      profile: { email: "tokenless@example.com", displayName: "Tokenless User" },
+    }),
+    db.collection("phoneLinksByUser").doc(uid).set({
+      userId: uid,
+      phone,
+      phoneHash: whatsappPhoneHash(phone),
+      status: "active",
+    }),
+    db.collection("credentialRefs").doc(credentialRefId(uid, "gmail", "oauth2")).set({
+      userId: uid,
+      service: "gmail",
+      purpose: "oauth2",
+      status: "active",
+    }),
+    db.collection("jobScoutProfiles").doc(uid).set({
+      userId: uid,
+      preferences: { targetRoles: ["Developer"], locations: ["Algiers, Algeria"], country: "dz" },
+      cvFileRef: `${uid}/cv/cv.pdf`,
+      profileConfirmedAt: new Date(),
+      safetyAcknowledgedAt: new Date(),
+      onboardingVersion: 2,
+    }),
+  ]);
+
+  const status = await getJobScoutStatusForUser(uid);
+  assert.equal(status.gmailConnected, false);
+  assert.equal(status.senderEmail, null);
+  assert.equal(status.ready, false);
+  assert.ok(status.missingRequirements.includes("gmail_connection"));
+  assert.ok(status.missingRequirements.includes("sender_email"));
 });
 
 test("getJobScoutInvite rejects a tampered token", opts, async () => {

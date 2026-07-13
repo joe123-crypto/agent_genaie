@@ -109,6 +109,15 @@ export async function loadGmailTokens(tokenStoreKey: string) {
   return tokens && tokens.access_token ? tokens : null;
 }
 
+export async function getSendableGmailConnection(uid: string) {
+  const tokenStoreKey = tokenStoreKeyForUid(uid);
+  const tokens = await loadGmailTokens(tokenStoreKey);
+  return {
+    connected: Boolean(tokens?.access_token),
+    tokenStoreKey,
+  };
+}
+
 export async function getValidAccessToken(tokenStoreKey: string) {
   let tokens = await loadGmailTokens(tokenStoreKey);
   if (!tokens || !tokens.access_token) throw httpError(401, "No Gmail tokens found");
@@ -143,12 +152,21 @@ export async function mirrorGmailConnectionToCentralData(uid: string, tokens: an
   if (options.isDisconnect) {
     const refId = credentialRefId(safeUid, "gmail", "oauth2");
     const credsRef = db.collection("credentialRefs").doc(refId);
+    const legacyCredsRef = db.collection("credentialRefs").doc(`gmail_oauth_token_${safeUid}`);
     await db.runTransaction(async (t) => {
       const credsDoc = await t.get(credsRef);
+      const legacyCredsDoc = await t.get(legacyCredsRef);
       const doc = await t.get(centralRef);
       if (credsDoc.exists) {
         t.update(credsRef, {
           status: "revoked",
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+      if (legacyCredsDoc.exists) {
+        t.update(legacyCredsRef, {
+          status: "revoked",
+          revokedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         });
       }

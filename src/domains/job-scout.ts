@@ -10,7 +10,6 @@ import {
   normalizeStringList,
   normalizeCvFileRef,
   isActivePhoneLink,
-  credentialRefId,
 } from "@/src/lib/utils";
 import { jobScoutTokenHash } from "@/src/security/crypto";
 import { putObject, getPresignedGetUrl, deleteObject, objectExists } from "./r2-storage";
@@ -19,11 +18,10 @@ import { queuePhoneLinkCoreWrites, queueJobScoutPhoneDeliveryUpdate } from "./ac
 import { config, assertPublicBaseUrl, JOB_SCOUT_SETUP_TTL_SECONDS } from "@/src/config";
 import {
   evaluateJobScoutReadiness,
-  canonicalGmailCredentialIsActive,
   JOB_SCOUT_ONBOARDING_VERSION,
   JOB_SCOUT_SAFETY_ACKNOWLEDGEMENT_VERSION,
-  legacyGmailCredentialIsActive,
 } from "./job-scout-readiness";
+import { getSendableGmailConnection } from "./gmail";
 
 export async function createJobScoutInvite(phoneInput: string, ttlSecondsInput?: number) {
   assertPublicBaseUrl();
@@ -176,7 +174,7 @@ export async function saveJobScoutProfile(
     profileRef.get(),
     db.collection("phoneLinksByUser").doc(safeUid).get(),
     db.collection("users").doc(safeUid).get(),
-    getGmailConnection(db, safeUid),
+    getGmailConnection(safeUid),
   ]);
   const existing = existingDoc.exists ? existingDoc.data() || {} : {};
   const phoneData = phoneDoc.exists ? phoneDoc.data() || {} : {};
@@ -186,7 +184,7 @@ export async function saveJobScoutProfile(
     throw httpError(409, "Gmail is not connected.");
   }
   const senderEmail = String((userData.profile as any)?.email || "").trim()
-    || gmailConnection.legacySenderEmail;
+    || null;
   if (!senderEmail) {
     throw httpError(409, "The linked user has no application email.");
   }
@@ -361,21 +359,8 @@ export async function resetJobScoutProfileForPhone(
   };
 }
 
-async function getGmailConnection(db: FirebaseFirestore.Firestore, uid: string) {
-  const [canonicalDoc, legacyDoc] = await Promise.all([
-    db.collection("credentialRefs").doc(credentialRefId(uid, "gmail", "oauth2")).get(),
-    db.collection("credentialRefs").doc(`gmail_oauth_token_${uid}`).get(),
-  ]);
-  const canonicalData = canonicalDoc.exists ? canonicalDoc.data() || {} : {};
-  const legacyData = legacyDoc.exists ? legacyDoc.data() || {} : {};
-  const canonicalConnected = canonicalGmailCredentialIsActive(canonicalDoc.exists, canonicalData);
-  const legacyConnected = legacyGmailCredentialIsActive(legacyDoc.exists, legacyData);
-  return {
-    connected: canonicalConnected || legacyConnected,
-    legacySenderEmail: legacyConnected
-      ? String(legacyData.metadata?.senderEmail || "").trim() || null
-      : null,
-  };
+async function getGmailConnection(uid: string) {
+  return getSendableGmailConnection(uid);
 }
 
 async function buildJobScoutSubscriber(uidInput: string, profile: Record<string, any>): Promise<any> {
@@ -384,7 +369,7 @@ async function buildJobScoutSubscriber(uidInput: string, profile: Record<string,
   const [phoneDoc, userDoc, gmailConnection] = await Promise.all([
     db.collection("phoneLinksByUser").doc(uid).get(),
     db.collection("users").doc(uid).get(),
-    getGmailConnection(db, uid),
+    getGmailConnection(uid),
   ]);
 
   const phoneData = phoneDoc.exists ? phoneDoc.data() || {} : {};
@@ -395,7 +380,7 @@ async function buildJobScoutSubscriber(uidInput: string, profile: Record<string,
   const profileEmail = String((userData.profile as any)?.email || "").trim() || null;
   const gmailConnected = gmailConnection.connected;
   const senderEmail = gmailConnected
-    ? profileEmail || gmailConnection.legacySenderEmail
+    ? profileEmail
     : null;
   const cvFileRef = String(profile.cvFileRef || "").trim();
   const cvAvailable = Boolean(cvFileRef && await objectExists(cvFileRef));
