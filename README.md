@@ -89,12 +89,18 @@ In Firebase Console:
 2. Enable Authentication -> Sign-in method -> Google.
 3. Keep same-email account linking enabled so Google and email-link sign-ins attach to the same Firebase user when the email matches.
 4. Add your app domain as an authorized domain.
-5. Create a web app and copy its `apiKey`, `authDomain`, `projectId`, and `appId`.
+5. Create a web app and copy its `apiKey`, `projectId`, and `appId`.
 6. Create a service account key JSON file from Project settings -> Service accounts.
 7. Base64 encode the service account JSON:
 
 ```bash
 base64 -w0 /path/to/firebase-service-account.json
+```
+
+For reliable mobile redirect sign-in on browsers that restrict third-party storage, set `FIREBASE_AUTH_DOMAIN` to the hostname serving Agent Genaie, not the default `firebaseapp.com` hostname. The Next.js configuration proxies `/__/auth/*` to `<FIREBASE_PROJECT_ID>.firebaseapp.com`. Add the following redirect URI to the Google OAuth client before deploying this setting:
+
+```text
+https://your-agent-genaie-domain.example/__/auth/handler
 ```
 
 ## Firestore Collections
@@ -135,7 +141,7 @@ export CENTRAL_DATA_ENCRYPTION_SECRET="$(openssl rand -base64 32)"
 export CENTRAL_DATA_KEY_VERSION="v1"
 export FIREBASE_PROJECT_ID="..."
 export FIREBASE_API_KEY="..."
-export FIREBASE_AUTH_DOMAIN="your-project.firebaseapp.com"
+export FIREBASE_AUTH_DOMAIN="your-agent-genaie-domain.example"
 export FIREBASE_APP_ID="..."
 export FIREBASE_EMAIL_LINK_URL="https://your-agent-genaie-domain.example/auth/firebase/finish"
 export FIREBASE_SERVICE_ACCOUNT_JSON_BASE64="..."

@@ -93,7 +93,7 @@ export async function assertNoDuplicateCentralEmail(firebaseUser: any) {
   const centralSnap = await db.collection("users").where("profile.emailLower", "==", emailLower).get();
   for (const doc of centralSnap.docs) {
     if (doc.id !== firebaseUser.uid) {
-      console.warn(`Duplicate central email detected: ${emailLower} for uid ${firebaseUser.uid} (conflicts with ${doc.id})`);
+      console.warn("Duplicate central email detected during authentication.");
       throw httpError(409, "An account with this email already exists.");
     }
   }
