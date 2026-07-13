@@ -14,7 +14,9 @@ import {
 import { StatusNotice, type StatusKind } from "@/app/_components/status-ui";
 import {
   AUTH_NEXT_STORAGE_KEY,
+  AUTH_REDIRECT_PENDING_STORAGE_KEY,
   authErrorDetails,
+  canUseRedirectSignIn,
   createAndVerifyServerSession,
   destinationForSession,
   isMobileBrowser,
@@ -38,6 +40,49 @@ type Phase =
 
 type Notice = { kind: StatusKind; message: string };
 
+function readStoredRedirectAttempt() {
+  try {
+    const pending = window.sessionStorage.getItem(AUTH_REDIRECT_PENDING_STORAGE_KEY) === "1";
+    const nextPath = pending
+      ? safeNext(window.sessionStorage.getItem(AUTH_NEXT_STORAGE_KEY))
+      : null;
+    return { pending, nextPath };
+  } catch {
+    return { pending: false, nextPath: null };
+  }
+}
+
+function storeRedirectAttempt(nextPath: string) {
+  try {
+    window.sessionStorage.setItem(AUTH_REDIRECT_PENDING_STORAGE_KEY, "1");
+    window.sessionStorage.setItem(AUTH_NEXT_STORAGE_KEY, nextPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearStoredRedirectAttempt() {
+  try {
+    window.sessionStorage.removeItem(AUTH_REDIRECT_PENDING_STORAGE_KEY);
+    window.sessionStorage.removeItem(AUTH_NEXT_STORAGE_KEY);
+  } catch {
+    // Browsers that disable storage must still be able to use popup sign-in.
+  }
+}
+
+function redirectIsReady(settings: FirebaseClientSettings) {
+  try {
+    return canUseRedirectSignIn(
+      settings.firebase.authDomain,
+      window.location.host,
+      window.sessionStorage,
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function LoginContent() {
   const [auth, setAuth] = useState<Auth | null>(null);
   const [settings, setSettings] = useState<FirebaseClientSettings | null>(null);
@@ -54,7 +99,7 @@ export function LoginContent() {
   const nextParam = safeNext(searchParams.get("next"));
   const busy = !auth || !settings || ["loading", "google", "email", "session", "redirecting", "success"].includes(phase);
 
-  const completeSession = useCallback((user: User) => {
+  const completeSession = useCallback((user: User, redirectNext?: string | null) => {
     if (completionRef.current) return completionRef.current;
 
     const task = (async () => {
@@ -64,11 +109,11 @@ export function LoginContent() {
       const session = await createAndVerifyServerSession(idToken, user.uid);
       setPhase("success");
       setNotice({ kind: "complete", message: "Signed in. Opening your account..." });
-      const storedNext = window.sessionStorage.getItem(AUTH_NEXT_STORAGE_KEY);
-      window.sessionStorage.removeItem(AUTH_NEXT_STORAGE_KEY);
-      window.location.assign(destinationForSession(session, storedNext || nextParam));
+      clearStoredRedirectAttempt();
+      window.location.assign(destinationForSession(session, redirectNext || nextParam));
     })()
       .catch((error: unknown) => {
+        clearStoredRedirectAttempt();
         const details = authErrorDetails(error);
         setPhase("error");
         setNotice({ kind: "error", message: details.message });
@@ -91,6 +136,7 @@ export function LoginContent() {
         if (!active) return;
         setSettings(loadedSettings);
         setAuth(authInstance);
+        const redirectAttempt = readStoredRedirectAttempt();
 
         let redirectResult = null;
         let redirectError: unknown = null;
@@ -104,16 +150,30 @@ export function LoginContent() {
 
         const signedInUser = redirectResult?.user ?? authInstance.currentUser;
         if (signedInUser) {
-          await completeSession(signedInUser);
+          await completeSession(
+            signedInUser,
+            redirectAttempt.pending ? redirectAttempt.nextPath : undefined,
+          );
           return;
         }
         if (redirectError) {
+          clearStoredRedirectAttempt();
           const details = authErrorDetails(redirectError);
-          setForceRedirect(details.retryWithRedirect);
+          setForceRedirect(details.retryWithRedirect && redirectIsReady(loadedSettings));
           setPhase("error");
           setNotice({ kind: "error", message: details.message });
           return;
         }
+        if (redirectAttempt.pending) {
+          clearStoredRedirectAttempt();
+          setPhase("error");
+          setNotice({
+            kind: "error",
+            message: "Google returned to the app, but sign-in could not be completed. Please try again or use a magic link.",
+          });
+          return;
+        }
+        clearStoredRedirectAttempt();
         setPhase("ready");
         setNotice({ kind: "info", message: "Choose a sign-in method." });
       } catch (error) {
@@ -138,11 +198,14 @@ export function LoginContent() {
 
     const provider = new GoogleAuthProvider();
     provider.addScope("email");
-    const useRedirect = forceRedirect || isMobileBrowser(window.navigator);
+    const redirectReady = settings ? redirectIsReady(settings) : false;
+    const useRedirect = redirectReady && (forceRedirect || isMobileBrowser(window.navigator));
 
     try {
       if (useRedirect) {
-        window.sessionStorage.setItem(AUTH_NEXT_STORAGE_KEY, nextParam);
+        if (!storeRedirectAttempt(nextParam)) {
+          throw new Error("This browser cannot preserve Google redirect state. Please use the Google pop-up or a magic link.");
+        }
         setPhase("redirecting");
         setNotice({ kind: "loading", message: "Continuing to Google..." });
         await signInWithRedirect(auth, provider);
@@ -151,8 +214,9 @@ export function LoginContent() {
       const result = await signInWithPopup(auth, provider);
       await completeSession(result.user);
     } catch (error) {
+      if (useRedirect) clearStoredRedirectAttempt();
       const details = authErrorDetails(error);
-      setForceRedirect(details.retryWithRedirect);
+      setForceRedirect(details.retryWithRedirect && redirectReady);
       setPhase("error");
       setNotice({ kind: "error", message: details.message });
     } finally {

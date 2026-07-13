@@ -1,4 +1,38 @@
 export const AUTH_NEXT_STORAGE_KEY = "agentGenaieNextAfterSignIn";
+export const AUTH_REDIRECT_PENDING_STORAGE_KEY = "agentGenaieGoogleRedirectPending";
+
+type AuthStorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+function normalizeAuthHost(value: string | null | undefined) {
+  const normalized = value?.trim().toLowerCase().replace(/\.$/, "") ?? "";
+  if (!normalized || normalized.includes("://") || /[/?#@\s]/.test(normalized)) return null;
+  return normalized;
+}
+
+export function canUseRedirectSignIn(
+  authDomain: string | null | undefined,
+  currentHost: string,
+  storage: AuthStorageLike | null | undefined,
+) {
+  const configuredHost = normalizeAuthHost(authDomain);
+  const browserHost = normalizeAuthHost(currentHost);
+  if (!configuredHost || !browserHost || configuredHost !== browserHost || !storage) return false;
+
+  const probeKey = "__agentGenaieRedirectStorageProbe__";
+  try {
+    storage.setItem(probeKey, "1");
+    const available = storage.getItem(probeKey) === "1";
+    storage.removeItem(probeKey);
+    return available;
+  } catch {
+    try {
+      storage.removeItem(probeKey);
+    } catch {
+      // The storage is unavailable; redirect sign-in will stay disabled.
+    }
+    return false;
+  }
+}
 
 export type SessionResult = {
   ok: true;
@@ -105,10 +139,10 @@ export function authErrorDetails(error: unknown) {
   let retryWithRedirect = false;
 
   if (code === "auth/popup-closed-by-user") {
-    message = "Google sign-in was closed before it finished. Try again to continue in this tab.";
+    message = "Google sign-in was closed before it finished. Please try again.";
     retryWithRedirect = true;
   } else if (code === "auth/popup-blocked") {
-    message = "Your browser blocked the Google sign-in window. Try again to continue in this tab.";
+    message = "Your browser blocked the Google sign-in window. Allow pop-ups and try again, or use a magic link.";
     retryWithRedirect = true;
   } else if (code === "auth/cancelled-popup-request") {
     message = "Another sign-in attempt interrupted this one. Please try again.";

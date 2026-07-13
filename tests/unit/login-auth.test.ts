@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   authErrorDetails,
+  canUseRedirectSignIn,
   createAndVerifyServerSession,
   destinationForSession,
   isMobileBrowser,
@@ -33,6 +34,42 @@ test("mobile detection supports userAgentData, common mobile agents, and iPad de
   assert.equal(isMobileBrowser({ userAgent: "Mozilla/5.0 (Linux; Android 15)" }), true);
   assert.equal(isMobileBrowser({ platform: "MacIntel", maxTouchPoints: 5 }), true);
   assert.equal(isMobileBrowser({ userAgent: "Mozilla/5.0 (X11; Linux x86_64)" }), false);
+});
+
+test("redirect sign-in requires the Firebase auth domain to match the current host", () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem(key: string) {
+      return values.get(key) ?? null;
+    },
+    setItem(key: string, value: string) {
+      values.set(key, value);
+    },
+    removeItem(key: string) {
+      values.delete(key);
+    },
+  };
+
+  assert.equal(canUseRedirectSignIn("app.example", "app.example", storage), true);
+  assert.equal(canUseRedirectSignIn("APP.EXAMPLE.", "app.example", storage), true);
+  assert.equal(canUseRedirectSignIn("project.firebaseapp.com", "app.example", storage), false);
+  assert.equal(canUseRedirectSignIn("https://app.example", "app.example", storage), false);
+  assert.equal(canUseRedirectSignIn("app.example/path", "app.example", storage), false);
+});
+
+test("redirect sign-in is disabled when browser session storage is unavailable", () => {
+  const unavailableStorage = {
+    getItem() {
+      return null;
+    },
+    setItem() {
+      throw new Error("storage disabled");
+    },
+    removeItem() {},
+  };
+
+  assert.equal(canUseRedirectSignIn("app.example", "app.example", null), false);
+  assert.equal(canUseRedirectSignIn("app.example", "app.example", unavailableStorage), false);
 });
 
 test("server session creation is verified before navigation", async () => {
@@ -89,7 +126,7 @@ test("a missing or mismatched session cookie stops navigation", async () => {
   );
 });
 
-test("popup cancellation becomes a visible redirect retry", () => {
+test("popup cancellation remains visible and may offer a safe redirect retry", () => {
   const details = authErrorDetails({ code: "auth/popup-closed-by-user" });
   assert.match(details.message, /closed before it finished/i);
   assert.equal(details.retryWithRedirect, true);

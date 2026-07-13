@@ -32,6 +32,10 @@ vi.mock("@/src/firebase/client", () => ({
 }));
 
 import { LoginContent } from "@/app/login/login-content";
+import {
+  AUTH_NEXT_STORAGE_KEY,
+  AUTH_REDIRECT_PENDING_STORAGE_KEY,
+} from "@/src/auth/login";
 
 const settings = {
   configured: true,
@@ -50,9 +54,17 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+function settingsForCurrentHost() {
+  return {
+    ...settings,
+    firebase: { ...settings.firebase, authDomain: window.location.host },
+  };
+}
+
 describe("Google login readiness and recovery", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    window.sessionStorage.clear();
     Object.defineProperty(window.navigator, "userAgentData", {
       configurable: true,
       value: { mobile: false },
@@ -66,7 +78,10 @@ describe("Google login readiness and recovery", () => {
     });
   });
 
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    window.sessionStorage.clear();
+  });
 
   it("keeps the Google button disabled until Firebase is fully ready", async () => {
     const ready = deferred<void>();
@@ -94,7 +109,54 @@ describe("Google login readiness and recovery", () => {
     expect(mocks.signInWithPopup).toHaveBeenCalledOnce();
   });
 
-  it("shows popup cancellation and switches the retry to same-tab redirect", async () => {
+  it("keeps an unsafe popup retry on the popup flow", async () => {
+    mocks.signInWithPopup.mockRejectedValue({ code: "auth/popup-closed-by-user" });
+    render(createElement(LoginContent));
+    const button = await screen.findByRole("button", { name: /sign in with google/i });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+
+    expect(await screen.findByText(/closed before it finished/i)).toBeVisible();
+    expect(screen.getByRole("button", { name: /sign in with google/i })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /continue with google/i })).not.toBeInTheDocument();
+    expect(mocks.signInWithRedirect).not.toHaveBeenCalled();
+  });
+
+  it("uses popup on mobile when the Firebase auth domain is cross-origin", async () => {
+    Object.defineProperty(window.navigator, "userAgentData", {
+      configurable: true,
+      value: { mobile: true },
+    });
+    mocks.signInWithPopup.mockReturnValue(new Promise(() => {}));
+    render(createElement(LoginContent));
+    const button = await screen.findByRole("button", { name: /sign in with google/i });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+
+    await waitFor(() => expect(mocks.signInWithPopup).toHaveBeenCalledOnce());
+    expect(mocks.signInWithRedirect).not.toHaveBeenCalled();
+  });
+
+  it("uses redirect on mobile only when the auth domain matches the app host", async () => {
+    Object.defineProperty(window.navigator, "userAgentData", {
+      configurable: true,
+      value: { mobile: true },
+    });
+    mocks.loadFirebaseClientSettings.mockResolvedValue(settingsForCurrentHost());
+    mocks.signInWithRedirect.mockReturnValue(new Promise(() => {}));
+    render(createElement(LoginContent));
+    const button = await screen.findByRole("button", { name: /sign in with google/i });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+
+    await waitFor(() => expect(mocks.signInWithRedirect).toHaveBeenCalledOnce());
+    expect(mocks.signInWithPopup).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem(AUTH_REDIRECT_PENDING_STORAGE_KEY)).toBe("1");
+    expect(window.sessionStorage.getItem(AUTH_NEXT_STORAGE_KEY)).toBe("/");
+  });
+
+  it("offers a same-tab retry after popup cancellation only when redirect is safe", async () => {
+    mocks.loadFirebaseClientSettings.mockResolvedValue(settingsForCurrentHost());
     mocks.signInWithPopup.mockRejectedValue({ code: "auth/popup-closed-by-user" });
     render(createElement(LoginContent));
     const button = await screen.findByRole("button", { name: /sign in with google/i });
@@ -105,19 +167,16 @@ describe("Google login readiness and recovery", () => {
     expect(screen.getByRole("button", { name: /continue with google/i })).toBeEnabled();
   });
 
-  it("uses redirect directly on mobile", async () => {
-    Object.defineProperty(window.navigator, "userAgentData", {
-      configurable: true,
-      value: { mobile: true },
-    });
-    mocks.signInWithRedirect.mockReturnValue(new Promise(() => {}));
+  it("shows an error instead of silently resetting after an empty redirect return", async () => {
+    window.sessionStorage.setItem(AUTH_REDIRECT_PENDING_STORAGE_KEY, "1");
+    window.sessionStorage.setItem(AUTH_NEXT_STORAGE_KEY, "/vault");
     render(createElement(LoginContent));
-    const button = await screen.findByRole("button", { name: /sign in with google/i });
-    await waitFor(() => expect(button).toBeEnabled());
-    fireEvent.click(button);
 
-    await waitFor(() => expect(mocks.signInWithRedirect).toHaveBeenCalledOnce());
+    expect(await screen.findByText(/google returned to the app, but sign-in could not be completed/i)).toBeVisible();
+    expect(window.sessionStorage.getItem(AUTH_REDIRECT_PENDING_STORAGE_KEY)).toBeNull();
+    expect(window.sessionStorage.getItem(AUTH_NEXT_STORAGE_KEY)).toBeNull();
     expect(mocks.signInWithPopup).not.toHaveBeenCalled();
+    expect(mocks.signInWithRedirect).not.toHaveBeenCalled();
   });
 
   it("resumes server-session creation for a user returned by Firebase", async () => {
