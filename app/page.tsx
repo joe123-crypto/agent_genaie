@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import robotImage from "@/public/Pasted image (3).png";
 
 export const metadata: Metadata = {
   title: "Genaie Scout | Your AI task agent",
@@ -173,8 +172,10 @@ export default function RootPage() {
             <DecorativeScene />
             <Image
               className="landing-robot"
-              src={robotImage}
+              src="/Pasted image (3).png"
               alt="Robot assistant holding documents and a suitcase"
+              width={1536}
+              height={1024}
               priority
               sizes="(max-width: 900px) 88vw, 48vw"
             />
