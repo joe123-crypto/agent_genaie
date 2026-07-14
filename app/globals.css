@@ -753,14 +753,13 @@ button.password-toggle {
 /* Public Genaie Scout landing page. */
 .landing-page {
   min-height: 100svh;
-  padding: 18px;
-  background: #f1f1f1;
+  background: #ffffff;
   color: #090909;
 }
 
 .landing-canvas {
   width: 100%;
-  min-height: calc(100svh - 36px);
+  min-height: 100svh;
   overflow: hidden;
   background: #ffffff;
 }
@@ -1060,14 +1059,6 @@ a.button.landing-cta:hover {
 }
 
 @media (max-width: 720px) {
-  .landing-page {
-    padding: 8px;
-  }
-
-  .landing-canvas {
-    min-height: calc(100svh - 16px);
-  }
-
   .landing-header,
   .landing-hero {
     width: calc(100% - 40px);
