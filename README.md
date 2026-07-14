@@ -6,6 +6,7 @@ Agent Genaie is a Next.js app for user onboarding, Firebase-backed login, Gmail 
 
 Public routes:
 
+- `/` is the public Genaie Scout landing page and links visitors to sign in at `/login`.
 - `/login` supports Firebase Google Sign-In and passwordless email-link sign-in.
 - `/auth/firebase/finish` completes Firebase email-link sign-in and creates the server session cookie.
 - `/auth/session` creates or checks the Firebase-backed server session. `POST` also returns `publicUserId`, `isNewUser`, and `onboardingRequired`.
@@ -24,7 +25,7 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `/{publicUserId}/job-scout` signed-in Job Scout setup page for CV, target role, target location, and acknowledgements.
 - `/{publicUserId}/onboarding` one-time signup onboarding controller.
 - `/{publicUserId}/whatsapp` is the canonical WhatsApp linking page. Invite mode shows the originating masked number and confirmation; direct-web mode accepts a number and starts bot verification.
-- `/`, `/connect-gmail`, and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
+- `/connect-gmail` and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail OAuth for the signed-in Firebase user.
 - `GET /auth/google/status` checks Gmail connection for the signed-in Firebase user.
 - `POST /auth/google/revoke` revokes and removes stored Gmail tokens for the signed-in Firebase user.
