@@ -1,10 +1,19 @@
 /* Shared application palette and layout primitives. */
 :root {
   color-scheme: light;
+  --font-sans: Ubuntu, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-weight-body: 400;
+  --font-weight-nav: 450;
+  --font-weight-action: 500;
+  --font-weight-utility: 600;
+  --font-weight-heading: 700;
+  --font-weight-brand: 800;
   --background: #ffffff;
   --surface: #fafaf8;
-  --text-primary: #111111;
-  --text-secondary: #666666;
+  --text-primary: #090909;
+  --text-heading: #050505;
+  --text-secondary: #676767;
+  --text-inverse: #ffffff;
   --border: #e5e5e2;
   --accent: #478f77;
   --accent-soft: #e9f3f0;
@@ -57,7 +66,8 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--text-primary);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
+  font-weight: var(--font-weight-body);
   line-height: 1.5;
 }
 
@@ -79,9 +89,10 @@ a.button {
   border: 1px solid var(--text-primary);
   border-radius: var(--radius);
   background: var(--text-primary);
-  color: var(--background);
+  color: var(--text-inverse);
   cursor: pointer;
-  font-weight: 700;
+  font-size: 1.05rem;
+  font-weight: var(--font-weight-action);
   padding: 0 16px;
   text-decoration: none;
   transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
@@ -118,7 +129,7 @@ a.danger,
 .button.danger {
   background: var(--danger);
   border-color: var(--danger);
-  color: var(--background);
+  color: var(--text-inverse);
 }
 
 button.danger:hover:not(:disabled),
@@ -169,6 +180,7 @@ input[type="checkbox"] {
 
 label {
   color: var(--text-primary);
+  font-weight: var(--font-weight-utility);
 }
 
 [hidden] {
@@ -239,26 +251,37 @@ p {
 
 h1 {
   margin: 0;
-  font-size: 1.75rem;
+  color: var(--text-heading);
+  font-size: clamp(1.9rem, 3vw, 2.6rem);
+  font-weight: var(--font-weight-heading);
   line-height: 1.2;
 }
 
 h2 {
   margin: 0;
-  font-size: 1.15rem;
+  color: var(--text-heading);
+  font-size: 1.2rem;
+  font-weight: var(--font-weight-heading);
   line-height: 1.3;
 }
 
 h3 {
   margin: 20px 0 8px;
+  color: var(--text-heading);
   font-size: 1rem;
+  font-weight: var(--font-weight-heading);
   line-height: 1.3;
 }
 
 p {
   margin: 0;
   color: var(--text-secondary);
+  font-weight: var(--font-weight-body);
   line-height: 1.55;
+}
+
+strong {
+  font-weight: var(--font-weight-utility);
 }
 
 form {
@@ -269,7 +292,7 @@ form {
 .form-stack label {
   display: grid;
   gap: 7px;
-  font-weight: 700;
+  font-weight: var(--font-weight-utility);
 }
 
 .form-stack {
@@ -300,7 +323,7 @@ form {
   display: inline-flex;
   width: fit-content;
   color: var(--text-secondary);
-  font-weight: 650;
+  font-weight: var(--font-weight-nav);
   text-decoration: none;
 }
 
@@ -333,6 +356,7 @@ form {
   border-radius: 50%;
   color: var(--text-primary);
   font-size: 1.6rem;
+  font-weight: var(--font-weight-nav);
   line-height: 1;
   text-decoration: none;
 }
@@ -397,7 +421,7 @@ form {
   background: var(--status-bg);
   color: var(--status-text);
   font-size: 0.88rem;
-  font-weight: 700;
+  font-weight: var(--font-weight-utility);
   padding: 0 10px;
   white-space: nowrap;
 }
@@ -562,12 +586,13 @@ button.choice:focus-visible {
 button.choice strong {
   color: var(--text-primary);
   font-size: 1.05rem;
+  font-weight: var(--font-weight-utility);
 }
 
 .tab span,
 button.choice span {
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--font-weight-body);
   line-height: 1.45;
 }
 
@@ -581,7 +606,7 @@ button.choice span {
   display: grid;
   gap: 7px;
   color: var(--text-primary);
-  font-weight: 700;
+  font-weight: var(--font-weight-utility);
 }
 
 .readonly span {
@@ -590,7 +615,7 @@ button.choice span {
   align-items: center;
   border-radius: var(--radius);
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: var(--font-weight-body);
   padding: 0 12px;
 }
 
@@ -598,7 +623,7 @@ button.choice span {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  font-weight: 650;
+  font-weight: var(--font-weight-utility);
   line-height: 1.45;
 }
 
@@ -644,7 +669,7 @@ button.password-toggle {
   background: var(--surface);
   color: var(--text-primary);
   font-size: 0.88rem;
-  font-weight: 700;
+  font-weight: var(--font-weight-action);
   padding: 0 10px;
 }
 
@@ -662,7 +687,12 @@ button.password-toggle {
 }
 
 .auth-panel h1 {
-  font-size: 1.65rem;
+  font-size: clamp(1.9rem, 3vw, 2.6rem);
+  font-weight: var(--font-weight-brand);
+}
+
+.app-header h1 {
+  font-weight: var(--font-weight-brand);
 }
 
 .auth-panel p {
