@@ -1,0 +1,245 @@
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createElement } from "react";
+import { endDashboardSession } from "@/app/_components/dashboard-account-menu";
+import { buildDashboardViewModel } from "@/app/_components/dashboard-model";
+import { DashboardOverview } from "@/app/_components/dashboard-overview";
+import { DashboardSettings } from "@/app/_components/dashboard-settings";
+import { DashboardShell } from "@/app/_components/dashboard-shell";
+
+vi.mock("next/image", () => ({
+  default: ({ src, priority: _priority, ...props }: {
+    src: string | { src: string };
+    priority?: boolean;
+    alt: string;
+  }) => createElement("img", {
+    ...props,
+    src: typeof src === "string" ? src : src.src,
+  }),
+}));
+
+const publicUserId = "usr_1234567890abcdef";
+
+function dashboardModel(overrides: Parameters<typeof buildDashboardViewModel>[0] = {
+  account: {
+    available: true,
+    data: {
+      maskedPhone: "+213 *** 4567",
+      services: {
+        calendar: "connected",
+        gmail: "connected",
+        jobs: "subscribed",
+        webetu: "connected",
+      },
+      whatsappLinked: true,
+    },
+  },
+  jobScout: {
+    available: true,
+    data: {
+      configured: true,
+      cvAvailable: true,
+      gmailConnected: true,
+      linked: true,
+      missingRequirements: [],
+      ready: true,
+    },
+  },
+  publicUserId,
+  webetu: {
+    available: true,
+    data: {
+      configured: true,
+      status: "active",
+      whatsappLinked: true,
+    },
+  },
+}) {
+  return buildDashboardViewModel(overrides);
+}
+
+describe("signed-in dashboard UI", () => {
+  afterEach(cleanup);
+
+  it("renders the requested navigation and a working account menu trigger", () => {
+    render(
+      <DashboardShell active="overview" publicUserId={publicUserId} userLabel="Joseph">
+        <div>Dashboard content</div>
+      </DashboardShell>,
+    );
+
+    const nav = screen.getByRole("navigation", { name: /primary dashboard navigation/i });
+    const links = within(nav).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual([
+      "Overview",
+      "Job Scout",
+      "Webetu Reservations",
+      "Settings",
+    ]);
+    expect(screen.getByRole("link", { name: /overview/i })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("Genaie Scout")).toBeVisible();
+    expect(screen.queryByRole("img", { name: /robot/i })).not.toBeInTheDocument();
+
+    const accountButton = screen.getByRole("button", { name: /joseph/i });
+    expect(accountButton).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(accountButton);
+    expect(accountButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("menuitem", { name: /privacy/i })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: /sign out/i })).toBeVisible();
+  });
+
+  it("shows connection status, registered services, image 2, and service-specific sample rows", () => {
+    render(<DashboardOverview {...dashboardModel()} />);
+
+    expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
+    expect(screen.getByRole("img", { name: /robot assistant holding an envelope/i })).toHaveAttribute("src", "/Pasted image (2).png");
+    expect(screen.getAllByText(/whatsapp linked/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Google linked")).toBeVisible();
+    expect(screen.getByText("Job Scout")).toBeVisible();
+    expect(screen.getAllByText("Webetu Reservations").length).toBeGreaterThan(0);
+    expect(screen.getByText("Reserve Meals")).toBeVisible();
+    expect(screen.getByText("Search & Apply Jobs")).toBeVisible();
+    expect(screen.getByText("Deliver Results")).toBeVisible();
+    expect(screen.getAllByText("Sample schedule").length).toBeGreaterThan(0);
+  });
+
+  it("reports partial Google access and keeps Webetu pending until WhatsApp is linked", () => {
+    const model = dashboardModel({
+      account: {
+        available: true,
+        data: {
+          services: { calendar: "not_connected", gmail: "connected", webetu: "connected" },
+          whatsappLinked: false,
+        },
+      },
+      jobScout: { available: true, data: { configured: false } },
+      publicUserId,
+      webetu: {
+        available: true,
+        data: { configured: true, status: "active", whatsappLinked: false },
+      },
+    });
+
+    expect(model.connections.google.state).toBe("partial");
+    expect(model.connections.google.label).toBe("Google partially linked");
+    expect(model.services).toEqual([
+      expect.objectContaining({ name: "Webetu Reservations", ready: false, state: "setup_needed" }),
+    ]);
+    expect(model.cronRows).toEqual([]);
+    expect(model.nextRunLabel).toBe("No run scheduled");
+  });
+
+  it("keeps revoked Webetu visible even after its service flag becomes not connected", () => {
+    const model = dashboardModel({
+      account: {
+        available: true,
+        data: { services: { webetu: "not_connected" }, whatsappLinked: true },
+      },
+      jobScout: { available: true, data: { configured: false } },
+      publicUserId,
+      webetu: {
+        available: true,
+        data: { configured: false, status: "revoked", whatsappLinked: true },
+      },
+    });
+
+    expect(model.services).toEqual([
+      expect.objectContaining({ name: "Webetu Reservations", state: "revoked", status: "Credentials revoked" }),
+    ]);
+  });
+
+  it("only schedules rows for ready registered services", () => {
+    const model = dashboardModel({
+      account: {
+        available: true,
+        data: {
+          services: { jobs: "subscribed", webetu: "not_subscribed" },
+          whatsappLinked: true,
+        },
+      },
+      jobScout: {
+        available: true,
+        data: {
+          configured: true,
+          cvAvailable: true,
+          gmailConnected: true,
+          linked: true,
+          missingRequirements: [],
+          ready: true,
+        },
+      },
+      publicUserId,
+      webetu: { available: true, data: { configured: false, status: "not_saved" } },
+    });
+
+    expect(model.cronRows.map((row) => row.task)).toEqual(["Search & Apply Jobs", "Deliver Results"]);
+    expect(model.nextRunLabel).toBe("12:00 PM");
+  });
+
+  it("does not turn data-loading failures into disconnected states", () => {
+    const model = dashboardModel({
+      account: {
+        available: true,
+        data: { services: { jobs: "subscribed" }, whatsappLinked: false },
+      },
+      jobScout: { available: false, data: null },
+      publicUserId,
+      webetu: { available: false, data: null },
+    });
+
+    expect(model.hasStatusError).toBe(true);
+    expect(model.services).toEqual([
+      expect.objectContaining({ name: "Job Scout", state: "unavailable", status: "Status unavailable" }),
+    ]);
+  });
+
+  it("links Settings cards to Google and WhatsApp management", () => {
+    render(
+      <DashboardSettings
+        calendarConnected={false}
+        gmailConnected
+        publicUserId={publicUserId}
+        whatsappLinked={false}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeVisible();
+    expect(screen.getByRole("link", { name: /connect google/i })).toHaveAttribute("href", `/${publicUserId}/connect-gmail`);
+    expect(screen.getByRole("link", { name: /whatsapp linking/i })).toHaveAttribute("href", `/${publicUserId}/whatsapp`);
+    expect(screen.getByText("Gmail connected")).toBeVisible();
+    expect(screen.getByText("WhatsApp not linked")).toBeVisible();
+    expect(screen.getByText(/complete google and whatsapp linking/i)).toBeVisible();
+  });
+
+  it("shows unavailable Settings states without calling them disconnected", () => {
+    render(
+      <DashboardSettings
+        calendarConnected={false}
+        gmailConnected={false}
+        publicUserId={publicUserId}
+        statusAvailable={false}
+        whatsappLinked={false}
+      />,
+    );
+
+    expect(screen.getByText("Gmail status unavailable")).toBeVisible();
+    expect(screen.getByText("Calendar status unavailable")).toBeVisible();
+    expect(screen.getByText("WhatsApp status unavailable")).toBeVisible();
+    expect(screen.queryByText("WhatsApp not linked")).not.toBeInTheDocument();
+  });
+
+  it("clears the server session before redirecting from sign out", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      if (String(input) === "/auth/session/logout") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ configured: false, missing: ["config"] }), { status: 200 });
+    });
+    const redirect = vi.fn();
+
+    await endDashboardSession(fetcher, redirect);
+
+    expect(fetcher).toHaveBeenNthCalledWith(1, "/auth/session/logout", expect.objectContaining({ method: "POST" }));
+    expect(redirect).toHaveBeenCalledWith("/login");
+  });
+});

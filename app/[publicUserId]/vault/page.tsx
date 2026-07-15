@@ -4,6 +4,7 @@ import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
 import { getWebetuCredentialStatus } from "@/src/domains/webetu";
+import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
@@ -45,7 +46,6 @@ export default async function VaultPage({
     redirect("/login");
   }
 
-  const homePath = `/${publicUserId}`;
   const onboardingPath = `/${publicUserId}/onboarding`;
 
   const webetuStatus = await getWebetuCredentialStatus(uid).catch(() => null);
@@ -171,46 +171,62 @@ webetuPasswordToggle.addEventListener("click", function() {
 });
 `;
 
+  const userLabel =
+    (routeUser as { profile?: { displayName?: string; email?: string } }).profile?.displayName
+    ?? (routeUser as { profile?: { email?: string } }).profile?.email
+    ?? verified.name
+    ?? verified.email
+    ?? "Account";
+  const webetuPanel = (
+    <section className="panel panel-narrow dashboard-form-panel" aria-labelledby="vault-title">
+      <div className="panel-head">
+        <div>
+          <h1 id="vault-title">Webetu Reservations</h1>
+          <p>Save the Webetu account used for meal reservations.</p>
+        </div>
+        <StatusPill data-webetu-status kind={webetuKind}>{webetuLabel}</StatusPill>
+      </div>
+      <div className="account-meta">
+        <StatusPill data-whatsapp-status kind={whatsappLinked ? "complete" : "unlinked"}>{whatsappLabel}</StatusPill>
+        <span data-whatsapp-copy>{whatsappCopy}</span>
+      </div>
+      <form className="form-stack" data-webetu-form>
+        <label>
+          Webetu username
+          <input data-webetu-username name="username" autoComplete="username" maxLength={120} required />
+        </label>
+        <label>
+          Webetu password
+          <span className="password-field">
+            <input data-webetu-password name="password" type="password" autoComplete="current-password" maxLength={256} required />
+            <button className="password-toggle" data-webetu-password-toggle type="button" aria-label="Show Webetu password" aria-pressed="false">Show</button>
+          </span>
+        </label>
+        <div className="actions">
+          <button data-webetu-save type="submit">{webetuSaveLabel}</button>
+          <button className="danger" data-webetu-revoke type="button" hidden={!webetuConfigured}>Revoke</button>
+          {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
+          <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
+        </div>
+      </form>
+      <StatusNotice data-webetu-message />
+    </section>
+  );
+
   return (
     <>
-      <main className="app-main app-main-center">
-        <div className="shell shell-narrow">
-          {onboardingMode ? <OnboardingProgress backHref={onboardingPath} current={3} total={3} /> : <a className="toplink" href={homePath}>Back to dashboard</a>}
-          <section className="panel panel-narrow" aria-labelledby="vault-title">
-            <div className="panel-head">
-              <div>
-                <h1 id="vault-title">Credentials Vault</h1>
-                <p>Save the Webetu account used for meal reservations.</p>
-              </div>
-              <StatusPill data-webetu-status kind={webetuKind}>{webetuLabel}</StatusPill>
-            </div>
-            <div className="account-meta">
-              <StatusPill data-whatsapp-status kind={whatsappLinked ? "complete" : "unlinked"}>{whatsappLabel}</StatusPill>
-              <span data-whatsapp-copy>{whatsappCopy}</span>
-            </div>
-            <form className="form-stack" data-webetu-form>
-              <label>
-                Webetu username
-                <input data-webetu-username name="username" autoComplete="username" maxLength={120} required />
-              </label>
-              <label>
-                Webetu password
-                <span className="password-field">
-                  <input data-webetu-password name="password" type="password" autoComplete="current-password" maxLength={256} required />
-                  <button className="password-toggle" data-webetu-password-toggle type="button" aria-label="Show Webetu password" aria-pressed="false">Show</button>
-                </span>
-              </label>
-              <div className="actions">
-                <button data-webetu-save type="submit">{webetuSaveLabel}</button>
-                <button className="danger" data-webetu-revoke type="button" hidden={!webetuConfigured}>Revoke</button>
-                {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
-                <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
-              </div>
-            </form>
-            <StatusNotice data-webetu-message />
-          </section>
-        </div>
-      </main>
+      {onboardingMode ? (
+        <main className="app-main app-main-center">
+          <div className="shell shell-narrow">
+            <OnboardingProgress backHref={onboardingPath} current={3} total={3} />
+            {webetuPanel}
+          </div>
+        </main>
+      ) : (
+        <DashboardShell active="webetu" publicUserId={publicUserId} userLabel={userLabel}>
+          {webetuPanel}
+        </DashboardShell>
+      )}
       <script dangerouslySetInnerHTML={{ __html: vaultScript }} />
     </>
   );

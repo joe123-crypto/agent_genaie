@@ -4,6 +4,7 @@ import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
 import { getJobScoutStatusForUser } from "@/src/domains/job-scout";
+import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
@@ -70,9 +71,8 @@ export default async function JobScoutSetupPage({
     getJobScoutStatusForUser(uid).catch(() => null),
   ]);
 
-  const homePath = `/${publicUserId}`;
   const onboardingPath = `/${publicUserId}/onboarding`;
-  const connectPath = `${homePath}/connect-gmail${onboardingMode ? "?onboarding=1" : ""}`;
+  const connectPath = `/${publicUserId}/connect-gmail${onboardingMode ? "?onboarding=1" : ""}`;
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? verified.email ?? "signed-in user";
   const displayName =
     jobScoutStatus?.profile?.displayName
@@ -156,75 +156,86 @@ form.addEventListener("submit", async function(event) {
 });
 `;
 
+  const userLabel = displayName || email;
+  const setupPanel = (
+    <section className="panel dashboard-form-panel" aria-labelledby="job-scout-title">
+      <div className="panel-head">
+        <div>
+          <h1 id="job-scout-title">Job Scout Setup</h1>
+          <p>Complete the profile Job Scout uses for applications.</p>
+        </div>
+        <StatusPill data-ready-status kind={ready ? "complete" : "pending"}>{ready ? "Ready" : "Draft"}</StatusPill>
+      </div>
+      <div className="status-row" aria-label="Job Scout requirements">
+        <StatusPill kind={whatsappLinked ? "complete" : "unlinked"}>{whatsappLinked ? "WhatsApp: Linked" : "WhatsApp: Not linked"}</StatusPill>
+        <StatusPill kind={googleConnected ? "complete" : "unlinked"}>{googleConnected ? "Google: Connected" : "Google: Not connected"}</StatusPill>
+        <StatusPill data-cv-status kind={cvAvailable ? "complete" : "pending"}>{cvAvailable ? "CV: Uploaded" : "CV: Missing"}</StatusPill>
+      </div>
+      <StatusNotice className="missing" data-missing kind={ready ? "complete" : "warning"}>{missingCopy(jobScoutStatus?.missingRequirements)}</StatusNotice>
+      <form className="form-stack" data-job-scout-form>
+        <div className="grid">
+          <label>
+            Display name
+            <input name="displayName" defaultValue={displayName} maxLength={120} autoComplete="name" required />
+          </label>
+          <div className="readonly">
+            Email
+            <span>{email}</span>
+          </div>
+        </div>
+        <label>
+          CV PDF
+          <input data-cv name="cv" type="file" accept="application/pdf,.pdf" />
+          <span className="file-note">{cvAvailable ? "A CV is already uploaded. Choose a new PDF to replace it." : "Upload a PDF CV, max 4 MB."}</span>
+          <span className="file-note" data-cv-name>No new file selected</span>
+        </label>
+        <div className="grid">
+          <label>
+            Target role
+            <input name="targetRole" defaultValue={targetRole} maxLength={200} required />
+          </label>
+          <label>
+            Target location
+            <input name="targetLocation" defaultValue={targetLocation} maxLength={200} required />
+          </label>
+        </div>
+        <label>
+          Country code
+          <input name="country" defaultValue={country} minLength={2} maxLength={2} pattern="[A-Za-z]{2}" required />
+        </label>
+        <label className="check">
+          <input name="profileConfirmed" type="checkbox" defaultChecked={!!jobScoutStatus?.profileConfirmed} required />
+          <span>I confirm my profile and job preferences are accurate.</span>
+        </label>
+        <label className="check">
+          <input name="safetyAcknowledged" type="checkbox" defaultChecked={!!jobScoutStatus?.safetyAcknowledged} required />
+          <span>I will not pay upfront, I understand job scams exist, and Genaie is not accountable if I am scammed.</span>
+        </label>
+        <div className="actions">
+          <button data-save type="submit">Save Job Scout setup</button>
+          <a className="button secondary" href={connectPath}>Connect Google</a>
+          {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
+          <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
+        </div>
+      </form>
+      <StatusNotice data-message />
+    </section>
+  );
+
   return (
     <>
-      <main className="app-main app-main-center">
-        <div className="shell">
-          {onboardingMode ? <OnboardingProgress backHref={onboardingPath} current={4} total={4} /> : <a className="toplink" href={homePath}>Back to dashboard</a>}
-          <section className="panel" aria-labelledby="job-scout-title">
-            <div className="panel-head">
-              <div>
-                <h1 id="job-scout-title">Job Scout Setup</h1>
-                <p>Complete the profile Job Scout uses for applications.</p>
-              </div>
-              <StatusPill data-ready-status kind={ready ? "complete" : "pending"}>{ready ? "Ready" : "Draft"}</StatusPill>
-            </div>
-            <div className="status-row" aria-label="Job Scout requirements">
-              <StatusPill kind={whatsappLinked ? "complete" : "unlinked"}>{whatsappLinked ? "WhatsApp: Linked" : "WhatsApp: Not linked"}</StatusPill>
-              <StatusPill kind={googleConnected ? "complete" : "unlinked"}>{googleConnected ? "Google: Connected" : "Google: Not connected"}</StatusPill>
-              <StatusPill data-cv-status kind={cvAvailable ? "complete" : "pending"}>{cvAvailable ? "CV: Uploaded" : "CV: Missing"}</StatusPill>
-            </div>
-            <StatusNotice className="missing" data-missing kind={ready ? "complete" : "warning"}>{missingCopy(jobScoutStatus?.missingRequirements)}</StatusNotice>
-            <form className="form-stack" data-job-scout-form>
-              <div className="grid">
-                <label>
-                  Display name
-                  <input name="displayName" defaultValue={displayName} maxLength={120} autoComplete="name" required />
-                </label>
-                <div className="readonly">
-                  Email
-                  <span>{email}</span>
-                </div>
-              </div>
-              <label>
-                CV PDF
-                <input data-cv name="cv" type="file" accept="application/pdf,.pdf" />
-                <span className="file-note">{cvAvailable ? "A CV is already uploaded. Choose a new PDF to replace it." : "Upload a PDF CV, max 4 MB."}</span>
-                <span className="file-note" data-cv-name>No new file selected</span>
-              </label>
-              <div className="grid">
-                <label>
-                  Target role
-                  <input name="targetRole" defaultValue={targetRole} maxLength={200} required />
-                </label>
-                <label>
-                  Target location
-                  <input name="targetLocation" defaultValue={targetLocation} maxLength={200} required />
-                </label>
-              </div>
-              <label>
-                Country code
-                <input name="country" defaultValue={country} minLength={2} maxLength={2} pattern="[A-Za-z]{2}" required />
-              </label>
-              <label className="check">
-                <input name="profileConfirmed" type="checkbox" defaultChecked={!!jobScoutStatus?.profileConfirmed} required />
-                <span>I confirm my profile and job preferences are accurate.</span>
-              </label>
-              <label className="check">
-                <input name="safetyAcknowledged" type="checkbox" defaultChecked={!!jobScoutStatus?.safetyAcknowledged} required />
-                <span>I will not pay upfront, I understand job scams exist, and Genaie is not accountable if I am scammed.</span>
-              </label>
-              <div className="actions">
-                <button data-save type="submit">Save Job Scout setup</button>
-                <a className="button secondary" href={connectPath}>Connect Google</a>
-                {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
-                <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
-              </div>
-            </form>
-            <StatusNotice data-message />
-          </section>
-        </div>
-      </main>
+      {onboardingMode ? (
+        <main className="app-main app-main-center">
+          <div className="shell">
+            <OnboardingProgress backHref={onboardingPath} current={4} total={4} />
+            {setupPanel}
+          </div>
+        </main>
+      ) : (
+        <DashboardShell active="job-scout" publicUserId={publicUserId} userLabel={userLabel}>
+          {setupPanel}
+        </DashboardShell>
+      )}
       <script dangerouslySetInnerHTML={{ __html: pageScript }} />
     </>
   );

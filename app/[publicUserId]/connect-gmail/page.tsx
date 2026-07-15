@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
@@ -45,7 +46,6 @@ export default async function ConnectGmailPage({
     redirect("/login");
   }
 
-  const homePath = `/${publicUserId}`;
   const onboardingPath = `/${publicUserId}/onboarding`;
 
   // The user doc already fetched above records connection state.
@@ -77,7 +77,7 @@ function setPill(el, label, kind) {
 function setBusy(value) {
   connectButton.disabled = value;
   disconnectButton.disabled = value;
-  signOutButton.disabled = value;
+  if (signOutButton) signOutButton.disabled = value;
 }
 
 async function readJson(response) {
@@ -136,7 +136,7 @@ disconnectButton.addEventListener("click", async function() {
   } finally { setBusy(false); }
 });
 
-signOutButton.addEventListener("click", async function() {
+if (signOutButton) signOutButton.addEventListener("click", async function() {
   setBusy(true);
   await fetch("/auth/session/logout", {
     method: "POST",
@@ -158,34 +158,48 @@ signOutButton.addEventListener("click", async function() {
 });
 `;
 
+  const userLabel = (routeUser as { profile?: { displayName?: string; email?: string } }).profile?.displayName
+    || (routeUser as { profile?: { email?: string } }).profile?.email
+    || verified.name
+    || verified.email
+    || "Account";
+  const connectPanel = (
+    <section className="panel panel-narrow dashboard-form-panel" aria-labelledby="connect-google-title">
+      <h1 id="connect-google-title">Connect Google</h1>
+      <p>Connect Gmail and Calendar for job applications.</p>
+      <div data-signed-in>
+        <div className="meta">
+          <span>Signed in as <strong data-user-email>{email}</strong></span>
+          <div className="status-row" aria-label="Google connection status">
+            <StatusPill data-gmail-status kind={gmailConnected ? "complete" : "unlinked"}>{gmailConnected ? "Gmail: Connected" : "Gmail: Not connected"}</StatusPill>
+            <StatusPill data-calendar-status kind={calendarConnected ? "complete" : "unlinked"}>{calendarConnected ? "Calendar: Connected" : "Calendar: Not connected"}</StatusPill>
+          </div>
+        </div>
+        <div className="actions actions-spaced">
+          <button data-connect type="button">{gmailConnected ? "Reconnect Google" : "Connect Google"}</button>
+          <button className="danger" data-disconnect type="button" hidden={!gmailConnected}>Disconnect Google</button>
+          {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
+          {onboardingMode ? <button className="secondary" data-sign-out type="button">Sign out</button> : null}
+        </div>
+      </div>
+      <StatusNotice data-status hidden suppressHydrationWarning variant="block" />
+    </section>
+  );
+
   return (
     <>
-      <main className="app-main app-main-center">
-        <div className="shell shell-narrow">
-          {onboardingMode ? <OnboardingProgress backHref={onboardingPath} current={3} total={4} /> : null}
-          <section className="panel panel-narrow">
-            {!onboardingMode ? <a className="toplink" href={homePath}>Back to app</a> : null}
-            <h1>Connect Google</h1>
-            <p>Connect Gmail and Calendar for job applications.</p>
-            <div data-signed-in>
-              <div className="meta">
-                <span>Signed in as <strong data-user-email>{email}</strong></span>
-                <div className="status-row" aria-label="Google connection status">
-                  <StatusPill data-gmail-status kind={gmailConnected ? "complete" : "unlinked"}>{gmailConnected ? "Gmail: Connected" : "Gmail: Not connected"}</StatusPill>
-                  <StatusPill data-calendar-status kind={calendarConnected ? "complete" : "unlinked"}>{calendarConnected ? "Calendar: Connected" : "Calendar: Not connected"}</StatusPill>
-                </div>
-              </div>
-              <div className="actions actions-spaced">
-                <button data-connect type="button">{gmailConnected ? "Reconnect Google" : "Connect Google"}</button>
-                <button className="danger" data-disconnect type="button" hidden={!gmailConnected}>Disconnect Google</button>
-                {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
-                <button className="secondary" data-sign-out type="button">Sign out</button>
-              </div>
-            </div>
-            <StatusNotice data-status hidden suppressHydrationWarning variant="block" />
-          </section>
-        </div>
-      </main>
+      {onboardingMode ? (
+        <main className="app-main app-main-center">
+          <div className="shell shell-narrow">
+            <OnboardingProgress backHref={onboardingPath} current={3} total={4} />
+            {connectPanel}
+          </div>
+        </main>
+      ) : (
+        <DashboardShell active="settings" publicUserId={publicUserId} userLabel={userLabel}>
+          {connectPanel}
+        </DashboardShell>
+      )}
       <script type="module" dangerouslySetInnerHTML={{ __html: connectScript }} />
     </>
   );
