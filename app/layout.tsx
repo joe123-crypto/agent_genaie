@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import {Analytics} from "@vercel/analytics/next";
 import "./globals.css";
+
+const ubuntu = localFont({
+  src: "./fonts/Ubuntu-Variable.ttf",
+  weight: "100 800",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Agent Genaie",
@@ -10,7 +17,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>
+      <body className={ubuntu.className}>
         {children}
         <Analytics />
       </body>
