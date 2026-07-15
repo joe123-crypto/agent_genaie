@@ -10,6 +10,7 @@ import {
 import { getOnboardingStatus } from "@/src/domains/onboarding";
 import { maskPhone, setupPurposeLabel } from "@/src/lib/utils";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
+import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
 export const runtime = "nodejs";
@@ -230,59 +231,74 @@ if (switchButton) switchButton.addEventListener("click", async function() {
 });
 `;
 
+  const userLabel = accountStatus?.profile?.displayName
+    || accountStatus?.profile?.email
+    || verified.name
+    || verified.email
+    || "Account";
+  const whatsappPanel = (
+    <section className="panel panel-narrow dashboard-form-panel" aria-labelledby="whatsapp-title">
+      <div className="panel-head">
+        <div>
+          <h1 id="whatsapp-title">{tokenMode ? "Confirm WhatsApp link" : "WhatsApp Linking"}</h1>
+          <p>{tokenMode ? "Link the originating WhatsApp chat to this account." : "Link your WhatsApp number to this account."}</p>
+        </div>
+        <StatusPill data-whatsapp-status kind={statusKind}>{statusLabel}</StatusPill>
+      </div>
+      <div className="meta">
+        <span>Signed in as <strong>{email}</strong></span>
+        <span data-whatsapp-copy>{statusCopy}</span>
+        {invite ? <span><strong>WhatsApp:</strong> {maskPhone(invite.phone)}</span> : null}
+        {invite ? <span><strong>Purpose:</strong> {setupPurposeLabel(invite.purpose)}</span> : null}
+      </div>
+
+      {tokenMode ? (
+        <form className="actions actions-spaced" data-whatsapp-invite-form>
+          <button data-whatsapp-confirm type="submit">Confirm and link</button>
+          <button className="secondary" data-switch-account type="button">Use a different Google account</button>
+          <a className="button secondary" href={homePath}>Cancel</a>
+        </form>
+      ) : (
+        <>
+          <form className="form-stack" data-whatsapp-form hidden={whatsappLinked}>
+            <label>
+              WhatsApp number
+              <input data-whatsapp-phone name="phone" type="tel" autoComplete="tel" placeholder="+213600000000" maxLength={32} required />
+            </label>
+            <div className="actions">
+              <button data-whatsapp-submit type="submit">Create link request</button>
+              <a className="button" data-whatsapp-bot-link href="#" target="_blank" rel="noreferrer" hidden>Open WhatsApp bot</a>
+            </div>
+          </form>
+          <div className="actions">
+            <button className="danger" data-whatsapp-revoke type="button" hidden={!whatsappLinked}>Revoke WhatsApp link</button>
+            {chatHandoffUrl ? <a className="button" href={chatHandoffUrl}>Continue in WhatsApp</a> : null}
+            {onboardingMode && !chatHandoff ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
+            <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
+          </div>
+        </>
+      )}
+      {chatHandoff ? <p>Google is connected. Continue your Job Scout profile in WhatsApp.</p> : null}
+      <StatusNotice data-whatsapp-message />
+    </section>
+  );
+
   return (
     <>
-      <main className="app-main app-main-center">
-        <div className="shell shell-narrow">
-          {onboardingMode
-            ? <OnboardingProgress backHref={onboardingPath} current={2} total={onboardingTotal} />
-            : <a className="toplink" href={homePath}>Back to dashboard</a>}
-          <section className="panel panel-narrow" aria-labelledby="whatsapp-title">
-            <div className="panel-head">
-              <div>
-                <h1 id="whatsapp-title">{tokenMode ? "Confirm WhatsApp link" : "WhatsApp Linking"}</h1>
-                <p>{tokenMode ? "Link the originating WhatsApp chat to this account." : "Link your WhatsApp number to this account."}</p>
-              </div>
-              <StatusPill data-whatsapp-status kind={statusKind}>{statusLabel}</StatusPill>
-            </div>
-            <div className="meta">
-              <span>Signed in as <strong>{email}</strong></span>
-              <span data-whatsapp-copy>{statusCopy}</span>
-              {invite ? <span><strong>WhatsApp:</strong> {maskPhone(invite.phone)}</span> : null}
-              {invite ? <span><strong>Purpose:</strong> {setupPurposeLabel(invite.purpose)}</span> : null}
-            </div>
-
-            {tokenMode ? (
-              <form className="actions actions-spaced" data-whatsapp-invite-form>
-                <button data-whatsapp-confirm type="submit">Confirm and link</button>
-                <button className="secondary" data-switch-account type="button">Use a different Google account</button>
-                <a className="button secondary" href={homePath}>Cancel</a>
-              </form>
-            ) : (
-              <>
-                <form className="form-stack" data-whatsapp-form hidden={whatsappLinked}>
-                  <label>
-                    WhatsApp number
-                    <input data-whatsapp-phone name="phone" type="tel" autoComplete="tel" placeholder="+213600000000" maxLength={32} required />
-                  </label>
-                  <div className="actions">
-                    <button data-whatsapp-submit type="submit">Create link request</button>
-                    <a className="button" data-whatsapp-bot-link href="#" target="_blank" rel="noreferrer" hidden>Open WhatsApp bot</a>
-                  </div>
-                </form>
-                <div className="actions">
-                  <button className="danger" data-whatsapp-revoke type="button" hidden={!whatsappLinked}>Revoke WhatsApp link</button>
-                  {chatHandoffUrl ? <a className="button" href={chatHandoffUrl}>Continue in WhatsApp</a> : null}
-                  {onboardingMode && !chatHandoff ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
-                  <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
-                </div>
-              </>
-            )}
-            {chatHandoff ? <p>Google is connected. Continue your Job Scout profile in WhatsApp.</p> : null}
-            <StatusNotice data-whatsapp-message />
-          </section>
-        </div>
-      </main>
+      {onboardingMode || tokenMode ? (
+        <main className="app-main app-main-center">
+          <div className="shell shell-narrow">
+            {onboardingMode
+              ? <OnboardingProgress backHref={onboardingPath} current={2} total={onboardingTotal} />
+              : <a className="toplink" href={homePath}>Back to dashboard</a>}
+            {whatsappPanel}
+          </div>
+        </main>
+      ) : (
+        <DashboardShell active="settings" publicUserId={publicUserId} userLabel={userLabel}>
+          {whatsappPanel}
+        </DashboardShell>
+      )}
       <script type="module" dangerouslySetInnerHTML={{ __html: whatsappScript }} />
     </>
   );

@@ -47,6 +47,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ publi
         calendarConnected={accountStatus?.services.calendar === "connected"}
         gmailConnected={accountStatus?.services.gmail === "connected"}
         publicUserId={publicUserId}
+        statusAvailable={Boolean(accountStatus)}
         whatsappLinked={!!accountStatus?.whatsappLinked}
         whatsappMaskedPhone={accountStatus?.maskedPhone}
       />

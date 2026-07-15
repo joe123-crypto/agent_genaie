@@ -5,12 +5,13 @@ import {
   MessageCircle,
   ShieldCheck,
 } from "lucide-react";
-import { StatusPill } from "@/app/_components/status-ui";
+import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
 type DashboardSettingsProps = {
   calendarConnected: boolean;
   gmailConnected: boolean;
   publicUserId: string;
+  statusAvailable?: boolean;
   whatsappLinked: boolean;
   whatsappMaskedPhone?: string | null;
 };
@@ -19,10 +20,14 @@ export function DashboardSettings({
   calendarConnected,
   gmailConnected,
   publicUserId,
+  statusAvailable = true,
   whatsappLinked,
   whatsappMaskedPhone,
 }: DashboardSettingsProps) {
-  const googleConnected = gmailConnected || calendarConnected;
+  const googleConnected = gmailConnected && calendarConnected;
+  const gmailLabel = !statusAvailable ? "Gmail status unavailable" : gmailConnected ? "Gmail connected" : "Gmail not linked";
+  const calendarLabel = !statusAvailable ? "Calendar status unavailable" : calendarConnected ? "Calendar connected" : "Calendar not linked";
+  const whatsappLabel = !statusAvailable ? "WhatsApp status unavailable" : whatsappLinked ? "WhatsApp linked" : "WhatsApp not linked";
 
   return (
     <>
@@ -33,6 +38,12 @@ export function DashboardSettings({
         </div>
       </header>
 
+      {!statusAvailable ? (
+        <StatusNotice kind="warning" variant="block">
+          Connection status could not be loaded. Open a connection to verify its current state.
+        </StatusNotice>
+      ) : null}
+
       <section className="settings-grid" aria-label="Connection settings">
         <a className="settings-card" href={`/${publicUserId}/connect-gmail`}>
           <span className="overview-icon"><Mail aria-hidden="true" /></span>
@@ -40,8 +51,8 @@ export function DashboardSettings({
             <h2>Connect Google</h2>
             <p>Manage Gmail and Calendar access for job applications.</p>
             <div className="settings-pills">
-              <StatusPill kind={gmailConnected ? "complete" : "unlinked"}>{gmailConnected ? "Gmail connected" : "Gmail not linked"}</StatusPill>
-              <StatusPill kind={calendarConnected ? "complete" : "unlinked"}>{calendarConnected ? "Calendar connected" : "Calendar not linked"}</StatusPill>
+              <StatusPill kind={!statusAvailable ? "error" : gmailConnected ? "complete" : "unlinked"}>{gmailLabel}</StatusPill>
+              <StatusPill kind={!statusAvailable ? "error" : calendarConnected ? "complete" : "unlinked"}>{calendarLabel}</StatusPill>
             </div>
           </div>
           <ChevronRight aria-hidden="true" />
@@ -51,9 +62,9 @@ export function DashboardSettings({
           <span className="overview-icon"><MessageCircle aria-hidden="true" /></span>
           <div>
             <h2>WhatsApp Linking</h2>
-            <p>{whatsappLinked ? `Linked to ${whatsappMaskedPhone || "your WhatsApp number"}.` : "Connect a WhatsApp number for delivery updates."}</p>
+            <p>{!statusAvailable ? "WhatsApp connection status could not be loaded." : whatsappLinked ? `Linked to ${whatsappMaskedPhone || "your WhatsApp number"}.` : "Connect a WhatsApp number for delivery updates."}</p>
             <div className="settings-pills">
-              <StatusPill kind={whatsappLinked ? "complete" : "unlinked"}>{whatsappLinked ? "WhatsApp linked" : "WhatsApp not linked"}</StatusPill>
+              <StatusPill kind={!statusAvailable ? "error" : whatsappLinked ? "complete" : "unlinked"}>{whatsappLabel}</StatusPill>
             </div>
           </div>
           <ChevronRight aria-hidden="true" />
@@ -65,7 +76,9 @@ export function DashboardSettings({
         <div>
           <h2>Connection Coverage</h2>
           <p>
-            {googleConnected && whatsappLinked
+            {!statusAvailable
+              ? "Connection coverage is temporarily unavailable."
+              : googleConnected && whatsappLinked
               ? "Core account links are ready for service automation."
               : "Complete Google and WhatsApp linking to unlock the full service workflow."}
           </p>

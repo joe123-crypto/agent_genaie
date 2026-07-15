@@ -10,74 +10,40 @@ import {
   Send,
   Utensils,
 } from "lucide-react";
-import { StatusNotice, StatusPill, type StatusKind } from "@/app/_components/status-ui";
+import type { ConnectionState, DashboardCronRow, DashboardService, DashboardViewModel } from "@/app/_components/dashboard-model";
+import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
-type ConnectionStatus = {
-  googleCalendarConnected: boolean;
-  googleGmailConnected: boolean;
-  whatsappLinked: boolean;
-  whatsappMaskedPhone?: string | null;
-};
+export type DashboardOverviewProps = DashboardViewModel;
 
-type ServiceSummary = {
-  actionHref: string;
-  actionLabel: string;
-  details: string[];
-  kind: StatusKind;
-  name: string;
-  status: string;
-  type: "job-scout" | "webetu";
-};
-
-type CronRow = {
-  icon: "utensils" | "briefcase" | "send";
-  lastRun: string;
-  schedule: string;
-  service: string;
-  status: string;
-  task: string;
-  type: string;
-};
-
-export type DashboardOverviewProps = {
-  connections: ConnectionStatus;
-  cronRows: CronRow[];
-  nextRunLabel: string;
-  nextRunTime: string;
-  lastDeliveryLabel: string;
-  services: ServiceSummary[];
-};
-
-function CronIcon({ icon }: { icon: CronRow["icon"] }) {
+function CronIcon({ icon }: { icon: DashboardCronRow["icon"] }) {
   if (icon === "utensils") return <Utensils aria-hidden="true" />;
   if (icon === "briefcase") return <BriefcaseBusiness aria-hidden="true" />;
   return <Send aria-hidden="true" />;
 }
 
-function ServiceIcon({ type }: { type: ServiceSummary["type"] }) {
+function ServiceIcon({ type }: { type: DashboardService["type"] }) {
   if (type === "job-scout") return <BriefcaseBusiness aria-hidden="true" />;
   return <Utensils aria-hidden="true" />;
+}
+
+function statusDotClass(state: ConnectionState) {
+  if (state === "connected") return "status-dot is-live";
+  if (state === "partial") return "status-dot is-partial";
+  if (state === "unavailable") return "status-dot is-error";
+  return "status-dot";
 }
 
 export function DashboardOverview({
   connections,
   cronRows,
+  hasStatusError,
+  hero,
+  lastDeliveryCopy,
   lastDeliveryLabel,
+  nextRunCopy,
   nextRunLabel,
-  nextRunTime,
   services,
 }: DashboardOverviewProps) {
-  const googleConnected = connections.googleGmailConnected || connections.googleCalendarConnected;
-  const googleLabel = googleConnected ? "Google linked" : "Google not linked";
-  const googleCopy = [
-    connections.googleGmailConnected ? "Gmail" : null,
-    connections.googleCalendarConnected ? "Calendar" : null,
-  ].filter(Boolean).join(" + ") || "Connect Gmail and Calendar in Settings.";
-  const whatsappLabel = connections.whatsappLinked ? "WhatsApp linked" : "WhatsApp not linked";
-  const whatsappCopy = connections.whatsappLinked
-    ? connections.whatsappMaskedPhone || "Linked number"
-    : "Connect a WhatsApp number in Settings.";
-
   return (
     <>
       <header className="dashboard-topbar">
@@ -88,27 +54,35 @@ export function DashboardOverview({
         <div className="dashboard-whatsapp-card" aria-label="WhatsApp connection summary">
           <MessageCircle aria-hidden="true" />
           <div>
-            <strong>{whatsappLabel}</strong>
-            <span>{whatsappCopy}</span>
+            <strong>{connections.whatsapp.label}</strong>
+            <span>{connections.whatsapp.detail}</span>
           </div>
-          <span className={connections.whatsappLinked ? "status-dot is-live" : "status-dot"} />
+          <span className={statusDotClass(connections.whatsapp.state)} aria-hidden="true" />
         </div>
       </header>
 
+      {hasStatusError ? (
+        <StatusNotice kind="warning" variant="block">
+          Some account status could not be loaded. Displayed setup information may be incomplete.
+        </StatusNotice>
+      ) : null}
+
       <section className="overview-hero" aria-labelledby="overview-hero-title">
         <div>
-          <h2 id="overview-hero-title">Your AI agent is working for you.</h2>
-          <p>Sit back while Genaie Scout handles reservations and job applications.</p>
+          <h2 id="overview-hero-title">{hero.title}</h2>
+          <p>{hero.copy}</p>
         </div>
-        <Image
-          className="overview-hero-image"
-          src="/Pasted image (2).png"
-          alt="Robot assistant holding an envelope"
-          width={1536}
-          height={1024}
-          priority
-          sizes="(max-width: 900px) 74vw, 34vw"
-        />
+        <div className="overview-hero-art">
+          <Image
+            className="overview-hero-image"
+            src="/Pasted image (2).png"
+            alt="Robot assistant holding an envelope"
+            width={1536}
+            height={1024}
+            priority
+            sizes="(max-width: 820px) 72vw, 300px"
+          />
+        </div>
       </section>
 
       <section className="overview-status-grid" aria-label="Connection and service status">
@@ -116,16 +90,16 @@ export function DashboardOverview({
           <span className="overview-icon"><MessageCircle aria-hidden="true" /></span>
           <div>
             <span>WhatsApp</span>
-            <strong>{whatsappLabel}</strong>
-            <p>{whatsappCopy}</p>
+            <strong>{connections.whatsapp.label}</strong>
+            <p>{connections.whatsapp.detail}</p>
           </div>
         </article>
         <article className="overview-status-card">
           <span className="overview-icon"><Mail aria-hidden="true" /></span>
           <div>
             <span>Google</span>
-            <strong>{googleLabel}</strong>
-            <p>{googleCopy}</p>
+            <strong>{connections.google.label}</strong>
+            <p>{connections.google.detail}</p>
           </div>
         </article>
         <article className="overview-status-card">
@@ -184,7 +158,7 @@ export function DashboardOverview({
           <div>
             <span>Next Run</span>
             <strong>{nextRunLabel}</strong>
-            <p>{nextRunTime}</p>
+            <p>{nextRunCopy}</p>
           </div>
         </article>
         <article>
@@ -192,7 +166,7 @@ export function DashboardOverview({
           <div>
             <span>Last Delivery</span>
             <strong>{lastDeliveryLabel}</strong>
-            <p>To WhatsApp</p>
+            <p>{lastDeliveryCopy}</p>
           </div>
         </article>
       </section>
@@ -200,10 +174,11 @@ export function DashboardOverview({
       <section className="overview-table-panel" aria-labelledby="active-cron-title">
         <div className="overview-table-head">
           <h2 id="active-cron-title">Active Cron Jobs</h2>
-          <span><Clock3 aria-hidden="true" /> Dummy data</span>
+          <span><Clock3 aria-hidden="true" /> Sample schedule</span>
         </div>
-        <div className="overview-table-wrap">
-          <table className="overview-table">
+        {cronRows.length > 0 ? (
+          <div className="overview-table-wrap">
+            <table className="overview-table">
             <thead>
               <tr>
                 <th scope="col">Task</th>
@@ -224,13 +199,22 @@ export function DashboardOverview({
                   </td>
                   <td><span className="overview-chip">{row.type}</span></td>
                   <td>{row.schedule}</td>
-                  <td><span className="overview-live-status"><span className="status-dot is-live" />{row.status}</span></td>
+                  <td><span className="overview-live-status"><span className="status-dot is-live" aria-hidden="true" />{row.status}</span></td>
                   <td>{row.lastRun}</td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+        ) : (
+          <div className="overview-empty-schedule">
+            <Clock3 aria-hidden="true" />
+            <div>
+              <strong>No active tasks</strong>
+              <p>Complete a registered service setup to start scheduled work.</p>
+            </div>
+          </div>
+        )}
       </section>
     </>
   );

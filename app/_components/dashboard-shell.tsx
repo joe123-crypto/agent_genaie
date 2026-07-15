@@ -1,12 +1,11 @@
 import type { ReactNode } from "react";
 import {
   BriefcaseBusiness,
-  ChevronDown,
   Home,
   Settings,
   Utensils,
-  UserRound,
 } from "lucide-react";
+import { DashboardAccountMenu } from "@/app/_components/dashboard-account-menu";
 
 type DashboardSection = "overview" | "job-scout" | "webetu" | "settings";
 
@@ -55,13 +54,7 @@ export function DashboardShell({
             );
           })}
         </nav>
-        <div className="dashboard-user">
-          <span className="dashboard-user-avatar" aria-hidden="true">
-            <UserRound />
-          </span>
-          <span className="dashboard-user-label">{userLabel || "Account"}</span>
-          <ChevronDown aria-hidden="true" />
-        </div>
+        <DashboardAccountMenu userLabel={userLabel} />
       </aside>
       <section className="dashboard-content">{children}</section>
     </main>
