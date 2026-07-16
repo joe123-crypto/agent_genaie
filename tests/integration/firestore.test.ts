@@ -19,6 +19,7 @@ import {
   listJobApplications,
   resetJobScoutProfileForPhone,
 } from "@/src/domains/job-scout";
+import { listDashboardTasksForUser, upsertDashboardTaskStatus } from "@/src/domains/dashboard";
 import { syncUserToCentralData } from "@/src/domains/users";
 
 // Live round-trip against the Firestore emulator (started by CI via
@@ -252,6 +253,47 @@ test("createSignedInWhatsAppLinkRequest requires revoke before a different activ
     () => createSignedInWhatsAppLinkRequest(uid, "+213600000103"),
     (err: any) => err.status === 409,
   );
+});
+
+test("dashboard telemetry upsert writes the live task status shape", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-dashboard-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await db.collection("users").doc(uid).set({
+    profile: { email: "dashboard@example.com", displayName: "Dashboard User" },
+    publicUserId: "usr_dashboard000000",
+  });
+
+  const result = await upsertDashboardTaskStatus({
+    userId: uid,
+    taskId: "reserve_meals",
+    service: "webetu",
+    enabled: true,
+    status: "active",
+    scheduleLabel: "Daily - 10:00 AM",
+    timezone: "Africa/Algiers",
+    nextRunAt: "2026-07-17T09:00:00.000Z",
+    lastRunAt: "2026-07-16T06:45:00.000Z",
+    lastRunStatus: "success",
+    lastRunSummary: "Meals reserved",
+  });
+  assert.equal(result.ok, true);
+
+  const telemetry = await listDashboardTasksForUser(uid);
+  assert.equal(telemetry.tasks.length, 1);
+  assert.deepEqual(telemetry.tasks[0], {
+    enabled: true,
+    lastRunAt: "2026-07-16T06:45:00.000Z",
+    lastRunStatus: "success",
+    lastRunSummary: "Meals reserved",
+    nextRunAt: "2026-07-17T09:00:00.000Z",
+    scheduleLabel: "Daily - 10:00 AM",
+    service: "webetu",
+    status: "active",
+    taskId: "reserve_meals",
+    timezone: "Africa/Algiers",
+    updatedAt: telemetry.tasks[0].updatedAt,
+  });
+  assert.ok(telemetry.tasks[0].updatedAt);
 });
 
 test("bindAccountLinkInviteToUser does not overwrite an existing user phone link", opts, async () => {
