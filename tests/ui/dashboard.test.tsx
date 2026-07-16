@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { endDashboardSession } from "@/app/_components/dashboard-account-menu";
-import { buildDashboardViewModel } from "@/app/_components/dashboard-model";
+import { buildDashboardViewModel, type DashboardModelInput } from "@/app/_components/dashboard-model";
 import { DashboardOverview } from "@/app/_components/dashboard-overview";
 import { DashboardSettings } from "@/app/_components/dashboard-settings";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
@@ -20,42 +20,51 @@ vi.mock("next/image", () => ({
 
 const publicUserId = "usr_1234567890abcdef";
 
-function dashboardModel(overrides: Parameters<typeof buildDashboardViewModel>[0] = {
-  account: {
-    available: true,
-    data: {
-      maskedPhone: "+213 *** 4567",
-      services: {
-        calendar: "connected",
-        gmail: "connected",
-        jobs: "subscribed",
-        webetu: "connected",
+function readyInput(overrides: Partial<DashboardModelInput> = {}): DashboardModelInput {
+  return {
+    account: {
+      available: true,
+      data: {
+        maskedPhone: "+213...0000",
+        services: {
+          calendar: "connected",
+          gmail: "connected",
+          jobs: "subscribed",
+          webetu: "connected",
+        },
+        whatsappLinked: true,
       },
-      whatsappLinked: true,
     },
-  },
-  jobScout: {
-    available: true,
-    data: {
-      configured: true,
-      cvAvailable: true,
-      gmailConnected: true,
-      linked: true,
-      missingRequirements: [],
-      ready: true,
+    jobScout: {
+      available: true,
+      data: {
+        configured: true,
+        cvAvailable: true,
+        gmailConnected: true,
+        linked: true,
+        missingRequirements: [],
+        ready: true,
+      },
     },
-  },
-  publicUserId,
-  webetu: {
-    available: true,
-    data: {
-      configured: true,
-      status: "active",
-      whatsappLinked: true,
+    publicUserId,
+    telemetry: {
+      available: true,
+      data: { tasks: [] },
     },
-  },
-}) {
-  return buildDashboardViewModel(overrides);
+    webetu: {
+      available: true,
+      data: {
+        configured: true,
+        status: "active",
+        whatsappLinked: true,
+      },
+    },
+    ...overrides,
+  };
+}
+
+function dashboardModel(overrides: Partial<DashboardModelInput> = {}) {
+  return buildDashboardViewModel(readyInput(overrides));
 }
 
 describe("signed-in dashboard UI", () => {
@@ -88,7 +97,7 @@ describe("signed-in dashboard UI", () => {
     expect(screen.getByRole("menuitem", { name: /sign out/i })).toBeVisible();
   });
 
-  it("shows connection status, registered services, image 2, and service-specific sample rows", () => {
+  it("shows connection status and no dummy cron rows when telemetry is empty", () => {
     render(<DashboardOverview {...dashboardModel()} />);
 
     expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
@@ -97,10 +106,62 @@ describe("signed-in dashboard UI", () => {
     expect(screen.getByText("Google linked")).toBeVisible();
     expect(screen.getByText("Job Scout")).toBeVisible();
     expect(screen.getAllByText("Webetu Reservations").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("No live schedule reported yet").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Reserve Meals")).not.toBeInTheDocument();
+    expect(screen.queryByText("Search & Apply Jobs")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sample schedule")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sample delivery")).not.toBeInTheDocument();
+  });
+
+  it("renders active cron rows and metrics from live telemetry", () => {
+    render(
+      <DashboardOverview
+        {...dashboardModel({
+          telemetry: {
+            available: true,
+            data: {
+              tasks: [
+                {
+                  enabled: true,
+                  lastRunAt: "2026-07-16T06:45:00.000Z",
+                  lastRunStatus: "success",
+                  lastRunSummary: "Meals reserved",
+                  nextRunAt: "2026-07-17T09:00:00.000Z",
+                  scheduleLabel: "Daily - 10:00 AM",
+                  service: "webetu",
+                  status: "active",
+                  taskId: "reserve_meals",
+                  timezone: "Africa/Algiers",
+                  updatedAt: "2026-07-16T07:00:00.000Z",
+                },
+                {
+                  enabled: true,
+                  lastRunAt: "2026-07-16T08:15:00.000Z",
+                  lastRunStatus: "success",
+                  lastRunSummary: "Results delivered",
+                  nextRunAt: null,
+                  scheduleLabel: "After each task run",
+                  service: "delivery",
+                  status: "running",
+                  taskId: "deliver_results",
+                  timezone: "Africa/Algiers",
+                  updatedAt: "2026-07-16T08:20:00.000Z",
+                },
+              ],
+            },
+          },
+        })}
+      />,
+    );
+
+    const metrics = screen.getByLabelText("Agent schedule metrics");
+    expect(within(metrics).getByText("2")).toBeVisible();
+    expect(within(metrics).getByText("10:00 AM")).toBeVisible();
+    expect(within(metrics).getByText("9:15 AM")).toBeVisible();
     expect(screen.getByText("Reserve Meals")).toBeVisible();
-    expect(screen.getByText("Search & Apply Jobs")).toBeVisible();
     expect(screen.getByText("Deliver Results")).toBeVisible();
-    expect(screen.getAllByText("Sample schedule").length).toBeGreaterThan(0);
+    expect(screen.getByText("Daily - 10:00 AM")).toBeVisible();
+    expect(screen.getByText("Running")).toBeVisible();
   });
 
   it("reports partial Google access and keeps Webetu pending until WhatsApp is linked", () => {
@@ -113,7 +174,6 @@ describe("signed-in dashboard UI", () => {
         },
       },
       jobScout: { available: true, data: { configured: false } },
-      publicUserId,
       webetu: {
         available: true,
         data: { configured: true, status: "active", whatsappLinked: false },
@@ -136,7 +196,6 @@ describe("signed-in dashboard UI", () => {
         data: { services: { webetu: "not_connected" }, whatsappLinked: true },
       },
       jobScout: { available: true, data: { configured: false } },
-      publicUserId,
       webetu: {
         available: true,
         data: { configured: false, status: "revoked", whatsappLinked: true },
@@ -148,32 +207,86 @@ describe("signed-in dashboard UI", () => {
     ]);
   });
 
-  it("only schedules rows for ready registered services", () => {
+  it("only schedules rows from ready services and valid enabled telemetry", () => {
     const model = dashboardModel({
-      account: {
-        available: true,
-        data: {
-          services: { jobs: "subscribed", webetu: "not_subscribed" },
-          whatsappLinked: true,
-        },
-      },
-      jobScout: {
-        available: true,
-        data: {
-          configured: true,
-          cvAvailable: true,
-          gmailConnected: true,
-          linked: true,
-          missingRequirements: [],
-          ready: true,
-        },
-      },
-      publicUserId,
       webetu: { available: true, data: { configured: false, status: "not_saved" } },
+      telemetry: {
+        available: true,
+        data: {
+          tasks: [
+            {
+              enabled: true,
+              lastRunAt: "2026-07-16T08:15:00.000Z",
+              lastRunStatus: "success",
+              lastRunSummary: "Applications checked",
+              nextRunAt: "2026-07-17T11:00:00.000Z",
+              scheduleLabel: "Daily - 12:00 PM",
+              service: "job_scout",
+              status: "active",
+              taskId: "search_apply_jobs",
+              timezone: "Africa/Algiers",
+              updatedAt: "2026-07-16T08:20:00.000Z",
+            },
+            {
+              enabled: true,
+              lastRunAt: null,
+              lastRunStatus: null,
+              lastRunSummary: null,
+              nextRunAt: "2026-07-17T09:00:00.000Z",
+              scheduleLabel: "Daily - 10:00 AM",
+              service: "webetu",
+              status: "active",
+              taskId: "reserve_meals",
+              timezone: "Africa/Algiers",
+              updatedAt: null,
+            },
+            {
+              enabled: false,
+              lastRunAt: null,
+              lastRunStatus: null,
+              lastRunSummary: null,
+              nextRunAt: "2026-07-17T12:00:00.000Z",
+              scheduleLabel: "Disabled task",
+              service: "delivery",
+              status: "disabled",
+              taskId: "deliver_results",
+              timezone: "Africa/Algiers",
+              updatedAt: null,
+            },
+          ],
+        },
+      },
     });
 
-    expect(model.cronRows.map((row) => row.task)).toEqual(["Search & Apply Jobs", "Deliver Results"]);
+    expect(model.cronRows.map((row) => row.task)).toEqual(["Search & Apply Jobs"]);
     expect(model.nextRunLabel).toBe("12:00 PM");
+  });
+
+  it("ignores unknown telemetry tasks", () => {
+    const model = dashboardModel({
+      telemetry: {
+        available: true,
+        data: {
+          tasks: [
+            {
+              enabled: true,
+              lastRunAt: null,
+              lastRunStatus: null,
+              lastRunSummary: null,
+              nextRunAt: "2026-07-16T08:00:00.000Z",
+              scheduleLabel: "Bad task",
+              service: "webetu",
+              status: "active",
+              taskId: "unknown" as any,
+              timezone: "Africa/Algiers",
+              updatedAt: null,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(model.cronRows).toEqual([]);
   });
 
   it("does not turn data-loading failures into disconnected states", () => {
@@ -183,7 +296,6 @@ describe("signed-in dashboard UI", () => {
         data: { services: { jobs: "subscribed" }, whatsappLinked: false },
       },
       jobScout: { available: false, data: null },
-      publicUserId,
       webetu: { available: false, data: null },
     });
 

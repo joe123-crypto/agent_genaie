@@ -26,10 +26,10 @@ function ServiceIcon({ type }: { type: DashboardService["type"] }) {
   return <Utensils aria-hidden="true" />;
 }
 
-function statusDotClass(state: ConnectionState) {
-  if (state === "connected") return "status-dot is-live";
+function statusDotClass(state: ConnectionState | DashboardCronRow["statusKind"]) {
+  if (state === "connected" || state === "live") return "status-dot is-live";
   if (state === "partial") return "status-dot is-partial";
-  if (state === "unavailable") return "status-dot is-error";
+  if (state === "unavailable" || state === "error") return "status-dot is-error";
   return "status-dot";
 }
 
@@ -43,6 +43,7 @@ export function DashboardOverview({
   nextRunCopy,
   nextRunLabel,
   services,
+  telemetryAvailable,
 }: DashboardOverviewProps) {
   return (
     <>
@@ -63,7 +64,7 @@ export function DashboardOverview({
 
       {hasStatusError ? (
         <StatusNotice kind="warning" variant="block">
-          Some account status could not be loaded. Displayed setup information may be incomplete.
+          Some account or agent status could not be loaded. Displayed setup information may be incomplete.
         </StatusNotice>
       ) : null}
 
@@ -150,7 +151,7 @@ export function DashboardOverview({
           <div>
             <span>Tasks Scheduled</span>
             <strong>{cronRows.length}</strong>
-            <p>Upcoming cron jobs</p>
+            <p>{telemetryAvailable ? "Live agent tasks" : "Agent schedule unavailable"}</p>
           </div>
         </article>
         <article>
@@ -174,44 +175,44 @@ export function DashboardOverview({
       <section className="overview-table-panel" aria-labelledby="active-cron-title">
         <div className="overview-table-head">
           <h2 id="active-cron-title">Active Cron Jobs</h2>
-          <span><Clock3 aria-hidden="true" /> Sample schedule</span>
+          <span><Clock3 aria-hidden="true" /> Live agent schedule</span>
         </div>
         {cronRows.length > 0 ? (
           <div className="overview-table-wrap">
             <table className="overview-table">
-            <thead>
-              <tr>
-                <th scope="col">Task</th>
-                <th scope="col">Type</th>
-                <th scope="col">Schedule</th>
-                <th scope="col">Status</th>
-                <th scope="col">Last Run</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cronRows.map((row) => (
-                <tr key={row.task}>
-                  <td>
-                    <span className="overview-task">
-                      <span className="overview-icon"><CronIcon icon={row.icon} /></span>
-                      <span><strong>{row.task}</strong><small>{row.service}</small></span>
-                    </span>
-                  </td>
-                  <td><span className="overview-chip">{row.type}</span></td>
-                  <td>{row.schedule}</td>
-                  <td><span className="overview-live-status"><span className="status-dot is-live" aria-hidden="true" />{row.status}</span></td>
-                  <td>{row.lastRun}</td>
+              <thead>
+                <tr>
+                  <th scope="col">Task</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Schedule</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Last Run</th>
                 </tr>
-              ))}
-            </tbody>
+              </thead>
+              <tbody>
+                {cronRows.map((row) => (
+                  <tr key={row.taskId}>
+                    <td>
+                      <span className="overview-task">
+                        <span className="overview-icon"><CronIcon icon={row.icon} /></span>
+                        <span><strong>{row.task}</strong><small>{row.service}</small></span>
+                      </span>
+                    </td>
+                    <td><span className="overview-chip">{row.type}</span></td>
+                    <td>{row.schedule}</td>
+                    <td><span className="overview-live-status"><span className={statusDotClass(row.statusKind)} aria-hidden="true" />{row.status}</span></td>
+                    <td>{row.lastRun}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         ) : (
           <div className="overview-empty-schedule">
             <Clock3 aria-hidden="true" />
             <div>
-              <strong>No active tasks</strong>
-              <p>Complete a registered service setup to start scheduled work.</p>
+              <strong>{services.some((service) => service.ready) ? "No live schedule reported yet" : "No active tasks"}</strong>
+              <p>{services.some((service) => service.ready) ? "The agent has not published schedule telemetry for this account." : "Complete a registered service setup to start scheduled work."}</p>
             </div>
           </div>
         )}

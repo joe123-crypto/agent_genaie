@@ -4,10 +4,11 @@ import { buildDashboardViewModel } from "@/app/_components/dashboard-model";
 import { DashboardOverview } from "@/app/_components/dashboard-overview";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { SESSION_COOKIE_NAME } from "@/src/config";
+import { listDashboardTasksForUser } from "@/src/domains/dashboard";
 import { getJobScoutStatusForUser } from "@/src/domains/job-scout";
-import { getSignedInAccountStatus, resolvePublicUser, syncUserToCentralData } from "@/src/domains/users";
-import { getWebetuCredentialStatus } from "@/src/domains/webetu";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
+import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { getWebetuCredentialStatus } from "@/src/domains/webetu";
 
 export const runtime = "nodejs";
 
@@ -38,18 +39,21 @@ export default async function DashboardPage({ params }: { params: Promise<{ publ
     redirect("/login");
   }
 
-  const [accountResult, jobScoutResult, webetuResult] = await Promise.allSettled([
+  const [accountResult, jobScoutResult, webetuResult, telemetryResult] = await Promise.allSettled([
     getSignedInAccountStatus(uid),
     getJobScoutStatusForUser(uid),
     getWebetuCredentialStatus(uid),
+    listDashboardTasksForUser(uid),
   ]);
   const accountStatus = accountResult.status === "fulfilled" ? accountResult.value : null;
   const jobScoutStatus = jobScoutResult.status === "fulfilled" ? jobScoutResult.value : null;
   const webetuStatus = webetuResult.status === "fulfilled" ? webetuResult.value : null;
+  const telemetry = telemetryResult.status === "fulfilled" ? telemetryResult.value : null;
   const dashboard = buildDashboardViewModel({
     account: { available: accountResult.status === "fulfilled", data: accountStatus },
     jobScout: { available: jobScoutResult.status === "fulfilled", data: jobScoutStatus },
     publicUserId,
+    telemetry: { available: telemetryResult.status === "fulfilled", data: telemetry },
     webetu: { available: webetuResult.status === "fulfilled", data: webetuStatus },
   });
 

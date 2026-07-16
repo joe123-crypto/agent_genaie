@@ -58,6 +58,7 @@ Internal routes require `Authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY`:
 - `GET /internal/job-scout/subscribers` lists only Job Scout subscribers who pass the backend readiness checks.
 - `GET /internal/job-scout/applications` lists recorded Job Scout applications for one user.
 - `POST /internal/job-scout/applications` records an applied, skipped, physical-submission, or failed Job Scout outcome.
+- `POST /internal/dashboard/tasks` upserts one live dashboard task status snapshot for a user. Pass `userId`, or pass `phone` to resolve the active linked user.
 - `GET /internal/webetu/restaurants` lists supported Webetu restaurant names.
 - `GET /internal/webetu/preferences?phone=...` reads a linked user's Webetu restaurant preference.
 - `POST /internal/webetu/preferences/default` saves a confirmed default restaurant for a linked WhatsApp phone.
@@ -114,6 +115,7 @@ Enable Firestore for the same Firebase project. Agent Genaie writes central reco
 - `jobScoutDeliveryByPhone` — Job Scout delivery records keyed by phone hash
 - `jobApplications` — recorded Job Scout application outcomes
 - `webetuDeliveryByPhone` — Webetu delivery records keyed by phone hash
+- `dashboardTaskStatus` — live agent schedule/run snapshots keyed by `<uid>_<taskId>` for the signed-in dashboard
 - `webetuPreferences` — per-user default restaurant and date overrides
 - `webetuOverrides` — per-user single-day restaurant override records
 - `webetuRestaurants` — restaurant catalog
@@ -195,6 +197,39 @@ Check the central database connection:
 curl http://127.0.0.1:3010/internal/central-data/status \
   -H "authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY"
 ```
+
+## Dashboard Telemetry
+
+The signed-in dashboard renders setup readiness from existing account/service records and schedule/run telemetry from Firestore. It does not synthesize sample cron rows. Until the agent publishes telemetry, ready services show “No live schedule reported yet.”
+
+Agent workers should publish each task through the internal route:
+
+```bash
+curl -X POST http://127.0.0.1:3010/internal/dashboard/tasks \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY" \
+  -d '{
+    "userId": "firebase-uid",
+    "taskId": "reserve_meals",
+    "service": "webetu",
+    "enabled": true,
+    "status": "active",
+    "scheduleLabel": "Daily - 10:00 AM",
+    "timezone": "Africa/Algiers",
+    "nextRunAt": "2026-07-17T09:00:00.000Z",
+    "lastRunAt": "2026-07-16T06:45:00.000Z",
+    "lastRunStatus": "success",
+    "lastRunSummary": "Meals reserved"
+  }'
+```
+
+Accepted `taskId` and `service` pairs:
+
+- `reserve_meals` with `webetu`
+- `search_apply_jobs` with `job_scout`
+- `deliver_results` with `delivery`
+
+`status` must be `active`, `running`, `paused`, `failed`, or `disabled`. `lastRunStatus`, when present, must be `success`, `partial`, `failed`, `skipped`, or `action_required`.
 
 ## Send Examples
 

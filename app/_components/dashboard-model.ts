@@ -2,6 +2,9 @@ import type { StatusKind } from "@/app/_components/status-ui";
 
 export type ConnectionState = "connected" | "partial" | "disconnected" | "unavailable";
 export type ServiceState = "ready" | "setup_needed" | "revoked" | "unavailable";
+export type DashboardTaskId = "reserve_meals" | "search_apply_jobs" | "deliver_results";
+export type DashboardTaskService = "webetu" | "job_scout" | "delivery";
+export type DashboardTaskStatus = "active" | "running" | "paused" | "failed" | "disabled";
 
 export type DashboardSource<T> = {
   available: boolean;
@@ -35,6 +38,24 @@ type WebetuStatusSnapshot = {
   whatsappLinked?: boolean;
 };
 
+export type DashboardTelemetryTask = {
+  enabled: boolean;
+  lastRunAt: string | null;
+  lastRunStatus: "success" | "partial" | "failed" | "skipped" | "action_required" | null;
+  lastRunSummary: string | null;
+  nextRunAt: string | null;
+  scheduleLabel: string | null;
+  service: DashboardTaskService;
+  status: DashboardTaskStatus;
+  taskId: DashboardTaskId;
+  timezone: string | null;
+  updatedAt: string | null;
+};
+
+export type DashboardTelemetrySnapshot = {
+  tasks: DashboardTelemetryTask[];
+};
+
 export type DashboardConnection = {
   detail: string;
   label: string;
@@ -56,10 +77,13 @@ export type DashboardService = {
 export type DashboardCronRow = {
   icon: "utensils" | "briefcase" | "send";
   lastRun: string;
+  lastRunAt: string | null;
   schedule: string;
   service: string;
   status: string;
+  statusKind: "live" | "partial" | "error";
   task: string;
+  taskId: DashboardTaskId;
   type: string;
 };
 
@@ -79,12 +103,14 @@ export type DashboardViewModel = {
   nextRunCopy: string;
   nextRunLabel: string;
   services: DashboardService[];
+  telemetryAvailable: boolean;
 };
 
 export type DashboardModelInput = {
   account: DashboardSource<AccountStatusSnapshot>;
   jobScout: DashboardSource<JobScoutStatusSnapshot>;
   publicUserId: string;
+  telemetry?: DashboardSource<DashboardTelemetrySnapshot>;
   webetu: DashboardSource<WebetuStatusSnapshot>;
 };
 
@@ -97,6 +123,32 @@ const missingLabels: Record<string, string> = {
   locations: "target location",
   profile_confirmation: "profile confirmation",
   safety_acknowledgement: "terms acknowledgement",
+};
+
+const taskMeta: Record<DashboardTaskId, {
+  icon: DashboardCronRow["icon"];
+  service: string;
+  task: string;
+  type: string;
+}> = {
+  reserve_meals: {
+    icon: "utensils",
+    service: "Webetu Reservations",
+    task: "Reserve Meals",
+    type: "Reservation",
+  },
+  search_apply_jobs: {
+    icon: "briefcase",
+    service: "Job Applications",
+    task: "Search & Apply Jobs",
+    type: "Jobs",
+  },
+  deliver_results: {
+    icon: "send",
+    service: "WhatsApp",
+    task: "Deliver Results",
+    type: "Delivery",
+  },
 };
 
 function isRegisteredService(value: unknown) {
@@ -250,52 +302,96 @@ function webetuService(input: DashboardModelInput): DashboardService | null {
   };
 }
 
-function sampleCronRows(services: DashboardService[]): DashboardCronRow[] {
-  const rows: DashboardCronRow[] = [];
-  if (services.some((service) => service.type === "webetu" && service.ready)) {
-    rows.push({
-      icon: "utensils",
-      lastRun: "7:45 AM",
-      schedule: "Daily - 10:00 AM",
-      service: "Webetu Reservations",
-      status: "Active",
-      task: "Reserve Meals",
-      type: "Reservation",
-    });
+function formatDateTimeLabel(value: string | null, timezone?: string | null) {
+  if (!value) return "Not reported";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not reported";
+  const options: Intl.DateTimeFormatOptions = {
+    hour: "numeric",
+    minute: "2-digit",
+  };
+  if (timezone) options.timeZone = timezone;
+  try {
+    return new Intl.DateTimeFormat("en-US", options).format(date);
+  } catch {
+    delete options.timeZone;
+    return new Intl.DateTimeFormat("en-US", options).format(date);
   }
-  if (services.some((service) => service.type === "job-scout" && service.ready)) {
-    rows.push({
-      icon: "briefcase",
-      lastRun: "9:15 AM",
-      schedule: "Daily - 12:00 PM",
-      service: "Job Applications",
-      status: "Active",
-      task: "Search & Apply Jobs",
-      type: "Jobs",
-    });
+}
+
+function taskStatusLabel(status: DashboardTaskStatus) {
+  if (status === "running") return "Running";
+  if (status === "paused") return "Paused";
+  if (status === "failed") return "Failed";
+  if (status === "disabled") return "Disabled";
+  return "Active";
+}
+
+function taskStatusKind(status: DashboardTaskStatus): DashboardCronRow["statusKind"] {
+  if (status === "failed") return "error";
+  if (status === "paused") return "partial";
+  return "live";
+}
+
+function serviceIsReadyForTask(taskId: DashboardTaskId, services: DashboardService[]) {
+  if (taskId === "reserve_meals") {
+    return services.some((service) => service.type === "webetu" && service.ready);
   }
-  if (rows.length > 0) {
-    const deliveryLastRun = rows.some((row) => row.icon === "briefcase") ? "9:15 AM" : "7:45 AM";
-    rows.push({
-      icon: "send",
-      lastRun: deliveryLastRun,
-      schedule: "After each task run",
-      service: "WhatsApp",
-      status: "Active",
-      task: "Deliver Results",
-      type: "Delivery",
-    });
+  if (taskId === "search_apply_jobs") {
+    return services.some((service) => service.type === "job-scout" && service.ready);
   }
-  return rows;
+  return services.some((service) => service.ready);
+}
+
+function telemetryCronRows(
+  telemetry: DashboardSource<DashboardTelemetrySnapshot> | undefined,
+  services: DashboardService[],
+): DashboardCronRow[] {
+  if (!telemetry?.available || !telemetry.data) return [];
+  return telemetry.data.tasks
+    .filter((task) => Boolean(taskMeta[task.taskId]))
+    .filter((task) => task.enabled && task.status !== "disabled")
+    .filter((task) => serviceIsReadyForTask(task.taskId, services))
+    .sort((a, b) => {
+      const aNext = a.nextRunAt ? new Date(a.nextRunAt).getTime() : Number.POSITIVE_INFINITY;
+      const bNext = b.nextRunAt ? new Date(b.nextRunAt).getTime() : Number.POSITIVE_INFINITY;
+      return aNext - bNext || a.taskId.localeCompare(b.taskId);
+    })
+    .map((task) => {
+      const meta = taskMeta[task.taskId];
+      return {
+        ...meta,
+        lastRun: formatDateTimeLabel(task.lastRunAt, task.timezone),
+        lastRunAt: task.lastRunAt,
+        schedule: task.scheduleLabel || "Schedule not reported",
+        status: taskStatusLabel(task.status),
+        statusKind: taskStatusKind(task.status),
+        taskId: task.taskId,
+      };
+    });
+}
+
+function earliestNextRun(rows: DashboardCronRow[], telemetry: DashboardTelemetrySnapshot | null | undefined) {
+  const rowIds = new Set(rows.map((row) => row.taskId));
+  return (telemetry?.tasks ?? [])
+    .filter((task) => rowIds.has(task.taskId) && task.nextRunAt)
+    .sort((a, b) => new Date(a.nextRunAt as string).getTime() - new Date(b.nextRunAt as string).getTime())[0] ?? null;
+}
+
+function latestDeliveryRun(telemetry: DashboardTelemetrySnapshot | null | undefined) {
+  return (telemetry?.tasks ?? [])
+    .filter((task) => task.taskId === "deliver_results" && task.lastRunAt)
+    .sort((a, b) => new Date(b.lastRunAt as string).getTime() - new Date(a.lastRunAt as string).getTime())[0] ?? null;
 }
 
 export function buildDashboardViewModel(input: DashboardModelInput): DashboardViewModel {
   const services = [jobScoutService(input), webetuService(input)].filter(
     (service): service is DashboardService => Boolean(service),
   );
-  const cronRows = sampleCronRows(services);
+  const cronRows = telemetryCronRows(input.telemetry, services);
   const readyServices = services.filter((service) => service.ready);
-  const hasStatusError = !input.account.available || !input.jobScout.available || !input.webetu.available;
+  const telemetryAvailable = input.telemetry?.available ?? true;
+  const hasStatusError = !input.account.available || !input.jobScout.available || !input.webetu.available || !telemetryAvailable;
 
   let hero: DashboardViewModel["hero"];
   if (readyServices.length > 0) {
@@ -320,9 +416,8 @@ export function buildDashboardViewModel(input: DashboardModelInput): DashboardVi
     };
   }
 
-  const nextService = services.find((service) => service.type === "webetu" && service.ready)
-    ?? services.find((service) => service.type === "job-scout" && service.ready);
-  const deliveryRow = cronRows.find((row) => row.icon === "send");
+  const nextRunTask = earliestNextRun(cronRows, input.telemetry?.data);
+  const deliveryTask = latestDeliveryRun(input.telemetry?.data);
 
   return {
     connections: {
@@ -332,10 +427,11 @@ export function buildDashboardViewModel(input: DashboardModelInput): DashboardVi
     cronRows,
     hasStatusError,
     hero,
-    lastDeliveryCopy: deliveryRow ? "Sample delivery" : "Nothing delivered yet",
-    lastDeliveryLabel: deliveryRow?.lastRun ?? "No deliveries",
-    nextRunCopy: nextService ? "Sample schedule" : "Nothing scheduled yet",
-    nextRunLabel: nextService?.type === "webetu" ? "10:00 AM" : nextService ? "12:00 PM" : "No run scheduled",
+    lastDeliveryCopy: deliveryTask?.lastRunSummary || (deliveryTask ? "Last agent delivery" : "Nothing delivered yet"),
+    lastDeliveryLabel: formatDateTimeLabel(deliveryTask?.lastRunAt ?? null, deliveryTask?.timezone).replace("Not reported", "No deliveries"),
+    nextRunCopy: nextRunTask ? "Live agent schedule" : readyServices.length > 0 ? "No live schedule reported yet" : "Nothing scheduled yet",
+    nextRunLabel: formatDateTimeLabel(nextRunTask?.nextRunAt ?? null, nextRunTask?.timezone).replace("Not reported", "No run scheduled"),
     services,
+    telemetryAvailable,
   };
 }
