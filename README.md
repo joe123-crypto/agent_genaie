@@ -1,6 +1,10 @@
 # Agent Genaie
 
-Agent Genaie is a Next.js app for user onboarding, Firebase-backed login, Gmail OAuth connection, and internal service calls that send email through connected Gmail accounts.
+Agent Genaie is the Genaie Scout web app: Job Scout is the product — an AI agent that searches and applies for jobs on a user's behalf and reports every application over WhatsApp. The Next.js app handles user onboarding, Firebase-backed login, Gmail OAuth connection, CV storage, and the internal service calls used by the agent workers.
+
+## Hidden Legacy Service: Webetu Reservations
+
+The product is Job Scout only. The Webetu meal-reservation service is hidden from every public-facing surface (landing page, onboarding, dashboard navigation and services) pending extraction into its own project. Its code remains functional: `/{publicUserId}/vault` still works by direct URL for existing users, and the `/webetu/*` and `/internal/webetu/*` routes and Webetu Firestore collections listed below stay live for the agent workers.
 
 ## Routes
 
@@ -14,16 +18,16 @@ Public routes:
 - `/config/firebase` exposes the non-secret Firebase browser config.
 - `/auth/google/callback` receives the Google OAuth callback.
 - `/whatsapp?token=...` preserves a WhatsApp-originated invite through sign-in and redirects to the signed-in user's scoped WhatsApp page.
-- `/privacy-policy` explains Webetu credential and Gmail permission usage.
+- `/privacy-policy` explains CV, Gmail permission, and WhatsApp usage.
 - `/health` checks service health.
 
 Protected routes require the `agent_genaie_session` cookie or a Firebase bearer token:
 
 - `/{publicUserId}` signed-in dashboard launcher with service tabs.
-- `/{publicUserId}/vault` signed-in Webetu credential vault.
+- `/{publicUserId}/vault` signed-in Webetu credential vault (legacy; reachable by direct URL only, not linked in navigation).
 - `/{publicUserId}/connect-gmail` authenticated Gmail connect/disconnect page.
 - `/{publicUserId}/job-scout` signed-in Job Scout setup page for CV, target role, target location, and acknowledgements.
-- `/{publicUserId}/onboarding` one-time signup onboarding controller.
+- `/{publicUserId}/onboarding` one-time signup onboarding controller; auto-selects Job Scout and forwards to the next required step.
 - `/{publicUserId}/whatsapp` is the canonical WhatsApp linking page. Invite mode shows the originating masked number and confirmation; direct-web mode accepts a number and starts bot verification.
 - `/connect-gmail` and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail OAuth for the signed-in Firebase user.
@@ -31,7 +35,7 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `POST /auth/google/revoke` revokes and removes stored Gmail tokens for the signed-in Firebase user.
 - `GET /account/status` returns the signed-in user's WhatsApp link and service status.
 - `GET /account/onboarding/status` returns the signed-in user's onboarding selection, state, and next required step.
-- `POST /account/onboarding/select` starts onboarding for `jobs` or `webetu`.
+- `POST /account/onboarding/select` starts onboarding for `jobs` or `webetu` (the web flow auto-selects `jobs`; `webetu` is accepted for legacy compatibility).
 - `POST /account/onboarding/skip` marks onboarding skipped.
 - `POST /account/onboarding/complete` marks onboarding complete once the selected service requirements are satisfied.
 - `POST /account/whatsapp/link-request` is the canonical linking handler: it confirms a WhatsApp-originated token or creates a direct-web phone verification request.

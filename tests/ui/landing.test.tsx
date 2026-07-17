@@ -23,11 +23,11 @@ describe("Genaie Scout landing page", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: /let an agent do the boring repetitive work for you/i,
+        name: /your ai agent that hunts for jobs while you live your life/i,
       }),
     ).toBeVisible();
-    expect(screen.getByText(/focus on what matters/i)).toBeVisible();
-    expect(screen.getByRole("link", { name: /get started/i })).toHaveAttribute(
+    expect(screen.getByText(/applies on your behalf/i)).toBeVisible();
+    expect(screen.getByRole("link", { name: /start your job hunt/i })).toHaveAttribute(
       "href",
       "/login",
     );

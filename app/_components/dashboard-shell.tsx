@@ -3,7 +3,6 @@ import {
   BriefcaseBusiness,
   Home,
   Settings,
-  Utensils,
 } from "lucide-react";
 import { DashboardAccountMenu } from "@/app/_components/dashboard-account-menu";
 
@@ -16,10 +15,11 @@ type DashboardShellProps = {
   userLabel?: string | null;
 };
 
+// Webetu is hidden from navigation (pending extraction into its own project);
+// the vault page stays reachable by direct URL with active="webetu".
 const navItems = [
   { key: "overview", label: "Overview", href: "", icon: Home },
   { key: "job-scout", label: "Job Scout", href: "/job-scout", icon: BriefcaseBusiness },
-  { key: "webetu", label: "Webetu Reservations", href: "/vault", icon: Utensils },
   { key: "settings", label: "Settings", href: "/settings", icon: Settings },
 ] as const;
 

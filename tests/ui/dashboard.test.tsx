@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { endDashboardSession } from "@/app/_components/dashboard-account-menu";
-import { buildDashboardViewModel, type DashboardModelInput } from "@/app/_components/dashboard-model";
+import { buildDashboardViewModel, webetuService, type DashboardModelInput } from "@/app/_components/dashboard-model";
 import { DashboardOverview } from "@/app/_components/dashboard-overview";
 import { DashboardSettings } from "@/app/_components/dashboard-settings";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
@@ -82,7 +82,6 @@ describe("signed-in dashboard UI", () => {
     expect(links.map((link) => link.textContent)).toEqual([
       "Overview",
       "Job Scout",
-      "Webetu Reservations",
       "Settings",
     ]);
     expect(screen.getByRole("link", { name: /overview/i })).toHaveAttribute("aria-current", "page");
@@ -104,8 +103,8 @@ describe("signed-in dashboard UI", () => {
     expect(screen.getByRole("img", { name: /robot assistant holding an envelope/i })).toHaveAttribute("src", "/Pasted image (2).png");
     expect(screen.getAllByText(/whatsapp linked/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Google linked")).toBeVisible();
-    expect(screen.getByText("Job Scout")).toBeVisible();
-    expect(screen.getAllByText("Webetu Reservations").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Job Scout").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Webetu Reservations")).not.toBeInTheDocument();
     expect(screen.getAllByText("No live schedule reported yet").length).toBeGreaterThan(0);
     expect(screen.queryByText("Reserve Meals")).not.toBeInTheDocument();
     expect(screen.queryByText("Search & Apply Jobs")).not.toBeInTheDocument();
@@ -125,12 +124,12 @@ describe("signed-in dashboard UI", () => {
                   enabled: true,
                   lastRunAt: "2026-07-16T06:45:00.000Z",
                   lastRunStatus: "success",
-                  lastRunSummary: "Meals reserved",
+                  lastRunSummary: "Applications submitted",
                   nextRunAt: "2026-07-17T09:00:00.000Z",
                   scheduleLabel: "Daily - 10:00 AM",
-                  service: "webetu",
+                  service: "job_scout",
                   status: "active",
-                  taskId: "reserve_meals",
+                  taskId: "search_apply_jobs",
                   timezone: "Africa/Algiers",
                   updatedAt: "2026-07-16T07:00:00.000Z",
                 },
@@ -147,6 +146,19 @@ describe("signed-in dashboard UI", () => {
                   timezone: "Africa/Algiers",
                   updatedAt: "2026-07-16T08:20:00.000Z",
                 },
+                {
+                  enabled: true,
+                  lastRunAt: null,
+                  lastRunStatus: null,
+                  lastRunSummary: null,
+                  nextRunAt: "2026-07-17T08:00:00.000Z",
+                  scheduleLabel: "Daily - 9:00 AM",
+                  service: "webetu",
+                  status: "active",
+                  taskId: "reserve_meals",
+                  timezone: "Africa/Algiers",
+                  updatedAt: null,
+                },
               ],
             },
           },
@@ -158,14 +170,15 @@ describe("signed-in dashboard UI", () => {
     expect(within(metrics).getByText("2")).toBeVisible();
     expect(within(metrics).getByText("10:00 AM")).toBeVisible();
     expect(within(metrics).getByText("9:15 AM")).toBeVisible();
-    expect(screen.getByText("Reserve Meals")).toBeVisible();
+    expect(screen.getByText("Search & Apply Jobs")).toBeVisible();
     expect(screen.getByText("Deliver Results")).toBeVisible();
     expect(screen.getByText("Daily - 10:00 AM")).toBeVisible();
     expect(screen.getByText("Running")).toBeVisible();
+    expect(screen.queryByText("Reserve Meals")).not.toBeInTheDocument();
   });
 
-  it("reports partial Google access and keeps Webetu pending until WhatsApp is linked", () => {
-    const model = dashboardModel({
+  it("reports partial Google access and hides Webetu from the dashboard services", () => {
+    const input = readyInput({
       account: {
         available: true,
         data: {
@@ -179,18 +192,20 @@ describe("signed-in dashboard UI", () => {
         data: { configured: true, status: "active", whatsappLinked: false },
       },
     });
+    const model = buildDashboardViewModel(input);
 
     expect(model.connections.google.state).toBe("partial");
     expect(model.connections.google.label).toBe("Google partially linked");
-    expect(model.services).toEqual([
-      expect.objectContaining({ name: "Webetu Reservations", ready: false, state: "setup_needed" }),
-    ]);
+    expect(model.services).toEqual([]);
     expect(model.cronRows).toEqual([]);
     expect(model.nextRunLabel).toBe("No run scheduled");
+    expect(webetuService(input)).toEqual(
+      expect.objectContaining({ name: "Webetu Reservations", ready: false, state: "setup_needed" }),
+    );
   });
 
-  it("keeps revoked Webetu visible even after its service flag becomes not connected", () => {
-    const model = dashboardModel({
+  it("keeps revoked Webetu status logic intact while hiding it from the dashboard", () => {
+    const input = readyInput({
       account: {
         available: true,
         data: { services: { webetu: "not_connected" }, whatsappLinked: true },
@@ -202,9 +217,10 @@ describe("signed-in dashboard UI", () => {
       },
     });
 
-    expect(model.services).toEqual([
+    expect(buildDashboardViewModel(input).services).toEqual([]);
+    expect(webetuService(input)).toEqual(
       expect.objectContaining({ name: "Webetu Reservations", state: "revoked", status: "Credentials revoked" }),
-    ]);
+    );
   });
 
   it("only schedules rows from ready services and valid enabled telemetry", () => {

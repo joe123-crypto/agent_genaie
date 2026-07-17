@@ -140,7 +140,7 @@ export function DashboardOverview({
           </div>
         ) : (
           <StatusNotice kind="info" variant="block">
-            No services are registered yet. Open Job Scout or Webetu Reservations to finish setup.
+            No services are registered yet. Open Job Scout to finish setup.
           </StatusNotice>
         )}
       </section>

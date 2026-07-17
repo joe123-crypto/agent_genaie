@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Image from "next/image";
 
 export const metadata: Metadata = {
-  title: "Genaie Scout | Your AI task agent",
+  title: "Genaie Scout | Your AI job scout",
   description:
-    "Let Genaie Scout handle repetitive work so you can focus on what matters.",
+    "Genaie Scout searches and applies for jobs on your behalf, then reports every application straight to your WhatsApp.",
 };
 
 function FacebookIcon() {
@@ -157,14 +157,15 @@ export default function RootPage() {
         <section className="landing-hero" aria-labelledby="landing-title">
           <div className="landing-copy" id="about">
             <h1 id="landing-title">
-              Let an agent do the boring repetitive work for you
+              Your AI agent that hunts for jobs while you live your life
             </h1>
             <p>
-              Focus on what matters. Genaie Scout is your AI agent that handles
-              the boring tasks so you can achieve more, stress less.
+              Upload your CV and tell Genaie Scout the role you want. Your
+              agent searches openings, applies on your behalf, and reports
+              every application straight to your WhatsApp.
             </p>
             <a className="button landing-cta" href="/login">
-              Get Started
+              Start your job hunt
             </a>
           </div>
 

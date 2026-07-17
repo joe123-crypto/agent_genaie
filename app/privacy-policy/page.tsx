@@ -24,7 +24,7 @@ export default async function PrivacyPolicyPage() {
         <div className="shell">
           <header className="policy-card">
             <h1>Privacy &amp; Policy</h1>
-            <p>This page explains how Genaie uses Webetu credentials, Gmail, and Calendar permissions.</p>
+            <p>This page explains how Genaie Scout uses your CV, Gmail and Calendar permissions, and WhatsApp connection.</p>
             <div className="actions actions-spaced">
               {dashboardHref ? (
                 <a className="button" href={dashboardHref}>Back to dashboard</a>
@@ -34,10 +34,13 @@ export default async function PrivacyPolicyPage() {
             </div>
           </header>
           <section className="policy-card">
-            <h2>Webetu Credentials</h2>
-            <p>Your Webetu username and password are used only to sign in to Webetu for the meal reservation service.</p>
-            <p>They are encrypted before storage. The application is designed so secret credentials are not shown to the agent or developers in the user interface, logs, or API responses.</p>
-            <p>If you no longer need the service, or if you no longer trust the service, you can remove your saved credentials from the Credentials Vault. You are encouraged to remove credentials that you no longer need.</p>
+            <h2>Your CV and Job Profile</h2>
+            <p>Your CV and job preferences (such as target role and location) are used only to search for openings and prepare job applications on your behalf.</p>
+            <p>Your CV is stored securely and is not shared beyond the applications the agent submits for you. You can replace or remove it at any time from the Job Scout page.</p>
+          </section>
+          <section className="policy-card">
+            <h2>WhatsApp</h2>
+            <p>Your linked WhatsApp number is used only to deliver job search results, application reports, and setup reminders. It is shown masked in the interface, and you can unlink it at any time from Settings.</p>
           </section>
           <section className="policy-card">
             <h2>Google Permissions</h2>

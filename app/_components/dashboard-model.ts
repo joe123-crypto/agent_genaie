@@ -251,7 +251,9 @@ function jobScoutService(input: DashboardModelInput): DashboardService | null {
   };
 }
 
-function webetuService(input: DashboardModelInput): DashboardService | null {
+// Webetu is hidden from the dashboard (pending extraction into its own project).
+// Exported so its status logic stays covered by tests until the extraction.
+export function webetuService(input: DashboardModelInput): DashboardService | null {
   const statusValue = String(input.webetu.data?.status ?? "");
   const registered = isRegisteredService(input.account.data?.services?.webetu)
     || Boolean(input.webetu.data?.configured)
@@ -385,13 +387,13 @@ function latestDeliveryRun(telemetry: DashboardTelemetrySnapshot | null | undefi
 }
 
 export function buildDashboardViewModel(input: DashboardModelInput): DashboardViewModel {
-  const services = [jobScoutService(input), webetuService(input)].filter(
+  const services = [jobScoutService(input)].filter(
     (service): service is DashboardService => Boolean(service),
   );
   const cronRows = telemetryCronRows(input.telemetry, services);
   const readyServices = services.filter((service) => service.ready);
   const telemetryAvailable = input.telemetry?.available ?? true;
-  const hasStatusError = !input.account.available || !input.jobScout.available || !input.webetu.available || !telemetryAvailable;
+  const hasStatusError = !input.account.available || !input.jobScout.available || !telemetryAvailable;
 
   let hero: DashboardViewModel["hero"];
   if (readyServices.length > 0) {
