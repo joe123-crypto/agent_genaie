@@ -223,6 +223,13 @@ export async function bindAccountLinkInviteToUser(token: string, firebaseUser: a
         }, { merge: true });
       }
       queueJobScoutPhoneDeliveryUpdate(t as any, db, phoneLink);
+    } else if (
+      userData.services?.jobs === "subscribed"
+      || userData.onboarding?.selectedService === "jobs"
+    ) {
+      // WhatsApp linking is optional for Job Scout, so subscribers may link
+      // after onboarding via an "account"-purpose invite; wire up delivery then.
+      queueJobScoutPhoneDeliveryUpdate(t as any, db, phoneLink);
     }
     nextPath = invite.nextPath;
   });

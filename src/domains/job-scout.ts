@@ -81,16 +81,13 @@ export async function saveJobScoutProfile(
   const cvFileRef = normalizeCvFileRef(body.cvFileRef);
   if (!await dependencies.objectExists(cvFileRef)) throw httpError(400, "The staged CV is not available.");
 
-  const [existingDoc, phoneDoc, userDoc, gmailConnection] = await Promise.all([
+  const [existingDoc, userDoc, gmailConnection] = await Promise.all([
     profileRef.get(),
-    db.collection("phoneLinksByUser").doc(safeUid).get(),
     db.collection("users").doc(safeUid).get(),
     getGmailConnection(safeUid),
   ]);
   const existing = existingDoc.exists ? existingDoc.data() || {} : {};
-  const phoneData = phoneDoc.exists ? phoneDoc.data() || {} : {};
   const userData = userDoc.exists ? userDoc.data() || {} : {};
-  if (!isActivePhoneLink(phoneData)) throw httpError(409, "The WhatsApp phone link is not active.");
   if (!gmailConnection.connected) {
     throw httpError(409, "Gmail is not connected.");
   }
@@ -322,7 +319,6 @@ async function buildJobScoutSubscriber(
   const readiness = evaluateJobScoutReadiness({
     onboardingVersion: profile.onboardingVersion,
     preferences: profile.preferences,
-    linked: Boolean(phone),
     gmailConnected,
     senderEmail,
     cvFileRef,
@@ -341,6 +337,7 @@ async function buildJobScoutSubscriber(
           selectedService: "jobs",
           channel: onboardingChannel,
           whatsappLinked: Boolean(phone),
+          whatsappSkipped: Boolean((userData.onboarding as any)?.whatsappSkippedAt),
           gmailConnected,
           jobScoutReady: readiness.ready,
           webetuConfigured: false,

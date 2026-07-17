@@ -104,6 +104,7 @@ export type DashboardViewModel = {
   nextRunLabel: string;
   services: DashboardService[];
   telemetryAvailable: boolean;
+  whatsappSuggestionHref: string | null;
 };
 
 export type DashboardModelInput = {
@@ -241,7 +242,7 @@ function jobScoutService(input: DashboardModelInput): DashboardService | null {
     details: [
       status.cvAvailable ? "CV uploaded" : "CV missing",
       status.gmailConnected ? "Google connected" : "Google not linked",
-      status.linked ? "WhatsApp linked" : "WhatsApp not linked",
+      status.linked ? "WhatsApp updates on" : "WhatsApp updates off (optional)",
       missingCopy(status.missingRequirements),
     ],
     kind: ready ? "complete" : "warning",
@@ -414,7 +415,7 @@ export function buildDashboardViewModel(input: DashboardModelInput): DashboardVi
   } else {
     hero = {
       title: "Choose a service to get started.",
-      copy: "Set up Job Scout or Webetu Reservations to begin scheduled work.",
+      copy: "Set up Job Scout to begin scheduled work.",
     };
   }
 
@@ -435,5 +436,9 @@ export function buildDashboardViewModel(input: DashboardModelInput): DashboardVi
     nextRunLabel: formatDateTimeLabel(nextRunTask?.nextRunAt ?? null, nextRunTask?.timezone).replace("Not reported", "No run scheduled"),
     services,
     telemetryAvailable,
+    whatsappSuggestionHref:
+      input.account.available && input.account.data && !input.account.data.whatsappLinked
+        ? `/${input.publicUserId}/whatsapp`
+        : null,
   };
 }

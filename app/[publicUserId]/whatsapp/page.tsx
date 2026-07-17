@@ -86,7 +86,9 @@ export default async function WhatsAppLinkingPage({
     ? "Confirm this link to use the WhatsApp chat shown below with your signed-in account."
     : whatsappLinked
       ? `This account is linked to ${accountStatus?.maskedPhone || "your WhatsApp number"}. Revoke it before linking a different number.`
-      : "Enter a WhatsApp number, then open the bot link to complete verification.";
+      : onboardingMode
+        ? "Optional: link your WhatsApp to get job application updates in chat. You can skip this and link any time from Settings."
+        : "Enter a WhatsApp number, then open the bot link to complete verification.";
 
   const whatsappScript = `
 const inviteForm = document.querySelector("[data-whatsapp-invite-form]");
@@ -95,6 +97,7 @@ const phoneInput = document.querySelector("[data-whatsapp-phone]");
 const submitButton = document.querySelector("[data-whatsapp-submit]");
 const confirmButton = document.querySelector("[data-whatsapp-confirm]");
 const revokeButton = document.querySelector("[data-whatsapp-revoke]");
+const skipButton = document.querySelector("[data-whatsapp-skip]");
 const switchButton = document.querySelector("[data-switch-account]");
 const statusPill = document.querySelector("[data-whatsapp-status]");
 const copyEl = document.querySelector("[data-whatsapp-copy]");
@@ -113,6 +116,7 @@ function setBusy(value) {
   if (submitButton) submitButton.disabled = value;
   if (confirmButton) confirmButton.disabled = value;
   if (revokeButton) revokeButton.disabled = value;
+  if (skipButton) skipButton.disabled = value;
   if (switchButton) switchButton.disabled = value;
 }
 function setLinked(maskedPhone) {
@@ -190,6 +194,23 @@ if (directForm) directForm.addEventListener("submit", async function(event) {
   } catch (err) {
     setMessage(err.message || "Could not create WhatsApp link request.", "error");
   } finally {
+    setBusy(false);
+  }
+});
+
+if (skipButton) skipButton.addEventListener("click", async function() {
+  setBusy(true);
+  setMessage("Skipping WhatsApp linking...", "loading");
+  try {
+    await readJson(await fetch("/account/onboarding/whatsapp/skip", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: "{}"
+    }));
+    window.location.assign(${JSON.stringify(onboardingPath)});
+  } catch (err) {
+    setMessage(err.message || "Could not skip WhatsApp linking.", "error");
     setBusy(false);
   }
 });
@@ -273,7 +294,11 @@ if (switchButton) switchButton.addEventListener("click", async function() {
           <div className="actions">
             <button className="danger" data-whatsapp-revoke type="button" hidden={!whatsappLinked}>Revoke WhatsApp link</button>
             {chatHandoffUrl ? <a className="button" href={chatHandoffUrl}>Continue in WhatsApp</a> : null}
-            {onboardingMode && !chatHandoff ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
+            {onboardingMode && !chatHandoff ? (
+              whatsappLinked
+                ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a>
+                : <button className="secondary" data-whatsapp-skip type="button">Skip for now</button>
+            ) : null}
             <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
           </div>
         </>

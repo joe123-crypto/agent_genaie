@@ -62,7 +62,7 @@ export function DashboardSettings({
           <span className="overview-icon"><MessageCircle aria-hidden="true" /></span>
           <div>
             <h2>WhatsApp Linking</h2>
-            <p>{!statusAvailable ? "WhatsApp connection status could not be loaded." : whatsappLinked ? `Linked to ${whatsappMaskedPhone || "your WhatsApp number"}.` : "Connect a WhatsApp number for delivery updates."}</p>
+            <p>{!statusAvailable ? "WhatsApp connection status could not be loaded." : whatsappLinked ? `Linked to ${whatsappMaskedPhone || "your WhatsApp number"}.` : "Optional: link a WhatsApp number to get updates in chat."}</p>
             <div className="settings-pills">
               <StatusPill kind={!statusAvailable ? "error" : whatsappLinked ? "complete" : "unlinked"}>{whatsappLabel}</StatusPill>
             </div>
@@ -80,7 +80,7 @@ export function DashboardSettings({
               ? "Connection coverage is temporarily unavailable."
               : googleConnected && whatsappLinked
               ? "Core account links are ready for service automation."
-              : "Complete Google and WhatsApp linking to unlock the full service workflow."}
+              : "Connect Google to unlock job applications. WhatsApp is optional — link it to get updates in chat."}
           </p>
         </div>
         <CalendarCheck aria-hidden="true" />

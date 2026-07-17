@@ -61,11 +61,13 @@ export async function getOnboardingStatus(uidInput: string) {
   const rawService = onboarding.selectedService ?? null;
   const selectedService = rawService === "jobs" || rawService === "webetu" ? rawService : null;
   const channel = storedOnboardingChannel(onboarding.channel);
+  const whatsappSkipped = Boolean(onboarding.whatsappSkippedAt);
   const dependencies = await loadOnboardingDependencies(uid, selectedService);
   const nextStep = calculateOnboardingNextStep({
     selectedService,
     channel,
     whatsappLinked: dependencies.whatsappLinked,
+    whatsappSkipped,
     gmailConnected: dependencies.gmailConnected,
     jobScoutReady: dependencies.jobScoutReady,
     webetuConfigured: dependencies.webetuConfigured,
@@ -77,6 +79,7 @@ export async function getOnboardingStatus(uidInput: string) {
     selectedService,
     channel,
     status,
+    whatsappSkipped,
     onboardingRequired: onboardingRequiresAttention(onboarding),
     skipped: status === "skipped",
     completed: status === "completed",
@@ -201,6 +204,7 @@ export async function startOrResumeOnboardingForPhone(
     selectedService: service,
     channel,
     whatsappLinked: status.requirements.whatsappLinked,
+    whatsappSkipped: status.whatsappSkipped,
     gmailConnected: status.requirements.gmailConnected,
     jobScoutReady: status.requirements.jobScoutReady,
     webetuConfigured: status.requirements.webetuConfigured,
@@ -215,6 +219,19 @@ export async function startOrResumeOnboardingForPhone(
     nextStep,
     nextUrl: scopedPathForOnboardingStep(publicUserId, nextStep),
   };
+}
+
+export async function skipOnboardingWhatsApp(uidInput: string) {
+  const uid = validateFirebaseUid(uidInput);
+  const db = getFirestoreDb();
+  await db.collection("users").doc(uid).set({
+    onboarding: {
+      whatsappSkippedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return getOnboardingStatus(uid);
 }
 
 export async function skipOnboarding(uidInput: string) {

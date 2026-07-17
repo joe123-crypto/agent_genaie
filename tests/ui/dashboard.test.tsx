@@ -110,6 +110,24 @@ describe("signed-in dashboard UI", () => {
     expect(screen.queryByText("Search & Apply Jobs")).not.toBeInTheDocument();
     expect(screen.queryByText("Sample schedule")).not.toBeInTheDocument();
     expect(screen.queryByText("Sample delivery")).not.toBeInTheDocument();
+    expect(screen.queryByText(/want updates on whatsapp/i)).not.toBeInTheDocument();
+  });
+
+  it("suggests linking WhatsApp when the account has no linked number", () => {
+    const model = dashboardModel({
+      account: {
+        available: true,
+        data: { services: { jobs: "subscribed" }, whatsappLinked: false },
+      },
+    });
+
+    expect(model.whatsappSuggestionHref).toBe(`/${publicUserId}/whatsapp`);
+    render(<DashboardOverview {...model} />);
+    expect(screen.getByText(/want updates on whatsapp/i)).toBeVisible();
+    expect(screen.getByRole("link", { name: /link your number/i })).toHaveAttribute(
+      "href",
+      `/${publicUserId}/whatsapp`,
+    );
   });
 
   it("renders active cron rows and metrics from live telemetry", () => {
@@ -336,7 +354,7 @@ describe("signed-in dashboard UI", () => {
     expect(screen.getByRole("link", { name: /whatsapp linking/i })).toHaveAttribute("href", `/${publicUserId}/whatsapp`);
     expect(screen.getByText("Gmail connected")).toBeVisible();
     expect(screen.getByText("WhatsApp not linked")).toBeVisible();
-    expect(screen.getByText(/complete google and whatsapp linking/i)).toBeVisible();
+    expect(screen.getByText(/whatsapp is optional — link it to get updates in chat/i)).toBeVisible();
   });
 
   it("shows unavailable Settings states without calling them disconnected", () => {

@@ -44,6 +44,7 @@ export function DashboardOverview({
   nextRunLabel,
   services,
   telemetryAvailable,
+  whatsappSuggestionHref,
 }: DashboardOverviewProps) {
   return (
     <>
@@ -65,6 +66,12 @@ export function DashboardOverview({
       {hasStatusError ? (
         <StatusNotice kind="warning" variant="block">
           Some account or agent status could not be loaded. Displayed setup information may be incomplete.
+        </StatusNotice>
+      ) : null}
+
+      {whatsappSuggestionHref ? (
+        <StatusNotice kind="info" variant="block">
+          Want updates on WhatsApp? <a href={whatsappSuggestionHref}>Link your number</a> to get job application reports in chat.
         </StatusNotice>
       ) : null}
 

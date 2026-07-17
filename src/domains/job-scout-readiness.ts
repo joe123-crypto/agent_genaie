@@ -4,7 +4,6 @@ export const JOB_SCOUT_SAFETY_ACKNOWLEDGEMENT_VERSION = "scam-warning-v1";
 export type JobScoutReadinessInput = {
   onboardingVersion?: unknown;
   preferences?: unknown;
-  linked: boolean;
   gmailConnected: boolean;
   senderEmail?: unknown;
   cvFileRef?: unknown;
@@ -40,8 +39,7 @@ export function evaluateJobScoutReadiness(input: JobScoutReadinessInput): JobSco
   const hasSenderEmail = Boolean(String(input.senderEmail ?? "").trim());
   const hasCvRef = Boolean(String(input.cvFileRef ?? "").trim());
   const structurallyComplete = Boolean(
-    input.linked
-    && input.gmailConnected
+    input.gmailConnected
     && hasSenderEmail
     && hasCvRef
     && input.cvAvailable
@@ -52,8 +50,9 @@ export function evaluateJobScoutReadiness(input: JobScoutReadinessInput): JobSco
   const profileConfirmed = legacyProfile ? structurallyComplete : Boolean(input.profileConfirmedAt);
   const safetyAcknowledged = legacyProfile ? structurallyComplete : Boolean(input.safetyAcknowledgedAt);
 
+  // A linked WhatsApp phone is deliberately not a requirement: it only enables
+  // chat updates, so the agent runs for users who never link one.
   const missingRequirements: string[] = [];
-  if (!input.linked) missingRequirements.push("phone_link");
   if (!input.gmailConnected) missingRequirements.push("gmail_connection");
   if (!hasSenderEmail) missingRequirements.push("sender_email");
   if (!hasCvRef || !input.cvAvailable) missingRequirements.push("cv");

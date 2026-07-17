@@ -53,6 +53,45 @@ test("Job Scout onboarding chooses the first incomplete requirement", () => {
   }), "dashboard");
 });
 
+test("Job Scout onboarding lets users skip WhatsApp linking", () => {
+  assert.equal(calculateOnboardingNextStep({
+    selectedService: "jobs",
+    whatsappLinked: false,
+    whatsappSkipped: true,
+    gmailConnected: false,
+    jobScoutReady: false,
+    webetuConfigured: false,
+  }), "connect_google");
+
+  assert.equal(calculateOnboardingNextStep({
+    selectedService: "jobs",
+    whatsappLinked: false,
+    whatsappSkipped: true,
+    gmailConnected: true,
+    jobScoutReady: false,
+    webetuConfigured: false,
+  }), "job_scout");
+
+  assert.equal(calculateOnboardingNextStep({
+    selectedService: "jobs",
+    whatsappLinked: false,
+    whatsappSkipped: true,
+    gmailConnected: true,
+    jobScoutReady: true,
+    webetuConfigured: false,
+  }), "dashboard");
+
+  // Skipping never affects Webetu, which still requires a linked WhatsApp.
+  assert.equal(calculateOnboardingNextStep({
+    selectedService: "webetu",
+    whatsappLinked: false,
+    whatsappSkipped: true,
+    gmailConnected: false,
+    jobScoutReady: false,
+    webetuConfigured: false,
+  }), "whatsapp");
+});
+
 test("Webetu onboarding chooses WhatsApp before credentials vault", () => {
   assert.equal(calculateOnboardingNextStep({
     selectedService: "webetu",

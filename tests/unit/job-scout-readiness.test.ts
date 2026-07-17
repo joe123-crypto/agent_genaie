@@ -3,7 +3,6 @@ import test from "node:test";
 import { evaluateJobScoutReadiness } from "@/src/domains/job-scout-readiness";
 
 const complete = {
-  linked: true,
   gmailConnected: true,
   senderEmail: "applicant@example.com",
   cvFileRef: "uid/cv/cv.pdf",
@@ -59,4 +58,15 @@ test("requires the CV object, not only its reference", () => {
   const result = evaluateJobScoutReadiness({ ...complete, cvAvailable: false });
   assert.equal(result.ready, false);
   assert.ok(result.missingRequirements.includes("cv"));
+});
+
+test("treats WhatsApp linking as optional, never a readiness requirement", () => {
+  const result = evaluateJobScoutReadiness({
+    ...complete,
+    onboardingVersion: 2,
+    profileConfirmedAt: new Date(),
+    safetyAcknowledgedAt: new Date(),
+  });
+  assert.equal(result.ready, true);
+  assert.ok(!result.missingRequirements.includes("phone_link"));
 });

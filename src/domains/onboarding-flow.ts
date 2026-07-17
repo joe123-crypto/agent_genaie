@@ -31,17 +31,20 @@ export function calculateOnboardingNextStep(input: {
   selectedService: OnboardingService | null;
   channel?: OnboardingChannel | null;
   whatsappLinked: boolean;
+  whatsappSkipped?: boolean;
   gmailConnected: boolean;
   jobScoutReady: boolean;
   webetuConfigured: boolean;
 }): OnboardingStep {
   if (!input.selectedService) return "service_selection";
-  if (!input.whatsappLinked) return "whatsapp";
   if (input.selectedService === "jobs") {
+    // WhatsApp linking is optional for Job Scout: the step is offered but skippable.
+    if (!input.whatsappLinked && !input.whatsappSkipped) return "whatsapp";
     if (!input.gmailConnected) return "connect_google";
     if (!input.jobScoutReady) return input.channel === "chat" ? "whatsapp_chat" : "job_scout";
     return "dashboard";
   }
+  if (!input.whatsappLinked) return "whatsapp";
   if (!input.webetuConfigured) return "vault";
   return "dashboard";
 }

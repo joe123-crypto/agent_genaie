@@ -167,7 +167,7 @@ form.addEventListener("submit", async function(event) {
         <StatusPill data-ready-status kind={ready ? "complete" : "pending"}>{ready ? "Ready" : "Draft"}</StatusPill>
       </div>
       <div className="status-row" aria-label="Job Scout requirements">
-        <StatusPill kind={whatsappLinked ? "complete" : "unlinked"}>{whatsappLinked ? "WhatsApp: Linked" : "WhatsApp: Not linked"}</StatusPill>
+        <StatusPill kind={whatsappLinked ? "complete" : "pending"}>{whatsappLinked ? "WhatsApp updates: On" : "WhatsApp updates: Off (optional)"}</StatusPill>
         <StatusPill kind={googleConnected ? "complete" : "unlinked"}>{googleConnected ? "Google: Connected" : "Google: Not connected"}</StatusPill>
         <StatusPill data-cv-status kind={cvAvailable ? "complete" : "pending"}>{cvAvailable ? "CV: Uploaded" : "CV: Missing"}</StatusPill>
       </div>
