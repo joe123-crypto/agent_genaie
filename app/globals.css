@@ -2132,6 +2132,8 @@ button.password-toggle {
   min-height: 100svh;
   overflow: hidden;
   background: #ffffff;
+  display: flex;
+  flex-direction: column;
 }
 
 .landing-header {
@@ -2215,13 +2217,14 @@ button.password-toggle {
 
 .landing-hero {
   width: min(1360px, calc(100% - 96px));
-  min-height: calc(100svh - 186px);
+  flex: 1 1 auto;
+  min-height: 0;
   margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(440px, 0.88fr) minmax(520px, 1.12fr);
   align-items: center;
   gap: clamp(28px, 3.5vw, 64px);
-  padding: 28px 0 72px;
+  padding: 16px 0 16px;
 }
 
 .landing-copy {
@@ -2489,6 +2492,16 @@ a.button.landing-cta:hover {
     width: min(620px, 112%);
     margin-left: -6%;
   }
+
+  .landing-trusted {
+    padding: 4px 0 52px;
+    gap: 20px;
+  }
+
+  .landing-trusted-avatar {
+    width: 48px;
+    height: 48px;
+  }
 }
 
 @media (max-width: 430px) {
@@ -2522,6 +2535,62 @@ a.button.landing-cta:hover {
   .landing-copy h1 {
     font-size: clamp(2.4rem, 11.5vw, 3.15rem);
   }
+}
+
+.landing-trusted {
+  width: min(1360px, calc(100% - 96px));
+  margin: 0 auto;
+  padding: 0 0 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  text-align: center;
+}
+
+.landing-trusted-label {
+  margin: 0;
+  color: #676767;
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.landing-trusted-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: clamp(20px, 3vw, 40px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-trusted-avatar {
+  display: block;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid #e5e5e2;
+  filter: grayscale(1);
+  opacity: 0.85;
+  transition: filter 200ms ease, opacity 200ms ease,
+    transform 200ms ease, border-color 200ms ease;
+}
+
+.landing-trusted-avatar:hover {
+  filter: grayscale(0);
+  opacity: 1;
+  transform: translateY(-3px);
+  border-color: #090909;
+}
+
+.landing-trusted-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 @media (prefers-reduced-motion: reduce) {

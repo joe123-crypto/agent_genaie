@@ -95,6 +95,47 @@ function SocialPlaceholders() {
   );
 }
 
+type FeaturedUser = {
+  name: string;
+  handle: string;
+  platform: "X" | "Instagram" | "Facebook";
+  href: string;
+  avatar: string;
+};
+
+const featuredUsers: FeaturedUser[] = [
+  {
+    name: "Joseph Mun",
+    handle: "joseph_mun4335",
+    platform: "X",
+    href: "https://x.com/joseph_mun4335",
+    avatar: "/users/joseph_mun4335.jpg",
+  },
+];
+
+function TrustedBy() {
+  return (
+    <section className="landing-trusted" aria-label="Trusted by our users">
+      <p className="landing-trusted-label">Trusted by</p>
+      <ul className="landing-trusted-row">
+        {featuredUsers.map((user) => (
+          <li key={user.href}>
+            <a
+              className="landing-trusted-avatar"
+              href={user.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`${user.name} (@${user.handle}) on ${user.platform}`}
+            >
+              <Image src={user.avatar} alt={user.name} width={56} height={56} />
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function DecorativeScene() {
   return (
     <svg
@@ -182,6 +223,8 @@ export default function RootPage() {
             />
           </div>
         </section>
+
+        <TrustedBy />
       </div>
     </main>
   );
