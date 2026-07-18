@@ -11,6 +11,7 @@ The product is Job Scout only. The Webetu meal-reservation service is hidden fro
 Public routes:
 
 - `/` is the public Genaie Scout landing page and links visitors to sign in at `/login`.
+- `/about` explains why Genaie Scout exists and the developer's motivation for building it.
 - `/login` supports Firebase Google Sign-In and passwordless email-link sign-in.
 - `/auth/firebase/finish` completes Firebase email-link sign-in and creates the server session cookie.
 - `/auth/session` creates or checks the Firebase-backed server session. `POST` also returns `publicUserId`, `isNewUser`, and `onboardingRequired`.
