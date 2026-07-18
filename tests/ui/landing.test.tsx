@@ -42,7 +42,7 @@ describe("Genaie Scout landing page", () => {
     const { container } = render(createElement(RootPage));
 
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "#home");
-    expect(screen.getByRole("link", { name: "About" })).toHaveAttribute("href", "#about");
+    expect(screen.getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
     expect(screen.getByRole("link", { name: /privacy & policy/i })).toHaveAttribute(
       "href",
       "/privacy-policy",
