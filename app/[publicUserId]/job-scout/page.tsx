@@ -21,6 +21,7 @@ function missingCopy(missing: unknown) {
     gmail_connection: "Google connection",
     sender_email: "sender email",
     cv: "CV",
+    cv_conversion: "CV conversion",
     target_roles: "target role",
     locations: "target location",
     profile_confirmation: "profile confirmation",
@@ -85,6 +86,8 @@ export default async function JobScoutSetupPage({
   const whatsappLinked = !!accountStatus?.whatsappLinked;
   const googleConnected = !!jobScoutStatus?.gmailConnected;
   const cvAvailable = !!jobScoutStatus?.cvAvailable;
+  const cvUploaded = !!jobScoutStatus?.cvUploaded;
+  const cvConversionStatus = String(jobScoutStatus?.cvConversionStatus || "missing");
   const ready = !!jobScoutStatus?.ready;
 
   const pageScript = `
@@ -102,6 +105,7 @@ const labels = {
   gmail_connection: "Google connection",
   sender_email: "sender email",
   cv: "CV",
+  cv_conversion: "CV conversion",
   target_roles: "target role",
   locations: "target location",
   profile_confirmation: "profile confirmation",
@@ -142,10 +146,21 @@ form.addEventListener("submit", async function(event) {
       body: new FormData(form)
     }));
     setPill(readyStatus, payload.ready ? "Ready" : "Draft", payload.ready ? "complete" : "pending");
-    setPill(cvStatus, payload.cvAvailable ? "CV: Uploaded" : "CV: Missing", payload.cvAvailable ? "complete" : "pending");
+    setPill(
+      cvStatus,
+      payload.cvAvailable ? "CV: Ready" : payload.cvConversionStatus === "pending" ? "CV: Conversion pending" : "CV: Missing",
+      payload.cvAvailable ? "complete" : "pending"
+    );
     missingStatus.querySelector("[data-status-label]").textContent = missingCopy(payload.missingRequirements);
     missingStatus.dataset.statusKind = payload.ready ? "complete" : "warning";
-    setMessage(payload.ready ? "Job Scout setup saved and ready." : "Setup saved, but requirements are still missing.", payload.ready ? "complete" : "warning");
+    setMessage(
+      payload.ready
+        ? "Job Scout setup saved and ready."
+        : payload.cvConversionStatus === "pending"
+          ? "Setup saved. Job applications are paused while your CV is converted to editable HTML."
+          : "Setup saved, but requirements are still missing.",
+      payload.ready ? "complete" : "warning"
+    );
     cvInput.value = "";
     cvName.textContent = "No new file selected";
   } catch (err) {
@@ -169,7 +184,9 @@ form.addEventListener("submit", async function(event) {
       <div className="status-row" aria-label="Job Scout requirements">
         <StatusPill kind={whatsappLinked ? "complete" : "pending"}>{whatsappLinked ? "WhatsApp updates: On" : "WhatsApp updates: Off (optional)"}</StatusPill>
         <StatusPill kind={googleConnected ? "complete" : "unlinked"}>{googleConnected ? "Google: Connected" : "Google: Not connected"}</StatusPill>
-        <StatusPill data-cv-status kind={cvAvailable ? "complete" : "pending"}>{cvAvailable ? "CV: Uploaded" : "CV: Missing"}</StatusPill>
+        <StatusPill data-cv-status kind={cvAvailable ? "complete" : "pending"}>
+          {cvAvailable ? "CV: Ready" : cvConversionStatus === "pending" ? "CV: Conversion pending" : "CV: Missing"}
+        </StatusPill>
       </div>
       <StatusNotice className="missing" data-missing kind={ready ? "complete" : "warning"}>{missingCopy(jobScoutStatus?.missingRequirements)}</StatusNotice>
       <form className="form-stack" data-job-scout-form>
@@ -186,7 +203,13 @@ form.addEventListener("submit", async function(event) {
         <label>
           CV PDF
           <input data-cv name="cv" type="file" accept="application/pdf,.pdf" />
-          <span className="file-note">{cvAvailable ? "A CV is already uploaded. Choose a new PDF to replace it." : "Upload a PDF CV, max 4 MB."}</span>
+          <span className="file-note">
+            {cvAvailable
+              ? "A canonical CV is ready. Choose a new PDF to replace it and restart conversion."
+              : cvUploaded
+                ? "Your PDF is awaiting conversion to editable HTML. Upload another PDF only to replace it."
+                : "Upload a PDF CV, max 4 MB. Applications begin after it is converted to editable HTML."}
+          </span>
           <span className="file-note" data-cv-name>No new file selected</span>
         </label>
         <div className="grid">

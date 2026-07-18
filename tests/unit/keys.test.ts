@@ -19,8 +19,8 @@ import { cvObjectKey } from "@/src/domains/job-scout";
 // of them change shape, data written to prod stops lining up with data already
 // stored there, so the exact string contracts are pinned here.
 
-test("cvObjectKey pins the R2 CV layout <uid>/cv/cv.pdf", () => {
-  assert.equal(cvObjectKey("uid123"), "uid123/cv/cv.pdf");
+test("cvObjectKey retains the transitional export for the pending PDF layout", () => {
+  assert.equal(cvObjectKey("uid123"), "uid123/cv/pending/original.pdf");
 });
 
 test("credentialRefId builds {service}_{purpose}_{uid} and sanitizes chars", () => {

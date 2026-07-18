@@ -45,7 +45,7 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `POST /webetu/credentials/revoke` revokes the signed-in user's stored Webetu credentials.
 - `POST /gmail/send` sends Gmail for the signed-in Firebase user only when `confirm` is `true`.
 - `GET /job-scout/profile/status` returns the signed-in user's Job Scout readiness.
-- `POST /job-scout/profile` uploads or reuses the signed-in user's CV and saves a ready Job Scout profile.
+- `POST /job-scout/profile` uploads or reuses the signed-in user's CV and saves Job Scout preferences. A new PDF is staged for conversion, so scouting remains paused until canonical HTML is finalized.
 
 Internal routes require `Authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY`:
 
@@ -56,12 +56,13 @@ Internal routes require `Authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY`:
 - `POST /internal/onboarding/start` starts or resumes one service's web or chat onboarding route and creates the canonical link only when the phone is not linked.
 - `POST /internal/job-scout/profile` saves WhatsApp-collected Job Scout preferences and a CV file reference.
 - `GET /internal/job-scout/status?phone=...` returns one requester's Job Scout readiness and missing requirements.
-- `POST /internal/job-scout/cv` uploads a user's CV PDF to R2 (multipart `file` + `userId` or `phone`); stored at `<uid>/cv/cv.pdf`.
-- `GET /internal/job-scout/cv?userId=...` returns a short-lived presigned URL to download the user's CV.
-- `DELETE /internal/job-scout/cv?userId=...` deletes the user's CV from R2 and clears the profile reference.
+- `POST /internal/job-scout/cv` accepts multipart `file` plus `userId` or `phone`. A PDF stages at `<uid>/cv/pending/original.pdf` and sets `cvConversionStatus: pending`; administrator-supplied `text/html` (or `format=html`) finalizes `<uid>/cv/base/cv.html`, deletes the pending PDF, and sets the profile ready for matching.
+- `GET /internal/job-scout/cv?userId=...` returns the canonical HTML presigned URL. Pass `format=pending` (legacy alias `format=pdf`) to retrieve the staged PDF during conversion.
+- `DELETE /internal/job-scout/cv?userId=...` deletes canonical HTML and pending/legacy PDF objects and clears all CV profile references.
 - `GET /internal/job-scout/subscribers` lists only Job Scout subscribers who pass the backend readiness checks.
 - `GET /internal/job-scout/applications` lists recorded Job Scout applications for one user.
 - `POST /internal/job-scout/applications` records an applied, skipped, physical-submission, or failed Job Scout outcome.
+- `POST /internal/job-scout/application-artifact` uploads an exact-sent private artifact after the application record exists. Multipart fields are `userId`, `applicationId`, `attempt` (1–3), `kind` (`cv`, `cover_letter_text`, or `cover_letter_pdf`), and `file`; fixed paths are `<uid>/applications/<applicationId>/<attempt>/cv.pdf`, `cover-letter.txt`, or `cover-letter.pdf`.
 - `POST /internal/dashboard/tasks` upserts one live dashboard task status snapshot for a user. Pass `userId`, or pass `phone` to resolve the active linked user.
 - `GET /internal/webetu/restaurants` lists supported Webetu restaurant names.
 - `GET /internal/webetu/preferences?phone=...` reads a linked user's Webetu restaurant preference.
@@ -115,9 +116,9 @@ Enable Firestore for the same Firebase project. Agent Genaie writes central reco
 - `phoneLinksByUser` — active WhatsApp-to-user links keyed by Firebase UID
 - `phoneLinksByPhone` — active WhatsApp-to-user links keyed by phone hash
 - `accountLinkInvites` — short-lived account link setup tokens
-- `jobScoutProfiles` — Job Scout preferences and CV references; `cvFileRef` is the R2 object key `<uid>/cv/cv.pdf` (the CV itself lives in the R2 bucket, not Firestore)
+- `jobScoutProfiles` — Job Scout preferences and CV state. Ready profiles store the same canonical `<uid>/cv/base/cv.html` key in `cvFileRef` and `cvHtmlRef`, with `cvConversionStatus: ready`, `cvSourceVersion`, and `cvConvertedAt`. Pending profiles store `<uid>/cv/pending/original.pdf` in `cvPendingRef` and cannot be dispatched.
 - `jobScoutDeliveryByPhone` — Job Scout delivery records keyed by phone hash
-- `jobApplications` — recorded Job Scout application outcomes
+- `jobApplications` — recorded Job Scout application outcomes. Private exact-sent files are referenced in `artifactRefs` for the latest attempt and `artifacts.<attempt>` for retained attempts; files remain in R2 and are not exposed by the dashboard.
 - `webetuDeliveryByPhone` — Webetu delivery records keyed by phone hash
 - `dashboardTaskStatus` — live agent schedule/run snapshots keyed by `<uid>_<taskId>` for the signed-in dashboard
 - `webetuPreferences` — per-user default restaurant and date overrides
@@ -159,7 +160,7 @@ export HOST=127.0.0.1
 export PORT=3010
 ```
 
-`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET` configure the Cloudflare R2 (S3-compatible) bucket that stores user CVs. Objects are keyed by Firebase UID (`<uid>/cv/cv.pdf`). `R2_ENDPOINT` is optional and defaults to `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`. Run `npm run migrate:cvs -- --dry-run` to preview migrating existing on-disk CVs into R2, then without `--dry-run` to perform it.
+`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET` configure the Cloudflare R2 (S3-compatible) bucket that stores user CVs and exact-sent application artifacts. Objects are isolated below each Firebase UID. `R2_ENDPOINT` is optional and defaults to `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`. Run `npm run migrate:cvs -- --dry-run` to preview staging existing on-disk PDFs for manual HTML conversion, then without `--dry-run` to perform it.
 
 Set **all** secrets to distinct random values. If any are omitted they fall back to `TOKEN_ENCRYPTION_SECRET`, which means one leaked secret compromises everything at once.
 

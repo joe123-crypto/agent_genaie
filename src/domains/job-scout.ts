@@ -62,6 +62,72 @@ async function deleteDocumentRefs(refs: FirebaseFirestore.DocumentReference[]) {
   return deleted;
 }
 
+const CV_MAX_BYTES = 4 * 1024 * 1024;
+const CV_HTML_MAX_BYTES = 4 * 1024 * 1024;
+const APPLICATION_PDF_MAX_BYTES = 4 * 1024 * 1024;
+const APPLICATION_TEXT_MAX_BYTES = 256 * 1024;
+export const JOB_SCOUT_CV_SOURCE_VERSION = 1;
+
+function storageSafeUid(uidInput: unknown) {
+  const uid = validateFirebaseUid(uidInput);
+  if (!/^[A-Za-z0-9._:@-]+$/.test(uid) || uid.includes("..")) {
+    throw httpError(400, "User ID cannot be used in a storage path.");
+  }
+  return uid;
+}
+
+export function cvPendingObjectKey(uidInput: string) {
+  return `${storageSafeUid(uidInput)}/cv/pending/original.pdf`;
+}
+
+export function cvHtmlObjectKey(uidInput: string) {
+  return `${storageSafeUid(uidInput)}/cv/base/cv.html`;
+}
+
+function isUserCvObjectRef(value: unknown, uidInput: string) {
+  const ref = String(value ?? "").trim();
+  const prefix = `${storageSafeUid(uidInput)}/cv/`;
+  return ref.startsWith(prefix) && ref.length > prefix.length && !ref.includes("..") && !ref.includes("\\");
+}
+
+// Transitional export retained for the existing migration script and any
+// deployed callers. New PDF objects are pending conversion, not canonical CVs.
+export function cvObjectKey(uidInput: string) {
+  return cvPendingObjectKey(uidInput);
+}
+
+function normalizedContentType(value: unknown) {
+  return String(value ?? "").toLowerCase().split(";")[0].trim();
+}
+
+function isPdf(bytes: Buffer) {
+  return bytes.length >= 5 && bytes.subarray(0, 5).toString("ascii") === "%PDF-";
+}
+
+function decodeUtf8(bytes: Buffer, label: string) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw httpError(400, `${label} must be valid UTF-8.`);
+  }
+}
+
+export function validateCanonicalCvHtml(bytes: Buffer) {
+  if (!bytes.length) throw httpError(400, "CV file is required.");
+  if (bytes.length > CV_HTML_MAX_BYTES) throw httpError(413, "CV HTML is too large (max 4 MB).");
+  const html = decodeUtf8(bytes, "CV HTML");
+  if (!/<html(?:\s|>)/i.test(html) || !/<body(?:\s|>)/i.test(html)) {
+    throw httpError(400, "CV HTML must contain html and body elements.");
+  }
+  if (/<(?:script|iframe|object|embed|base)(?:\s|>)/i.test(html)) {
+    throw httpError(400, "CV HTML contains an unsafe element.");
+  }
+  if (/\son[a-z]+\s*=/i.test(html) || /(?:href|src)\s*=\s*["']?\s*javascript:/i.test(html)) {
+    throw httpError(400, "CV HTML contains executable content.");
+  }
+  return html;
+}
+
 export async function saveJobScoutProfile(
   body: any,
   dependencies: { objectExists: typeof objectExists } = { objectExists },
@@ -78,9 +144,6 @@ export async function saveJobScoutProfile(
   if (preferences.locations.length === 0 || !/^[a-z]{2}$/.test(preferences.country)) {
     throw httpError(400, "At least one validated location and country are required.");
   }
-  const cvFileRef = normalizeCvFileRef(body.cvFileRef);
-  if (!await dependencies.objectExists(cvFileRef)) throw httpError(400, "The staged CV is not available.");
-
   const [existingDoc, userDoc, gmailConnection] = await Promise.all([
     profileRef.get(),
     db.collection("users").doc(safeUid).get(),
@@ -104,13 +167,51 @@ export async function saveJobScoutProfile(
   if (!profileConfirmedAt) throw httpError(400, "Profile confirmation is required.");
   if (!safetyAcknowledgedAt) throw httpError(400, "Scam-safety acknowledgement is required.");
 
+  const suppliedCvRef = normalizeCvFileRef(
+    body.cvHtmlRef ?? body.cvFileRef ?? existing.cvHtmlRef ?? existing.cvFileRef ?? existing.cvPendingRef,
+  );
+  const canonicalKey = cvHtmlObjectKey(safeUid);
+  const pendingKey = cvPendingObjectKey(safeUid);
+  const existingRefs = new Set(
+    [existing.cvHtmlRef, existing.cvFileRef, existing.cvPendingRef]
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean),
+  );
+  if (
+    !isUserCvObjectRef(suppliedCvRef, safeUid)
+    || (suppliedCvRef !== canonicalKey && suppliedCvRef !== pendingKey && !existingRefs.has(suppliedCvRef))
+  ) {
+    throw httpError(400, "CV reference does not belong to this user.");
+  }
+  if (!await dependencies.objectExists(suppliedCvRef)) {
+    throw httpError(400, "The staged CV is not available.");
+  }
+
+  const suppliedCanonical = suppliedCvRef === canonicalKey;
+  const existingCanonical = String(existing.cvHtmlRef ?? "").trim() === canonicalKey
+    || String(existing.cvFileRef ?? "").trim() === canonicalKey;
+  const cvHtmlRef = suppliedCanonical || existingCanonical ? canonicalKey : null;
+  const cvPendingRef = cvHtmlRef
+    ? null
+    : suppliedCvRef;
+  const cvConversionStatus = cvHtmlRef ? "ready" : "pending";
+  const setupStatus = cvHtmlRef ? "ready" : "pending";
+
   const profilePayload = {
     userId: safeUid,
     preferences,
-    cvFileRef,
+    // cvFileRef remains as the compatibility field but now always aliases the
+    // canonical HTML reference. Pending/legacy PDFs live in cvPendingRef.
+    cvFileRef: cvHtmlRef,
+    cvHtmlRef,
+    cvPendingRef,
+    cvConversionStatus,
+    cvSourceVersion: cvHtmlRef
+      ? Number(existing.cvSourceVersion || JOB_SCOUT_CV_SOURCE_VERSION)
+      : null,
     cvParsedText: body.cvParsedText ? String(body.cvParsedText).slice(0, 50000) : null,
     onboardingVersion: JOB_SCOUT_ONBOARDING_VERSION,
-    setupStatus: "ready",
+    setupStatus,
     profileConfirmedAt,
     safetyAcknowledgedAt,
     safetyAcknowledgementVersion:
@@ -125,7 +226,8 @@ export async function saveJobScoutProfile(
   const onboardingChannel = storedOnboardingChannel(onboarding.channel);
   const onboardingStatus = String(onboarding.status ?? "");
   if (
-    onboarding.selectedService === "jobs"
+    cvHtmlRef
+    && onboarding.selectedService === "jobs"
     && onboardingChannel === "chat"
     && (onboardingStatus === "required" || onboardingStatus === "in_progress")
   ) {
@@ -141,16 +243,15 @@ export async function saveJobScoutProfile(
     }, { merge: true });
   }
   await batch.commit();
-  return { ok: true, setupStatus: "ready", ready: true };
-}
-
-// Vercel Functions reject request bodies larger than 4.5 MB, and multipart adds
-// framing overhead, so cap the CV comfortably below that. Larger files would
-// need a direct presigned PUT rather than this proxied upload.
-const CV_MAX_BYTES = 4 * 1024 * 1024;
-
-export function cvObjectKey(uid: string) {
-  return `${uid}/cv/cv.pdf`;
+  return {
+    ok: true,
+    setupStatus,
+    ready: Boolean(cvHtmlRef),
+    cvFileRef: cvHtmlRef,
+    cvHtmlRef,
+    cvPendingRef,
+    cvConversionStatus,
+  };
 }
 
 export async function saveJobScoutCv(input: {
@@ -166,10 +267,11 @@ export async function saveJobScoutCv(input: {
   const safeUid = validateFirebaseUid(resolvedUid);
   if (!input.bytes || input.bytes.length === 0) throw httpError(400, "CV file is required.");
   if (input.bytes.length > CV_MAX_BYTES) throw httpError(413, "CV file is too large (max 4 MB).");
-  const contentType = String(input.contentType ?? "").toLowerCase().split(";")[0].trim();
+  const contentType = normalizedContentType(input.contentType);
   if (contentType !== "application/pdf") throw httpError(415, "CV must be a PDF (application/pdf).");
+  if (!isPdf(input.bytes)) throw httpError(400, "CV content is not a valid PDF.");
 
-  const key = cvObjectKey(safeUid);
+  const key = cvPendingObjectKey(safeUid);
   await putObject(key, input.bytes, "application/pdf");
 
   const db = getFirestoreDb();
@@ -178,48 +280,184 @@ export async function saveJobScoutCv(input: {
     const doc = await t.get(profileRef);
     if (doc.exists) {
       t.update(profileRef, {
-        cvFileRef: normalizeCvFileRef(key),
+        cvFileRef: null,
+        cvHtmlRef: null,
+        cvPendingRef: normalizeCvFileRef(key),
+        cvConversionStatus: "pending",
+        cvSourceVersion: null,
+        cvConvertedAt: null,
         // The previous extraction no longer matches the new file; clear it so
         // stale personal data isn't retained until the worker re-parses.
         cvParsedText: null,
+        setupStatus: "pending",
         updatedAt: FieldValue.serverTimestamp(),
       });
     } else {
       t.set(profileRef, {
         userId: safeUid,
         preferences: normalizeJobPreferences(undefined),
-        cvFileRef: normalizeCvFileRef(key),
+        cvFileRef: null,
+        cvHtmlRef: null,
+        cvPendingRef: normalizeCvFileRef(key),
+        cvConversionStatus: "pending",
+        cvSourceVersion: null,
+        cvConvertedAt: null,
         cvParsedText: null,
         onboardingVersion: JOB_SCOUT_ONBOARDING_VERSION,
-        setupStatus: "draft",
+        setupStatus: "pending",
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
     }
   });
-  return { ok: true, key };
+  // A replacement PDF must pause scouting immediately. The canonical path is
+  // deterministic, so deletion is safe even when an older profile omitted its
+  // cvHtmlRef field.
+  await deleteObject(cvHtmlObjectKey(safeUid));
+  return {
+    ok: true,
+    key,
+    cvPendingRef: key,
+    cvFileRef: null,
+    cvHtmlRef: null,
+    cvConversionStatus: "pending" as const,
+  };
 }
 
-export async function getJobScoutCvUrl(userIdInput: string) {
+export async function finalizeJobScoutCvHtml(input: {
+  userId?: string;
+  phone?: string;
+  bytes: Buffer;
+  contentType?: string;
+}) {
+  const resolvedUid = input.userId ?? (input.phone ? await findJobScoutUserByPhone(input.phone) : null);
+  if (!resolvedUid) throw httpError(404, "Linked Job Scout user not found.");
+  const safeUid = validateFirebaseUid(resolvedUid);
+  const contentType = normalizedContentType(input.contentType);
+  if (contentType !== "text/html") throw httpError(415, "Canonical CV must be HTML (text/html).");
+  validateCanonicalCvHtml(input.bytes);
+
+  const key = cvHtmlObjectKey(safeUid);
+  const pendingKey = cvPendingObjectKey(safeUid);
+  await putObject(key, input.bytes, "text/html; charset=utf-8");
+
+  const db = getFirestoreDb();
+  const profileRef = db.collection("jobScoutProfiles").doc(safeUid);
+  const profileDoc = await profileRef.get();
+  const existing = profileDoc.exists ? profileDoc.data() || {} : {};
+  const previousPendingRef = String(existing.cvPendingRef || "").trim();
+  const profilePayload: Record<string, any> = {
+    userId: safeUid,
+    cvFileRef: key,
+    cvHtmlRef: key,
+    cvPendingRef: null,
+    cvConversionStatus: "ready",
+    cvSourceVersion: JOB_SCOUT_CV_SOURCE_VERSION,
+    cvConvertedAt: FieldValue.serverTimestamp(),
+    cvParsedText: null,
+    setupStatus: "ready",
+    createdAt: existing.createdAt || FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  // Preserve legacy readiness grandfathering during manual migration. A brand
+  // new admin-created profile uses the current onboarding contract.
+  if (!profileDoc.exists) profilePayload.onboardingVersion = JOB_SCOUT_ONBOARDING_VERSION;
+  await profileRef.set(profilePayload, { merge: true });
+
+  await deleteObject(pendingKey);
+  if (
+    previousPendingRef
+    && previousPendingRef !== pendingKey
+    && previousPendingRef !== key
+    && isUserCvObjectRef(previousPendingRef, safeUid)
+  ) {
+    await deleteObject(previousPendingRef);
+  }
+
+  const status = await getJobScoutStatusForUser(safeUid).catch(() => null);
+  if (status && status.setupStatus !== "ready") {
+    await profileRef.update({
+      setupStatus: status.setupStatus,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+  if (status?.ready) {
+    const userRef = db.collection("users").doc(safeUid);
+    const userDoc = await userRef.get();
+    const onboarding = userDoc.exists ? userDoc.data()?.onboarding || {} : {};
+    const onboardingStatus = String(onboarding.status ?? "");
+    if (
+      onboarding.selectedService === "jobs"
+      && (onboardingStatus === "required" || onboardingStatus === "in_progress")
+    ) {
+      await userRef.set({
+        onboarding: {
+          selectedService: "jobs",
+          channel: storedOnboardingChannel(onboarding.channel) || "web",
+          status: "completed",
+          completedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+  }
+
+  return {
+    ok: true,
+    key,
+    cvFileRef: key,
+    cvHtmlRef: key,
+    cvPendingRef: null,
+    cvConversionStatus: "ready" as const,
+    ready: Boolean(status?.ready),
+  };
+}
+
+export type JobScoutCvFormat = "html" | "pending";
+
+export async function getJobScoutCvUrl(
+  userIdInput: string,
+  formatInput: JobScoutCvFormat | "pdf" = "html",
+) {
   const safeUid = validateFirebaseUid(userIdInput);
   const db = getFirestoreDb();
   const doc = await db.collection("jobScoutProfiles").doc(safeUid).get();
-  const cvFileRef = doc.exists ? (doc.data()?.cvFileRef as string | null | undefined) : null;
-  if (!cvFileRef) throw httpError(404, "No CV on file.");
+  const profile = doc.exists ? doc.data() || {} : {};
+  const format: JobScoutCvFormat = formatInput === "pdf" ? "pending" : formatInput;
+  if (format !== "html" && format !== "pending") throw httpError(400, "format must be html or pending.");
+  const canonicalKey = cvHtmlObjectKey(safeUid);
+  const canonicalRef = String(profile.cvHtmlRef || profile.cvFileRef || "").trim();
+  const legacyPdfRef = String(profile.cvFileRef || "").trim().toLowerCase().endsWith(".pdf")
+    ? String(profile.cvFileRef).trim()
+    : "";
+  const pendingRef = String(profile.cvPendingRef || legacyPdfRef || "").trim();
+  const key = format === "html" && canonicalRef === canonicalKey ? canonicalRef : format === "pending" ? pendingRef : "";
+  if (!key) {
+    throw httpError(404, format === "html" ? "No canonical HTML CV on file." : "No pending PDF CV on file.");
+  }
   // Presigning never checks existence, so verify the object is actually in R2 —
   // otherwise a stale cvFileRef would yield a URL that 404s on download and let
   // readiness checks pass falsely.
-  if (!(await objectExists(cvFileRef))) throw httpError(404, "CV file is missing from storage.");
+  if (!(await objectExists(key))) throw httpError(404, "CV file is missing from storage.");
   const expiresIn = 300;
-  const url = await getPresignedGetUrl(cvFileRef, expiresIn);
-  return { url, key: cvFileRef, expiresIn };
+  const url = await getPresignedGetUrl(key, expiresIn);
+  return {
+    url,
+    key,
+    expiresIn,
+    format,
+    contentType: format === "html" ? "text/html" : "application/pdf",
+    conversionStatus: String(profile.cvConversionStatus || (format === "html" ? "ready" : "pending")),
+  };
 }
 
 export async function getJobScoutCvFileRef(userIdInput: string) {
   const safeUid = validateFirebaseUid(userIdInput);
   const db = getFirestoreDb();
   const doc = await db.collection("jobScoutProfiles").doc(safeUid).get();
-  const cvFileRef = doc.exists ? String(doc.data()?.cvFileRef || "").trim() : "";
+  const data = doc.exists ? doc.data() || {} : {};
+  const cvFileRef = String(data.cvHtmlRef || data.cvFileRef || data.cvPendingRef || "").trim();
   return cvFileRef || null;
 }
 
@@ -228,20 +466,51 @@ export async function deleteJobScoutCv(userIdInput: string) {
   const db = getFirestoreDb();
   const profileRef = db.collection("jobScoutProfiles").doc(safeUid);
   const doc = await profileRef.get();
-  if (!doc.exists) return { ok: true };
-  const cvFileRef = doc.data()?.cvFileRef as string | null | undefined;
-  // Remove the R2 object only when there is one to remove...
-  if (cvFileRef) await deleteObject(cvFileRef);
-  // ...but always purge the CV references and extracted text, so parsed data
-  // left behind by old deletions or /profile writes (which may have no
-  // cvFileRef) doesn't linger.
+  const profile = doc.exists ? doc.data() || {} : {};
+  const refs = new Set([
+    cvHtmlObjectKey(safeUid),
+    cvPendingObjectKey(safeUid),
+    ...[profile.cvFileRef, profile.cvHtmlRef, profile.cvPendingRef]
+      .map((value) => String(value || "").trim())
+      .filter((value) => isUserCvObjectRef(value, safeUid)),
+  ].filter(Boolean));
+  for (const ref of refs) await deleteObject(ref);
+  if (!doc.exists) return { ok: true, deletedObjects: refs.size };
   await profileRef.update({
     cvFileRef: null,
+    cvHtmlRef: null,
+    cvPendingRef: null,
+    cvConversionStatus: "missing",
+    cvSourceVersion: null,
+    cvConvertedAt: null,
     cvParsedText: null,
     setupStatus: "draft",
     updatedAt: FieldValue.serverTimestamp(),
   });
-  return { ok: true };
+  return { ok: true, deletedObjects: refs.size };
+}
+
+function applicationArtifactRefsFromRecord(
+  userIdInput: string,
+  applicationIdInput: string,
+  record: Record<string, any>,
+) {
+  const refs = new Set<string>();
+  const prefix = `${storageSafeUid(userIdInput)}/applications/${normalizeApplicationId(applicationIdInput)}/`;
+  const visit = (value: unknown) => {
+    if (typeof value === "string") {
+      const ref = value.trim();
+      if (ref.startsWith(prefix) && isValidApplicationArtifactRef(ref, userIdInput, applicationIdInput)) {
+        refs.add(ref);
+      }
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    for (const nested of Object.values(value as Record<string, unknown>)) visit(nested);
+  };
+  visit(record.artifactRefs);
+  visit(record.artifacts);
+  return refs;
 }
 
 export async function resetJobScoutProfileForPhone(
@@ -257,17 +526,29 @@ export async function resetJobScoutProfileForPhone(
   let profileDeleted = false;
   let cvDeleted = false;
 
+  const applicationSnap = await db.collection("jobApplications").where("userId", "==", userId).get();
+  const storageRefs = new Set<string>([
+    cvHtmlObjectKey(userId),
+    cvPendingObjectKey(userId),
+  ]);
+
   if (profileDoc.exists) {
-    const cvFileRef = String(profileDoc.data()?.cvFileRef || "").trim();
-    if (cvFileRef) {
-      await dependencies.deleteObject(cvFileRef);
-      cvDeleted = true;
+    const profile = profileDoc.data() || {};
+    for (const ref of [profile.cvFileRef, profile.cvHtmlRef, profile.cvPendingRef]) {
+      const value = String(ref || "").trim();
+      if (isUserCvObjectRef(value, userId)) storageRefs.add(value);
     }
+  }
+  for (const doc of applicationSnap.docs) {
+    for (const ref of applicationArtifactRefsFromRecord(userId, doc.id, doc.data())) storageRefs.add(ref);
+  }
+  for (const ref of storageRefs) await dependencies.deleteObject(ref);
+  cvDeleted = storageRefs.size > 0;
+
+  if (profileDoc.exists) {
     await profileRef.delete();
     profileDeleted = true;
   }
-
-  const applicationSnap = await db.collection("jobApplications").where("userId", "==", userId).get();
   const applicationsDeleted = await deleteDocumentRefs(applicationSnap.docs.map((doc) => doc.ref));
 
   return {
@@ -277,6 +558,7 @@ export async function resetJobScoutProfileForPhone(
     phoneHash: hash,
     profileDeleted,
     cvDeleted,
+    storageObjectsDeleted: storageRefs.size,
     applicationsDeleted,
   };
 }
@@ -314,14 +596,35 @@ async function buildJobScoutSubscriber(
   const senderEmail = gmailConnected
     ? profileEmail
     : null;
-  const cvFileRef = String(profile.cvFileRef || "").trim();
-  const cvAvailable = Boolean(cvFileRef && await dependencies.objectExists(cvFileRef));
+  const canonicalKey = cvHtmlObjectKey(uid);
+  const storedCanonicalRef = String(profile.cvHtmlRef || profile.cvFileRef || "").trim();
+  const cvHtmlRef = storedCanonicalRef === canonicalKey ? canonicalKey : null;
+  const legacyPdfRef = String(profile.cvFileRef || "").trim().toLowerCase().endsWith(".pdf")
+    ? String(profile.cvFileRef).trim()
+    : null;
+  const cvPendingRef = String(profile.cvPendingRef || legacyPdfRef || "").trim() || null;
+  const storedConversionStatus = String(profile.cvConversionStatus || "").trim().toLowerCase();
+  const cvConversionStatus = storedConversionStatus === "ready" && cvHtmlRef
+    ? "ready"
+    : cvPendingRef
+      ? "pending"
+      : cvHtmlRef
+        ? "ready"
+        : "missing";
+  const [canonicalAvailable, pendingAvailable] = await Promise.all([
+    cvHtmlRef ? dependencies.objectExists(cvHtmlRef) : Promise.resolve(false),
+    cvPendingRef ? dependencies.objectExists(cvPendingRef) : Promise.resolve(false),
+  ]);
+  const cvAvailable = Boolean(cvConversionStatus === "ready" && cvHtmlRef && canonicalAvailable);
+  const cvUploaded = cvAvailable || Boolean(cvPendingRef && pendingAvailable);
   const readiness = evaluateJobScoutReadiness({
     onboardingVersion: profile.onboardingVersion,
     preferences: profile.preferences,
     gmailConnected,
     senderEmail,
-    cvFileRef,
+    cvFileRef: cvHtmlRef,
+    cvHtmlRef,
+    cvConversionStatus,
     cvAvailable,
     profileConfirmedAt: profile.profileConfirmedAt,
     safetyAcknowledgedAt: profile.safetyAcknowledgedAt,
@@ -352,7 +655,12 @@ async function buildJobScoutSubscriber(
     whatsappPhoneHash: hash,
     gmailConnected,
     senderEmail,
+    cvFileRef: cvHtmlRef,
+    cvHtmlRef,
+    cvPendingRef,
+    cvConversionStatus,
     cvAvailable,
+    cvUploaded,
     onboardingChannel,
     onboardingStatus,
     onboardingNextStep,
@@ -395,6 +703,11 @@ export async function getJobScoutStatusForUser(
     gmailConnected: subscriber.gmailConnected,
     senderEmail: subscriber.senderEmail,
     cvAvailable: subscriber.cvAvailable,
+    cvUploaded: subscriber.cvUploaded,
+    cvFileRef: subscriber.cvFileRef,
+    cvHtmlRef: subscriber.cvHtmlRef,
+    cvPendingRef: subscriber.cvPendingRef,
+    cvConversionStatus: subscriber.cvConversionStatus,
     onboardingVersion: subscriber.onboardingVersion,
     legacyProfile: subscriber.legacyProfile,
     profileConfirmed: subscriber.profileConfirmed,
@@ -470,6 +783,11 @@ export async function getJobScoutStatusForPhone(phoneInput: string) {
     gmailConnected: subscriber.gmailConnected,
     senderEmail: subscriber.senderEmail,
     cvAvailable: subscriber.cvAvailable,
+    cvUploaded: subscriber.cvUploaded,
+    cvFileRef: subscriber.cvFileRef,
+    cvHtmlRef: subscriber.cvHtmlRef,
+    cvPendingRef: subscriber.cvPendingRef,
+    cvConversionStatus: subscriber.cvConversionStatus,
     onboardingVersion: subscriber.onboardingVersion,
     legacyProfile: subscriber.legacyProfile,
     profileConfirmed: subscriber.profileConfirmed,
@@ -499,6 +817,183 @@ export async function listJobApplications(userIdInput: string) {
   const db = getFirestoreDb();
   const snap = await db.collection("jobApplications").where("userId", "==", safeUid).get();
   return snap.docs.map((doc) => doc.data());
+}
+
+export type JobApplicationArtifactKind = "cv" | "cover_letter_text" | "cover_letter_pdf";
+
+const APPLICATION_ARTIFACTS: Record<JobApplicationArtifactKind, {
+  fileName: string;
+  contentType: string;
+  field: "cv" | "coverLetterText" | "coverLetterPdf";
+  maxBytes: number;
+}> = {
+  cv: {
+    fileName: "cv.pdf",
+    contentType: "application/pdf",
+    field: "cv",
+    maxBytes: APPLICATION_PDF_MAX_BYTES,
+  },
+  cover_letter_text: {
+    fileName: "cover-letter.txt",
+    contentType: "text/plain",
+    field: "coverLetterText",
+    maxBytes: APPLICATION_TEXT_MAX_BYTES,
+  },
+  cover_letter_pdf: {
+    fileName: "cover-letter.pdf",
+    contentType: "application/pdf",
+    field: "coverLetterPdf",
+    maxBytes: APPLICATION_PDF_MAX_BYTES,
+  },
+};
+
+function normalizeApplicationId(value: unknown) {
+  const id = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw httpError(400, "applicationId is invalid.");
+  return id;
+}
+
+function normalizeArtifactAttempt(value: unknown) {
+  const attempt = Number(value);
+  if (!Number.isInteger(attempt) || attempt < 1 || attempt > 3) {
+    throw httpError(400, "attempt must be an integer from 1 to 3.");
+  }
+  return attempt;
+}
+
+function normalizeArtifactKind(value: unknown): JobApplicationArtifactKind {
+  const kind = String(value ?? "").trim() as JobApplicationArtifactKind;
+  if (!Object.hasOwn(APPLICATION_ARTIFACTS, kind)) throw httpError(400, "kind is invalid.");
+  return kind;
+}
+
+export function applicationArtifactObjectKey(input: {
+  userId: string;
+  applicationId: string;
+  attempt: number;
+  kind: JobApplicationArtifactKind;
+}) {
+  const uid = storageSafeUid(input.userId);
+  const applicationId = normalizeApplicationId(input.applicationId);
+  const attempt = normalizeArtifactAttempt(input.attempt);
+  const kind = normalizeArtifactKind(input.kind);
+  return `${uid}/applications/${applicationId}/${attempt}/${APPLICATION_ARTIFACTS[kind].fileName}`;
+}
+
+function isValidApplicationArtifactRef(
+  value: unknown,
+  userId: string,
+  applicationId: string,
+) {
+  const ref = String(value ?? "").trim();
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (const kind of Object.keys(APPLICATION_ARTIFACTS) as JobApplicationArtifactKind[]) {
+      if (ref === applicationArtifactObjectKey({ userId, applicationId, attempt, kind })) return true;
+    }
+  }
+  return false;
+}
+
+function normalizedArtifactRefs(
+  value: unknown,
+  userId: string,
+  applicationId: string,
+) {
+  if (!value || typeof value !== "object") return null;
+  const input = value as Record<string, unknown>;
+  const attempt = normalizeArtifactAttempt(input.attempt);
+  const output: Record<string, string | number> = { attempt };
+  const fields = [
+    ["cv", "cv"],
+    ["coverLetterText", "cover_letter_text"],
+    ["coverLetterPdf", "cover_letter_pdf"],
+  ] as const;
+  for (const [field, kind] of fields) {
+    const ref = String(input[field] ?? "").trim();
+    if (!ref) continue;
+    const expected = applicationArtifactObjectKey({ userId, applicationId, attempt, kind });
+    if (ref !== expected) throw httpError(400, `${field} artifact reference is invalid.`);
+    output[field] = ref;
+  }
+  if (Object.keys(output).length === 1) throw httpError(400, "artifactRefs must include at least one file reference.");
+  return output;
+}
+
+export async function saveJobApplicationArtifact(input: {
+  userId: string;
+  applicationId: string;
+  attempt: number;
+  kind: JobApplicationArtifactKind;
+  bytes: Buffer;
+  contentType?: string;
+}) {
+  const safeUid = validateFirebaseUid(input.userId);
+  const applicationId = normalizeApplicationId(input.applicationId);
+  const attempt = normalizeArtifactAttempt(input.attempt);
+  const kind = normalizeArtifactKind(input.kind);
+  const spec = APPLICATION_ARTIFACTS[kind];
+  if (!input.bytes.length) throw httpError(400, "Artifact file is required.");
+  if (input.bytes.length > spec.maxBytes) {
+    const size = spec.contentType === "text/plain" ? "256 KB" : "4 MB";
+    throw httpError(413, `Artifact is too large (max ${size}).`);
+  }
+  const contentType = normalizedContentType(input.contentType);
+  if (contentType !== spec.contentType) {
+    throw httpError(415, `Artifact must use ${spec.contentType}.`);
+  }
+  if (contentType === "application/pdf" && !isPdf(input.bytes)) {
+    throw httpError(400, "Artifact content is not a valid PDF.");
+  }
+  if (contentType === "text/plain") {
+    const text = decodeUtf8(input.bytes, "Cover letter");
+    if (!text.trim() || text.includes("\0")) throw httpError(400, "Cover letter text is invalid.");
+  }
+
+  const db = getFirestoreDb();
+  const applicationRef = db.collection("jobApplications").doc(applicationId);
+  const applicationDoc = await applicationRef.get();
+  if (!applicationDoc.exists) throw httpError(404, "Application record not found.");
+  if (String(applicationDoc.data()?.userId || "") !== safeUid) {
+    throw httpError(403, "Application does not belong to this user.");
+  }
+
+  const key = applicationArtifactObjectKey({ userId: safeUid, applicationId, attempt, kind });
+  await putObject(key, input.bytes, spec.contentType === "text/plain" ? "text/plain; charset=utf-8" : spec.contentType);
+  try {
+    await db.runTransaction(async (t) => {
+      const currentDoc = await t.get(applicationRef);
+      if (!currentDoc.exists) throw httpError(404, "Application record not found.");
+      const current = currentDoc.data() || {};
+      if (String(current.userId || "") !== safeUid) {
+        throw httpError(403, "Application does not belong to this user.");
+      }
+      const artifacts = current.artifacts && typeof current.artifacts === "object"
+        ? { ...current.artifacts }
+        : {};
+      const attemptArtifacts = artifacts[String(attempt)] && typeof artifacts[String(attempt)] === "object"
+        ? { ...artifacts[String(attempt)] }
+        : {};
+      attemptArtifacts[spec.field] = key;
+      attemptArtifacts.attempt = attempt;
+      artifacts[String(attempt)] = attemptArtifacts;
+
+      const previousLatestAttempt = Number(current.artifactRefs?.attempt || 0);
+      const artifactRefs = previousLatestAttempt === attempt && current.artifactRefs && typeof current.artifactRefs === "object"
+        ? { ...current.artifactRefs, attempt, [spec.field]: key }
+        : previousLatestAttempt > attempt
+          ? current.artifactRefs
+          : { attempt, [spec.field]: key };
+      t.update(applicationRef, {
+        artifacts,
+        artifactRefs,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (err) {
+    await deleteObject(key).catch(() => undefined);
+    throw err;
+  }
+  return { ok: true, key, artifactRef: key, applicationId, attempt, kind };
 }
 
 export async function recordJobApplication(body: any) {
@@ -533,13 +1028,19 @@ export async function recordJobApplication(body: any) {
   const replace = body.replace === true;
   const db = getFirestoreDb();
   const id = jobApplicationId(safeUid, company, role);
+  if (body.applicationId && normalizeApplicationId(body.applicationId) !== id) {
+    throw httpError(400, "applicationId does not match the application identity.");
+  }
+  const artifactRefs = body.artifactRefs == null
+    ? null
+    : normalizedArtifactRefs(body.artifactRefs, safeUid, id);
   const docRef = db.collection("jobApplications").doc(id);
   const now = FieldValue.serverTimestamp();
   let created = false;
   let updated = false;
   await db.runTransaction(async (t) => {
     const doc = await t.get(docRef);
-    const payload = {
+    const payload: Record<string, any> = {
       id,
       applicationId: id,
       userId: safeUid,
@@ -564,6 +1065,10 @@ export async function recordJobApplication(body: any) {
       appliedAt: status === "applied" ? now : null,
       updatedAt: now,
     };
+    if (artifactRefs) {
+      payload.artifactRefs = artifactRefs;
+      payload.artifacts = { [String(artifactRefs.attempt)]: artifactRefs };
+    }
     if (!doc.exists) {
       t.set(docRef, {
         ...payload,

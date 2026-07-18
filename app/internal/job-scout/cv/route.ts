@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyInternalApiKey } from "@/src/security/session";
 import { httpError } from "@/src/lib/utils";
-import { saveJobScoutCv, getJobScoutCvUrl, deleteJobScoutCv } from "@/src/domains/job-scout";
+import {
+  saveJobScoutCv,
+  finalizeJobScoutCvHtml,
+  getJobScoutCvUrl,
+  deleteJobScoutCv,
+} from "@/src/domains/job-scout";
 
 export const runtime = "nodejs";
 
@@ -15,6 +20,15 @@ export async function POST(req: NextRequest) {
     const userId = (form.get("userId") as string | null) ?? undefined;
     const phone = (form.get("phone") as string | null) ?? undefined;
     const bytes = Buffer.from(await file.arrayBuffer());
+    const requestedFormat = String(form.get("format") || "").trim().toLowerCase();
+    if (requestedFormat && !["html", "pdf", "pending"].includes(requestedFormat)) {
+      throw httpError(400, "format must be html or pdf.");
+    }
+    const contentType = String(file.type || "").toLowerCase().split(";")[0].trim();
+    if (requestedFormat === "html" || contentType === "text/html") {
+      const result = await finalizeJobScoutCvHtml({ userId, phone, bytes, contentType: file.type });
+      return NextResponse.json(result);
+    }
     const result = await saveJobScoutCv({
       userId,
       phone,
@@ -37,7 +51,10 @@ export async function GET(req: NextRequest) {
     verifyInternalApiKey(req);
     const userId = req.nextUrl.searchParams.get("userId");
     if (!userId) throw httpError(400, "userId is required.");
-    const result = await getJobScoutCvUrl(userId);
+    const rawFormat = String(req.nextUrl.searchParams.get("format") || "html").trim().toLowerCase();
+    if (!["html", "pending", "pdf"].includes(rawFormat)) throw httpError(400, "format must be html or pending.");
+    const format = rawFormat as "html" | "pending" | "pdf";
+    const result = await getJobScoutCvUrl(userId, format);
     return NextResponse.json(result);
   } catch (err: unknown) {
     const error = err as Error & { status?: number };

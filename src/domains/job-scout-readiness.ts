@@ -7,6 +7,8 @@ export type JobScoutReadinessInput = {
   gmailConnected: boolean;
   senderEmail?: unknown;
   cvFileRef?: unknown;
+  cvHtmlRef?: unknown;
+  cvConversionStatus?: unknown;
   cvAvailable: boolean;
   profileConfirmedAt?: unknown;
   safetyAcknowledgedAt?: unknown;
@@ -18,7 +20,7 @@ export type JobScoutReadiness = {
   profileConfirmed: boolean;
   safetyAcknowledged: boolean;
   ready: boolean;
-  setupStatus: "draft" | "ready";
+  setupStatus: "draft" | "pending" | "ready";
   missingRequirements: string[];
 };
 
@@ -37,12 +39,17 @@ export function evaluateJobScoutReadiness(input: JobScoutReadinessInput): JobSco
   const hasLocations = nonEmptyList(preferences.locations);
   const hasCountry = /^[a-z]{2}$/i.test(String(preferences.country ?? "").trim());
   const hasSenderEmail = Boolean(String(input.senderEmail ?? "").trim());
-  const hasCvRef = Boolean(String(input.cvFileRef ?? "").trim());
+  const cvHtmlRef = String(input.cvHtmlRef ?? input.cvFileRef ?? "").trim();
+  const conversionStatus = String(input.cvConversionStatus ?? "").trim().toLowerCase();
+  const hasReadyCv = Boolean(
+    conversionStatus === "ready"
+    && cvHtmlRef
+    && input.cvAvailable,
+  );
   const structurallyComplete = Boolean(
     input.gmailConnected
     && hasSenderEmail
-    && hasCvRef
-    && input.cvAvailable
+    && hasReadyCv
     && hasRoles
     && hasLocations
     && hasCountry
@@ -55,7 +62,9 @@ export function evaluateJobScoutReadiness(input: JobScoutReadinessInput): JobSco
   const missingRequirements: string[] = [];
   if (!input.gmailConnected) missingRequirements.push("gmail_connection");
   if (!hasSenderEmail) missingRequirements.push("sender_email");
-  if (!hasCvRef || !input.cvAvailable) missingRequirements.push("cv");
+  if (!hasReadyCv) {
+    missingRequirements.push(conversionStatus === "pending" ? "cv_conversion" : "cv");
+  }
   if (!hasRoles) missingRequirements.push("target_roles");
   if (!hasLocations || !hasCountry) missingRequirements.push("locations");
   if (!profileConfirmed) missingRequirements.push("profile_confirmation");
@@ -68,7 +77,7 @@ export function evaluateJobScoutReadiness(input: JobScoutReadinessInput): JobSco
     profileConfirmed,
     safetyAcknowledged,
     ready,
-    setupStatus: ready ? "ready" : "draft",
+    setupStatus: ready ? "ready" : conversionStatus === "pending" ? "pending" : "draft",
     missingRequirements,
   };
 }

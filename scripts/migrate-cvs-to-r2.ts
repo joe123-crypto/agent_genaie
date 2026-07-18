@@ -6,8 +6,9 @@
  *
  * <phone-hash> is the WhatsApp phone hash. We resolve it to a Firebase UID via
  * jobScoutDeliveryByPhone/{hash}.userId (fallback: phoneLinksByUser where
- * phoneHash == hash), then upload to `${uid}/cv/cv.pdf` and set the profile's
- * cvFileRef.
+ * phoneHash == hash), then stage the PDF at
+ * `${uid}/cv/pending/original.pdf`. Profiles remain paused until an
+ * administrator finalizes canonical HTML through the existing CV route.
  *
  * Usage:
  *   npx tsx scripts/migrate-cvs-to-r2.ts [--dry-run] [--source <dir>]
@@ -95,10 +96,10 @@ async function main() {
     }
 
     // Upload only if the object is missing, but ALWAYS reconcile Firestore so a
-    // prior partial run (upload succeeded, cvFileRef write failed) self-heals.
+    // prior partial run (upload succeeded, profile write failed) self-heals.
     const alreadyUploaded = await objectExists(key);
     if (alreadyUploaded) {
-      console.log(`  = object exists, reconciling cvFileRef ${key}`);
+      console.log(`  = object exists, reconciling pending CV ${key}`);
       skippedExisting++;
     } else {
       const bytes = fs.readFileSync(cvPath);
@@ -111,7 +112,17 @@ async function main() {
       .collection("jobScoutProfiles")
       .doc(uid)
       .set(
-        { userId: uid, cvFileRef: key, updatedAt: FieldValue.serverTimestamp() },
+        {
+          userId: uid,
+          cvFileRef: null,
+          cvHtmlRef: null,
+          cvPendingRef: key,
+          cvConversionStatus: "pending",
+          cvSourceVersion: null,
+          cvConvertedAt: null,
+          setupStatus: "pending",
+          updatedAt: FieldValue.serverTimestamp(),
+        },
         { merge: true },
       );
   }

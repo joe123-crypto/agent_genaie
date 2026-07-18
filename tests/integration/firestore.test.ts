@@ -102,7 +102,8 @@ test("saveJobScoutProfile writes the expected jobScoutProfiles document shape", 
       maxApplicationsPerRun: 99,
       country: "FR",
     },
-    cvFileRef: `${uid}/cv/cv.pdf`,
+    cvFileRef: `${uid}/cv/base/cv.html`,
+    cvHtmlRef: `${uid}/cv/base/cv.html`,
     cvParsedText: "x".repeat(60000),
     profileConfirmed: true,
     safetyAcknowledged: true,
@@ -115,7 +116,10 @@ test("saveJobScoutProfile writes the expected jobScoutProfiles document shape", 
   assert.deepEqual(data.preferences.targetRoles, ["Dev"]); // deduped
   assert.equal(data.preferences.maxApplicationsPerRun, 5); // clamped
   assert.equal(data.preferences.country, "fr"); // normalized locale
-  assert.equal(data.cvFileRef, `${uid}/cv/cv.pdf`);
+  assert.equal(data.cvFileRef, `${uid}/cv/base/cv.html`);
+  assert.equal(data.cvHtmlRef, `${uid}/cv/base/cv.html`);
+  assert.equal(data.cvPendingRef, null);
+  assert.equal(data.cvConversionStatus, "ready");
   assert.equal(data.cvParsedText.length, 50000); // capped
   assert.equal(data.onboardingVersion, 2);
   assert.equal(data.setupStatus, "ready");
@@ -417,7 +421,9 @@ test("getJobScoutStatusForUser rejects tokenless Gmail refs", opts, async () => 
     db.collection("jobScoutProfiles").doc(uid).set({
       userId: uid,
       preferences: { targetRoles: ["Developer"], locations: ["Algiers, Algeria"], country: "dz" },
-      cvFileRef: `${uid}/cv/cv.pdf`,
+      cvFileRef: `${uid}/cv/base/cv.html`,
+      cvHtmlRef: `${uid}/cv/base/cv.html`,
+      cvConversionStatus: "ready",
       profileConfirmedAt: new Date(),
       safetyAcknowledgedAt: new Date(),
       onboardingVersion: 2,
@@ -425,7 +431,7 @@ test("getJobScoutStatusForUser rejects tokenless Gmail refs", opts, async () => 
   ]);
 
   const status = await getJobScoutStatusForUser(uid, {
-    objectExists: async (key: string) => key === `${uid}/cv/cv.pdf`,
+    objectExists: async (key: string) => key === `${uid}/cv/base/cv.html`,
   });
   assert.equal(status.gmailConnected, false);
   assert.equal(status.senderEmail, null);
@@ -477,6 +483,7 @@ test("recordJobApplication uses jobApplicationId as the doc ID and a valid statu
     ["applied", "skipped", "action_required", "physical_submission", "failed"].includes(data.status),
     "status is one of the allowed enum values",
   );
+  assert.equal(data.artifactRefs, undefined);
 
   const listed = await listJobApplications(uid);
   assert.equal(listed.length, 1);
@@ -489,7 +496,9 @@ test("resetJobScoutProfileForPhone leaves inert legacy invite documents untouche
   const otherUid = `${uid}-other`;
   const phone = "+213600000004";
   const hash = whatsappPhoneHash(phone);
-  const cvFileRef = `${uid}/cv/cv.pdf`;
+  const cvFileRef = `${uid}/cv/base/cv.html`;
+  const pendingRef = `${uid}/cv/pending/original.pdf`;
+  const cvArtifactRef = `${uid}/applications/${uid}-app-1/1/cv.pdf`;
   const deletedObjects: string[] = [];
 
   await Promise.all([
@@ -517,11 +526,19 @@ test("resetJobScoutProfileForPhone leaves inert legacy invite documents untouche
     db.collection("jobScoutProfiles").doc(uid).set({
       userId: uid,
       cvFileRef,
+      cvHtmlRef: cvFileRef,
+      cvPendingRef: pendingRef,
       cvParsedText: "parsed CV text",
       preferences: { targetRoles: ["Any"], locations: ["Nationwide, Zimbabwe"], country: "zw" },
       setupStatus: "ready",
     }),
-    db.collection("jobApplications").doc(`${uid}-app-1`).set({ userId: uid, company: "A", role: "One" }),
+    db.collection("jobApplications").doc(`${uid}-app-1`).set({
+      userId: uid,
+      company: "A",
+      role: "One",
+      artifactRefs: { attempt: 1, cv: cvArtifactRef },
+      artifacts: { "1": { attempt: 1, cv: cvArtifactRef } },
+    }),
     db.collection("jobApplications").doc(`${uid}-app-2`).set({ userId: uid, company: "B", role: "Two" }),
     db.collection("jobApplications").doc(`${uid}-other-app`).set({ userId: otherUid, company: "C", role: "Three" }),
     // The legacy collection has no active route or reader. Historical documents
@@ -546,7 +563,7 @@ test("resetJobScoutProfileForPhone leaves inert legacy invite documents untouche
   assert.equal(result.cvDeleted, true);
   assert.equal(result.applicationsDeleted, 2);
   assert.equal(Object.hasOwn(result, "invitesDeleted"), false);
-  assert.deepEqual(deletedObjects, [cvFileRef]);
+  assert.deepEqual(new Set(deletedObjects), new Set([cvFileRef, pendingRef, cvArtifactRef]));
 
   assert.equal((await db.collection("jobScoutProfiles").doc(uid).get()).exists, false);
   assert.equal((await db.collection("jobApplications").where("userId", "==", uid).get()).size, 0);

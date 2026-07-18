@@ -47,7 +47,7 @@ export default async function PrivacyPolicyPage() {
           <section className="policy-card">
             <h2>Your CV and job profile</h2>
             <p>To apply for jobs on your behalf, Genaie Scout collects your CV and your job preferences, such as your target role, target location, country, and how many applications the agent may submit per run.</p>
-            <p>Your CV file is stored securely, and text extracted from it is used only to match you to openings and to prepare applications. This information is not shared beyond the applications the agent submits for you. You can replace or remove your CV at any time from the Job Scout page.</p>
+            <p>Your uploaded PDF is stored securely while it is converted into an editable HTML CV. The HTML CV is used only to match you to openings and prepare tailored applications. Private copies of the exact CV and cover letter sent for an application may be retained with that application record for audit and deletion. This information is not shared beyond the applications the agent submits for you. You can replace or remove your CV at any time from the Job Scout page.</p>
           </section>
           <section className="policy-card">
             <h2>WhatsApp</h2>

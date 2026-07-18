@@ -5,7 +5,9 @@ import { evaluateJobScoutReadiness } from "@/src/domains/job-scout-readiness";
 const complete = {
   gmailConnected: true,
   senderEmail: "applicant@example.com",
-  cvFileRef: "uid/cv/cv.pdf",
+  cvFileRef: "uid/cv/base/cv.html",
+  cvHtmlRef: "uid/cv/base/cv.html",
+  cvConversionStatus: "ready",
   cvAvailable: true,
   preferences: {
     targetRoles: ["Waitress"],
@@ -58,6 +60,33 @@ test("requires the CV object, not only its reference", () => {
   const result = evaluateJobScoutReadiness({ ...complete, cvAvailable: false });
   assert.equal(result.ready, false);
   assert.ok(result.missingRequirements.includes("cv"));
+});
+
+test("pauses readiness while a PDF awaits HTML conversion", () => {
+  const result = evaluateJobScoutReadiness({
+    ...complete,
+    cvFileRef: null,
+    cvHtmlRef: null,
+    cvConversionStatus: "pending",
+    cvAvailable: false,
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.setupStatus, "pending");
+  assert.ok(result.missingRequirements.includes("cv_conversion"));
+  assert.ok(!result.missingRequirements.includes("cv"));
+});
+
+test("does not grandfather legacy PDF-only profiles", () => {
+  const result = evaluateJobScoutReadiness({
+    ...complete,
+    cvFileRef: "uid/cv/cv.pdf",
+    cvHtmlRef: null,
+    cvConversionStatus: "pending",
+    cvAvailable: true,
+  });
+  assert.equal(result.legacyProfile, true);
+  assert.equal(result.ready, false);
+  assert.ok(result.missingRequirements.includes("cv_conversion"));
 });
 
 test("treats WhatsApp linking as optional, never a readiness requirement", () => {

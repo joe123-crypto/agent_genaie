@@ -25,6 +25,8 @@ type AccountStatusSnapshot = {
 type JobScoutStatusSnapshot = {
   configured?: boolean;
   cvAvailable?: boolean;
+  cvUploaded?: boolean;
+  cvConversionStatus?: unknown;
   gmailConnected?: boolean;
   linked?: boolean;
   missingRequirements?: unknown;
@@ -120,6 +122,7 @@ const missingLabels: Record<string, string> = {
   gmail_connection: "Google connection",
   sender_email: "sender email",
   cv: "CV",
+  cv_conversion: "CV conversion",
   target_roles: "target role",
   locations: "target location",
   profile_confirmation: "profile confirmation",
@@ -240,7 +243,11 @@ function jobScoutService(input: DashboardModelInput): DashboardService | null {
   return {
     ...base,
     details: [
-      status.cvAvailable ? "CV uploaded" : "CV missing",
+      status.cvAvailable
+        ? "CV ready"
+        : status.cvConversionStatus === "pending" || status.cvUploaded
+          ? "CV conversion pending"
+          : "CV missing",
       status.gmailConnected ? "Google connected" : "Google not linked",
       status.linked ? "WhatsApp updates on" : "WhatsApp updates off (optional)",
       missingCopy(status.missingRequirements),
