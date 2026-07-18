@@ -190,6 +190,7 @@ export default function RootPage() {
             </a>
             <a href="#about">About</a>
             <a href="/privacy-policy">Privacy &amp; Policy</a>
+            <a href="/terms-of-service">Terms of Service</a>
           </nav>
 
           <SocialPlaceholders />
