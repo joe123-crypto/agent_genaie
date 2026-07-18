@@ -169,8 +169,8 @@ const footerColumns = [
         href: "https://x.com/joseph_mun4335",
       },
       { label: "Facebook · coming soon", href: "#home" },
-      { label: "WhatsApp · coming soon", href: "#home" },
-      { label: "Email · support coming soon", href: "#home" },
+      { label: "WhatsApp · +213 563 719 936", href: "https://wa.me/213563719936" },
+      { label: "Email · genaie2027@gmail.com", href: "mailto:genaie2027@gmail.com" },
     ],
   },
 ];
@@ -238,8 +238,8 @@ function LandingFooter() {
             Joseph Mun
           </a>
         </p>
-        <p className="landing-footer-dev">
-          Developer · Genaie Scout · @joseph_mun4335
+        <p className="landing-footer-copyright">
+          © 2026 Genaie Scout. All rights reserved.
         </p>
       </div>
     </footer>

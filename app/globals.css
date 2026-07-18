@@ -2692,7 +2692,7 @@ a.button.landing-cta:hover {
   object-fit: cover;
 }
 
-.landing-footer-dev {
+.landing-footer-copyright {
   text-align: right;
 }
 
@@ -2738,7 +2738,7 @@ a.button.landing-cta:hover {
     flex-direction: column;
   }
 
-  .landing-footer-dev {
+  .landing-footer-copyright {
     text-align: left;
   }
 }
