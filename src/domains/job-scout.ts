@@ -671,7 +671,12 @@ async function buildJobScoutSubscriber(
   };
 }
 
-export async function listJobScoutSubscribers(limitInput: number) {
+export type JobScoutSubscriberFilter = "ready" | "pending_conversion";
+
+export async function listJobScoutSubscribers(
+  limitInput: number,
+  statusFilter: JobScoutSubscriberFilter = "ready",
+) {
   const limit = Number.isFinite(limitInput) ? Math.max(1, Math.min(limitInput, 100)) : 50;
   const db = getFirestoreDb();
   const snap = await db.collection("jobScoutProfiles").limit(limit).get();
@@ -679,6 +684,14 @@ export async function listJobScoutSubscribers(limitInput: number) {
   const subscribers = await Promise.all(
     snap.docs.map((doc) => buildJobScoutSubscriber(doc.id, doc.data())),
   );
+  if (statusFilter === "pending_conversion") {
+    // Profiles whose CV still awaits PDF -> canonical HTML conversion. The
+    // conversion worker consumes this list; other readiness gaps are fine
+    // because converting early never hurts.
+    return subscribers.filter(
+      (subscriber) => subscriber.cvConversionStatus === "pending" && subscriber.cvPendingRef,
+    );
+  }
   return subscribers.filter((subscriber) => subscriber.ready);
 }
 
