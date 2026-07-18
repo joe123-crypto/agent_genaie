@@ -136,6 +136,116 @@ function TrustedBy() {
   );
 }
 
+const footerColumns = [
+  {
+    title: "Navigation",
+    links: [
+      { label: "Home", href: "#home" },
+      { label: "About", href: "#about" },
+      { label: "Start your job hunt", href: "/login" },
+    ],
+  },
+  {
+    title: "App",
+    links: [
+      { label: "Dashboard", href: "/vault" },
+      { label: "CV vault", href: "/vault" },
+      { label: "Connect Gmail", href: "/connect-gmail" },
+      { label: "WhatsApp setup", href: "/whatsapp" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { label: "Privacy policy", href: "/privacy-policy" },
+      { label: "Terms of service", href: "/terms-of-service" },
+    ],
+  },
+  {
+    title: "Social media",
+    links: [
+      {
+        label: "X / Twitter · @joseph_mun4335",
+        href: "https://x.com/joseph_mun4335",
+      },
+      { label: "Facebook · coming soon", href: "#home" },
+      { label: "WhatsApp · +213 563 719 936", href: "https://wa.me/213563719936" },
+      { label: "Email · genaie2027@gmail.com", href: "mailto:genaie2027@gmail.com" },
+    ],
+  },
+];
+
+function LandingFooter() {
+  return (
+    <footer className="landing-footer" aria-labelledby="landing-footer-title">
+      <div className="landing-footer-grid">
+        <div className="landing-footer-brand-column">
+          <p id="landing-footer-title" className="landing-footer-eyebrow">
+            Genaie Scout
+          </p>
+          <p className="landing-footer-summary">
+            An AI job scout that finds roles, applies with your CV, and reports
+            every application back to your WhatsApp.
+          </p>
+        </div>
+
+        {footerColumns.map((column) => (
+          <nav
+            className="landing-footer-column"
+            key={column.title}
+            aria-label={`${column.title} footer links`}
+          >
+            <h2>{column.title}</h2>
+            <ul>
+              {column.links.map((link) => (
+                <li key={`${column.title}-${link.label}`}>
+                  <a
+                    href={link.href}
+                    aria-label={
+                      link.label === "Start your job hunt"
+                        ? "Footer sign-in link"
+                        : `${link.label} footer link`
+                    }
+                    {...(link.href.startsWith("http")
+                      ? { target: "_blank", rel: "noopener noreferrer" }
+                      : {})}
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ))}
+      </div>
+
+      <div className="landing-footer-bottom">
+        <p>
+          Built by{" "}
+          <a
+            className="landing-footer-maker"
+            href="https://x.com/joseph_mun4335"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Image
+              src="/users/joseph_mun4335.jpg"
+              alt=""
+              width={24}
+              height={24}
+              aria-hidden="true"
+            />
+            Joseph Mun
+          </a>
+        </p>
+        <p className="landing-footer-copyright">
+          © 2026 Genaie Scout. All rights reserved.
+        </p>
+      </div>
+    </footer>
+  );
+}
+
 function DecorativeScene() {
   return (
     <svg
@@ -226,6 +336,7 @@ export default function RootPage() {
         </section>
 
         <TrustedBy />
+        <LandingFooter />
       </div>
     </main>
   );
