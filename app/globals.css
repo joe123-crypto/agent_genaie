@@ -2148,11 +2148,13 @@ button.password-toggle {
 
 .landing-brand {
   width: fit-content;
-  color: #090909;
-  font-size: clamp(1.22rem, 1.55vw, 1.55rem);
-  font-weight: 800;
-  letter-spacing: -0.045em;
-  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.landing-brand img {
+  height: clamp(30px, 2.6vw, 40px);
+  width: auto;
 }
 
 .landing-nav {
@@ -2510,8 +2512,8 @@ a.button.landing-cta:hover {
     width: calc(100% - 30px);
   }
 
-  .landing-brand {
-    font-size: 1.12rem;
+  .landing-brand img {
+    height: 26px;
   }
 
   .landing-socials {
