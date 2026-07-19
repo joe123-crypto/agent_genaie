@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Image from "next/image";
 import {
   BriefcaseBusiness,
   Home,
@@ -34,8 +35,8 @@ export function DashboardShell({
   return (
     <main className="dashboard-app">
       <aside className="dashboard-sidebar" aria-label="Dashboard navigation">
-        <a className="dashboard-brand" href={basePath}>
-          Genaie Scout
+        <a className="dashboard-brand" href={basePath} aria-label="Genaie Scout home">
+          <Image src="/logo.png" alt="Genaie Scout" width={1045} height={283} />
         </a>
         <nav className="dashboard-nav" aria-label="Primary dashboard navigation">
           {navItems.map((item) => {

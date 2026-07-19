@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import {
   GoogleAuthProvider,
@@ -251,7 +252,14 @@ export function LoginContent() {
     <main className="app-main app-main-center">
       <div className="auth-shell">
         <section className="auth-panel">
-          <h1>Agent Genaie</h1>
+          <Image
+            className="auth-logo"
+            src="/logo.png"
+            alt="Genaie Scout"
+            width={1045}
+            height={283}
+            priority
+          />
           <p>Sign in to manage your services and credentials.</p>
           <StatusNotice kind={notice.kind} role="status" aria-live="polite">
             {notice.message}
