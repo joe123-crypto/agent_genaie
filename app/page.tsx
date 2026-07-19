@@ -180,9 +180,14 @@ function LandingFooter() {
     <footer className="landing-footer" aria-labelledby="landing-footer-title">
       <div className="landing-footer-grid">
         <div className="landing-footer-brand-column">
-          <p id="landing-footer-title" className="landing-footer-eyebrow">
-            Genaie Scout
-          </p>
+          <Image
+            id="landing-footer-title"
+            className="landing-footer-logo"
+            src="/logo-white.png"
+            alt="Genaie Scout"
+            width={1045}
+            height={283}
+          />
           <p className="landing-footer-summary">
             An AI job scout that finds roles, applies with your CV, and reports
             every application back to your WhatsApp.

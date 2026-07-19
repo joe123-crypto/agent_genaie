@@ -686,9 +686,9 @@ button.password-toggle {
   text-align: center;
 }
 
-.auth-panel h1 {
-  font-size: clamp(1.9rem, 3vw, 2.6rem);
-  font-weight: var(--font-weight-brand);
+.auth-logo {
+  height: clamp(40px, 5vw, 52px);
+  width: auto;
 }
 
 .app-header h1 {
@@ -775,10 +775,14 @@ button.password-toggle {
 }
 
 .dashboard-brand {
-  color: var(--text-primary);
-  font-size: 1.28rem;
-  font-weight: var(--font-weight-brand);
-  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+}
+
+.dashboard-brand img {
+  height: 30px;
+  width: auto;
 }
 
 .dashboard-nav {
@@ -1469,13 +1473,6 @@ button.password-toggle {
   border-right: 1px solid var(--border);
   padding: 54px 28px 28px;
   z-index: 10;
-}
-
-.dashboard-brand {
-  color: var(--text-primary);
-  font-size: 1.28rem;
-  font-weight: 800;
-  text-decoration: none;
 }
 
 .dashboard-nav {
@@ -2625,13 +2622,19 @@ a.button.landing-cta:hover {
   min-width: 0;
 }
 
-.landing-footer-eyebrow,
 .landing-footer-column h2 {
   margin: 0 0 20px;
   color: #ffffff;
   font-size: 0.86rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+}
+
+.landing-footer-logo {
+  display: block;
+  height: 30px;
+  width: auto;
+  margin: 0 0 20px;
 }
 
 .landing-footer-summary {
