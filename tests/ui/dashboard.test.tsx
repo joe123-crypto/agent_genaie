@@ -241,6 +241,36 @@ describe("signed-in dashboard UI", () => {
     );
   });
 
+  it("treats an uploaded PDF awaiting backend conversion as processing, not missing setup", () => {
+    const model = dashboardModel({
+      jobScout: {
+        available: true,
+        data: {
+          configured: true,
+          cvAvailable: false,
+          cvConversionStatus: "pending",
+          cvUploaded: true,
+          gmailConnected: true,
+          linked: false,
+          missingRequirements: ["cv_conversion"],
+          ready: false,
+        },
+      },
+    });
+
+    expect(model.services).toEqual([
+      expect.objectContaining({
+        name: "Job Scout",
+        state: "processing",
+        status: "Processing CV",
+        details: expect.arrayContaining([
+          "CV processing",
+          "Your uploaded PDF is being processed. No action is needed.",
+        ]),
+      }),
+    ]);
+  });
+
   it("only schedules rows from ready services and valid enabled telemetry", () => {
     const model = dashboardModel({
       webetu: { available: true, data: { configured: false, status: "not_saved" } },

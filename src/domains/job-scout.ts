@@ -679,7 +679,10 @@ export async function listJobScoutSubscribers(
 ) {
   const limit = Number.isFinite(limitInput) ? Math.max(1, Math.min(limitInput, 100)) : 50;
   const db = getFirestoreDb();
-  const snap = await db.collection("jobScoutProfiles").limit(limit).get();
+  const profiles = db.collection("jobScoutProfiles");
+  const snap = statusFilter === "pending_conversion"
+    ? await profiles.where("cvConversionStatus", "==", "pending").limit(limit).get()
+    : await profiles.limit(limit).get();
 
   const subscribers = await Promise.all(
     snap.docs.map((doc) => buildJobScoutSubscriber(doc.id, doc.data())),

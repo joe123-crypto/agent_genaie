@@ -1,7 +1,7 @@
 import type { StatusKind } from "@/app/_components/status-ui";
 
 export type ConnectionState = "connected" | "partial" | "disconnected" | "unavailable";
-export type ServiceState = "ready" | "setup_needed" | "revoked" | "unavailable";
+export type ServiceState = "ready" | "processing" | "setup_needed" | "revoked" | "unavailable";
 export type DashboardTaskId = "reserve_meals" | "search_apply_jobs" | "deliver_results";
 export type DashboardTaskService = "webetu" | "job_scout" | "delivery";
 export type DashboardTaskStatus = "active" | "running" | "paused" | "failed" | "disabled";
@@ -159,11 +159,17 @@ function isRegisteredService(value: unknown) {
   return value === "subscribed" || value === "connected";
 }
 
-function missingCopy(missing: unknown) {
-  if (!Array.isArray(missing) || missing.length === 0) {
+function missingCopy(missing: unknown, conversionPending = false) {
+  const requirements = Array.isArray(missing)
+    ? missing.filter((item) => String(item) !== "cv_conversion")
+    : [];
+  if (conversionPending && requirements.length === 0) {
+    return "Your uploaded PDF is being processed. No action is needed.";
+  }
+  if (requirements.length === 0) {
     return "All setup requirements are complete.";
   }
-  return `Missing ${missing.map((item) => missingLabels[String(item)] || String(item)).join(", ")}.`;
+  return `Missing ${requirements.map((item) => missingLabels[String(item)] || String(item)).join(", ")}.`;
 }
 
 function googleConnection(account: DashboardModelInput["account"]): DashboardConnection {
@@ -240,22 +246,23 @@ function jobScoutService(input: DashboardModelInput): DashboardService | null {
 
   const status = input.jobScout.data;
   const ready = Boolean(status.ready);
+  const conversionPending = status.cvConversionStatus === "pending" || Boolean(status.cvUploaded && !status.cvAvailable);
   return {
     ...base,
     details: [
       status.cvAvailable
         ? "CV ready"
-        : status.cvConversionStatus === "pending" || status.cvUploaded
-          ? "CV conversion pending"
+        : conversionPending
+          ? "CV processing"
           : "CV missing",
       status.gmailConnected ? "Google connected" : "Google not linked",
       status.linked ? "WhatsApp updates on" : "WhatsApp updates off (optional)",
-      missingCopy(status.missingRequirements),
+      missingCopy(status.missingRequirements, conversionPending),
     ],
     kind: ready ? "complete" : "warning",
     ready,
-    state: ready ? "ready" : "setup_needed",
-    status: ready ? "Ready" : "Setup needed",
+    state: ready ? "ready" : conversionPending ? "processing" : "setup_needed",
+    status: ready ? "Ready" : conversionPending ? "Processing CV" : "Setup needed",
   };
 }
 

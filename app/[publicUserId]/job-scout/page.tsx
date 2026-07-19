@@ -14,20 +14,26 @@ function firstValue(value: unknown) {
   return Array.isArray(value) ? String(value[0] ?? "") : "";
 }
 
-function missingCopy(missing: unknown) {
-  if (!Array.isArray(missing) || missing.length === 0) return "All requirements are complete.";
+function missingCopy(missing: unknown, conversionStatus?: unknown) {
+  const requirements = Array.isArray(missing)
+    ? missing.map(String).filter((item) => item !== "cv_conversion")
+    : [];
   const labels: Record<string, string> = {
     phone_link: "WhatsApp link",
     gmail_connection: "Google connection",
     sender_email: "sender email",
     cv: "CV",
-    cv_conversion: "CV conversion",
     target_roles: "target role",
     locations: "target location",
     profile_confirmation: "profile confirmation",
     safety_acknowledgement: "terms acknowledgement",
   };
-  return `Missing: ${missing.map((item) => labels[String(item)] || String(item)).join(", ")}.`;
+  if (String(conversionStatus) === "pending") {
+    if (requirements.length === 0) return "Your PDF is uploaded and being processed. No action is needed.";
+    return `Your PDF is being processed. Missing: ${requirements.map((item) => labels[item] || item).join(", ")}.`;
+  }
+  if (requirements.length === 0) return "All requirements are complete.";
+  return `Missing: ${requirements.map((item) => labels[item] || item).join(", ")}.`;
 }
 
 export default async function JobScoutSetupPage({
@@ -99,13 +105,14 @@ const cvStatus = document.querySelector("[data-cv-status]");
 const missingStatus = document.querySelector("[data-missing]");
 const cvInput = document.querySelector("[data-cv]");
 const cvName = document.querySelector("[data-cv-name]");
+const initialCvConversionPending = ${JSON.stringify(cvConversionStatus === "pending")};
+let activeConversionPoll = null;
 
 const labels = {
   phone_link: "WhatsApp link",
   gmail_connection: "Google connection",
   sender_email: "sender email",
   cv: "CV",
-  cv_conversion: "CV conversion",
   target_roles: "target role",
   locations: "target location",
   profile_confirmation: "profile confirmation",
@@ -120,14 +127,57 @@ function setPill(el, text, kind) {
   el.querySelector("[data-status-label]").textContent = text;
   el.dataset.statusKind = kind || "info";
 }
-function missingCopy(missing) {
-  if (!Array.isArray(missing) || missing.length === 0) return "All requirements are complete.";
-  return "Missing: " + missing.map(function(item) { return labels[item] || item; }).join(", ") + ".";
+function missingCopy(missing, conversionStatus) {
+  const requirements = Array.isArray(missing)
+    ? missing.filter(function(item) { return item !== "cv_conversion"; })
+    : [];
+  if (conversionStatus === "pending") {
+    if (requirements.length === 0) return "Your PDF is uploaded and being processed. No action is needed.";
+    return "Your PDF is being processed. Missing: " + requirements.map(function(item) { return labels[item] || item; }).join(", ") + ".";
+  }
+  if (requirements.length === 0) return "All requirements are complete.";
+  return "Missing: " + requirements.map(function(item) { return labels[item] || item; }).join(", ") + ".";
 }
 async function readJson(response) {
   const body = await response.json().catch(function() { return {}; });
   if (!response.ok) throw new Error(body.error || "Request failed with " + response.status);
   return body;
+}
+function applyStatus(payload) {
+  setPill(readyStatus, payload.ready ? "Ready" : "Processing", payload.ready ? "complete" : "pending");
+  setPill(
+    cvStatus,
+    payload.cvAvailable ? "CV: Ready" : payload.cvConversionStatus === "pending" ? "CV: Processing" : "CV: Missing",
+    payload.cvAvailable ? "complete" : "pending"
+  );
+  missingStatus.querySelector("[data-status-label]").textContent = missingCopy(
+    payload.missingRequirements,
+    payload.cvConversionStatus
+  );
+  missingStatus.dataset.statusKind = payload.ready ? "complete" : payload.cvConversionStatus === "pending" ? "info" : "warning";
+}
+function sleep(ms) {
+  return new Promise(function(resolve) { window.setTimeout(resolve, ms); });
+}
+function waitForCvConversion(initialStatus) {
+  if (activeConversionPoll) return activeConversionPoll;
+  activeConversionPoll = (async function() {
+    let status = initialStatus;
+    for (let attempt = 0; attempt < 30 && status.cvConversionStatus === "pending"; attempt += 1) {
+      await sleep(2000);
+      status = await readJson(await fetch("/job-scout/profile/status", {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store"
+      }));
+      applyStatus(status);
+      if (status.ready) return status;
+    }
+    return status;
+  })().finally(function() {
+    activeConversionPoll = null;
+  });
+  return activeConversionPoll;
 }
 
 cvInput.addEventListener("change", function() {
@@ -140,26 +190,23 @@ form.addEventListener("submit", async function(event) {
   saveButton.disabled = true;
   setMessage("Saving Job Scout setup...", "loading");
   try {
-    const payload = await readJson(await fetch("/job-scout/profile", {
+    let payload = await readJson(await fetch("/job-scout/profile", {
       method: "POST",
       credentials: "same-origin",
       body: new FormData(form)
     }));
-    setPill(readyStatus, payload.ready ? "Ready" : "Draft", payload.ready ? "complete" : "pending");
-    setPill(
-      cvStatus,
-      payload.cvAvailable ? "CV: Ready" : payload.cvConversionStatus === "pending" ? "CV: Conversion pending" : "CV: Missing",
-      payload.cvAvailable ? "complete" : "pending"
-    );
-    missingStatus.querySelector("[data-status-label]").textContent = missingCopy(payload.missingRequirements);
-    missingStatus.dataset.statusKind = payload.ready ? "complete" : "warning";
+    applyStatus(payload);
+    if (payload.cvConversionStatus === "pending") {
+      setMessage("PDF uploaded. Preparing it for Job Scout...", "loading");
+      payload = await waitForCvConversion(payload);
+    }
     setMessage(
       payload.ready
         ? "Job Scout setup saved and ready."
         : payload.cvConversionStatus === "pending"
-          ? "Setup saved. Job applications are paused while your CV is converted to editable HTML."
+          ? "Setup saved. Your PDF is still being processed; you can leave this page."
           : "Setup saved, but requirements are still missing.",
-      payload.ready ? "complete" : "warning"
+      payload.ready ? "complete" : payload.cvConversionStatus === "pending" ? "info" : "warning"
     );
     cvInput.value = "";
     cvName.textContent = "No new file selected";
@@ -169,6 +216,20 @@ form.addEventListener("submit", async function(event) {
     saveButton.disabled = false;
   }
 });
+
+if (initialCvConversionPending) {
+  setMessage("Your uploaded PDF is being prepared for Job Scout...", "loading");
+  waitForCvConversion({ cvConversionStatus: "pending" }).then(function(payload) {
+    setMessage(
+      payload.ready
+        ? "Your CV is ready."
+        : "Your PDF is still being processed; you can leave this page.",
+      payload.ready ? "complete" : "info"
+    );
+  }).catch(function() {
+    setMessage("Your PDF is uploaded and will continue processing in the background.", "info");
+  });
+}
 `;
 
   const userLabel = displayName || email;
@@ -179,16 +240,18 @@ form.addEventListener("submit", async function(event) {
           <h1 id="job-scout-title">Job Scout Setup</h1>
           <p>Complete the profile Job Scout uses for applications.</p>
         </div>
-        <StatusPill data-ready-status kind={ready ? "complete" : "pending"}>{ready ? "Ready" : "Draft"}</StatusPill>
+        <StatusPill data-ready-status kind={ready ? "complete" : "pending"}>{ready ? "Ready" : cvConversionStatus === "pending" ? "Processing" : "Draft"}</StatusPill>
       </div>
       <div className="status-row" aria-label="Job Scout requirements">
         <StatusPill kind={whatsappLinked ? "complete" : "pending"}>{whatsappLinked ? "WhatsApp updates: On" : "WhatsApp updates: Off (optional)"}</StatusPill>
         <StatusPill kind={googleConnected ? "complete" : "unlinked"}>{googleConnected ? "Google: Connected" : "Google: Not connected"}</StatusPill>
         <StatusPill data-cv-status kind={cvAvailable ? "complete" : "pending"}>
-          {cvAvailable ? "CV: Ready" : cvConversionStatus === "pending" ? "CV: Conversion pending" : "CV: Missing"}
+          {cvAvailable ? "CV: Ready" : cvConversionStatus === "pending" ? "CV: Processing" : "CV: Missing"}
         </StatusPill>
       </div>
-      <StatusNotice className="missing" data-missing kind={ready ? "complete" : "warning"}>{missingCopy(jobScoutStatus?.missingRequirements)}</StatusNotice>
+      <StatusNotice className="missing" data-missing kind={ready ? "complete" : cvConversionStatus === "pending" ? "info" : "warning"}>
+        {missingCopy(jobScoutStatus?.missingRequirements, cvConversionStatus)}
+      </StatusNotice>
       <form className="form-stack" data-job-scout-form>
         <div className="grid">
           <label>
@@ -205,10 +268,10 @@ form.addEventListener("submit", async function(event) {
           <input data-cv name="cv" type="file" accept="application/pdf,.pdf" />
           <span className="file-note">
             {cvAvailable
-              ? "A canonical CV is ready. Choose a new PDF to replace it and restart conversion."
+              ? "Your CV is ready. Choose a new PDF only if you want to replace it."
               : cvUploaded
-                ? "Your PDF is awaiting conversion to editable HTML. Upload another PDF only to replace it."
-                : "Upload a PDF CV, max 4 MB. Applications begin after it is converted to editable HTML."}
+                ? "Your PDF is uploaded and being processed. Upload another PDF only to replace it."
+                : "Upload a PDF CV, max 4 MB. Job Scout prepares it automatically for applications."}
           </span>
           <span className="file-note" data-cv-name>No new file selected</span>
         </label>
