@@ -5,7 +5,7 @@ const rootDir = process.cwd();
 
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
-export const GOOGLE_OAUTH_SCOPES = [GMAIL_SEND_SCOPE, CALENDAR_SCOPE].join(" ");
+export const GOOGLE_OAUTH_SCOPES = GMAIL_SEND_SCOPE;
 export const TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export const REVOKE_URL = "https://oauth2.googleapis.com/revoke";

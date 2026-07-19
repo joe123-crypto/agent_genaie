@@ -33,3 +33,9 @@ test("requireConfig passes when the required values are present", async () => {
   const { requireConfig } = await import("@/src/config");
   assert.doesNotThrow(() => requireConfig(["r2AccountId", "firebaseProjectId"]));
 });
+
+test("Google OAuth requests only Gmail send access", async () => {
+  const { CALENDAR_SCOPE, GMAIL_SEND_SCOPE, GOOGLE_OAUTH_SCOPES } = await import("@/src/config");
+  assert.equal(GOOGLE_OAUTH_SCOPES, GMAIL_SEND_SCOPE);
+  assert.equal(GOOGLE_OAUTH_SCOPES.includes(CALENDAR_SCOPE), false);
+});

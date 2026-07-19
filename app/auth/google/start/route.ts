@@ -28,7 +28,6 @@ export async function POST(req: NextRequest) {
       scope: GOOGLE_OAUTH_SCOPES,
       access_type: "offline",
       prompt: "consent",
-      include_granted_scopes: "true",
       state: stateStr,
     });
 
