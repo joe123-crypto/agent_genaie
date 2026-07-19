@@ -291,7 +291,13 @@ export default function RootPage() {
       <div className="landing-canvas" id="home">
         <header className="landing-header">
           <a className="landing-brand" href="#home" aria-label="Genaie Scout home">
-            Genaie Scout
+            <Image
+              src="/logo.png"
+              alt="Genaie Scout"
+              width={1045}
+              height={283}
+              priority
+            />
           </a>
 
           <nav className="landing-nav" aria-label="Primary navigation">
