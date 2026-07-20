@@ -136,6 +136,26 @@ function TrustedBy() {
   );
 }
 
+function HowTo() {
+  return (
+    <section className="landing-howto" aria-label="How it works">
+      <h2 className="landing-howto-heading">See it in action</h2>
+      <p className="landing-howto-subheading">
+        Watch how Job Scout hunts for jobs while you live your life.
+      </p>
+      <div className="landing-howto-video-card">
+        <iframe
+          className="landing-howto-iframe"
+          src="https://www.youtube.com/embed/AMbvDlGnfXs"
+          title="Job Scout demo video"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+    </section>
+  );
+}
+
 const footerColumns = [
   {
     title: "Navigation",
@@ -347,6 +367,7 @@ export default function RootPage() {
         </section>
 
         <TrustedBy />
+        <HowTo />
         <LandingFooter />
       </div>
     </main>

@@ -2592,6 +2592,50 @@ a.button.landing-cta:hover {
   object-fit: cover;
 }
 
+/* ── How To / Video section ──────────────────────────── */
+.landing-howto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(0.75rem, 2vw, 1.25rem);
+  padding: clamp(3rem, 6vw, 5rem) clamp(1rem, 4vw, 2rem);
+  max-width: 1360px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.landing-howto-heading {
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  font-weight: 700;
+  text-align: center;
+  color: var(--foreground);
+  margin: 0;
+}
+
+.landing-howto-subheading {
+  font-size: clamp(0.9rem, 1.5vw, 1.05rem);
+  color: #6b7280;
+  text-align: center;
+  margin: 0;
+  max-width: 560px;
+}
+
+.landing-howto-video-card {
+  width: 100%;
+  max-width: 800px;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+}
+
+.landing-howto-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
 .landing-footer {
   width: 100%;
   margin: 48px auto 0;
