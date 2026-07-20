@@ -320,7 +320,7 @@ export default function RootPage() {
         <section className="landing-hero" aria-labelledby="landing-title">
           <div className="landing-copy" id="about">
             <h1 id="landing-title">
-              Your AI agent that hunts for jobs while you live your life
+              Your personal agent that hunts for jobs while you live your life
             </h1>
             <p>
               Upload your CV and tell Genaie Scout the role you want. Your
