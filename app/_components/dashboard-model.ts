@@ -414,7 +414,7 @@ export function buildDashboardViewModel(input: DashboardModelInput): DashboardVi
   if (readyServices.length > 0) {
     hero = {
       title: "Your AI agent is working for you.",
-      copy: `Genaie Scout is handling ${readyServices.map((service) => service.name).join(" and ")}.`,
+      copy: `Genaie is handling ${readyServices.map((service) => service.name).join(" and ")}.`,
     };
   } else if (services.length > 0) {
     hero = {

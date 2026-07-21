@@ -11,7 +11,7 @@ const ubuntu = localFont({
 
 export const metadata: Metadata = {
   title: "Agent Genaie",
-  description: "Genaie Scout dashboard. Manage your Job Scout profile, CV, Gmail, and WhatsApp links.",
+  description: "Genaie dashboard. Manage your Job Scout profile, CV, Gmail, and WhatsApp links.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

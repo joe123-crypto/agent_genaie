@@ -255,7 +255,7 @@ export function LoginContent() {
           <Image
             className="auth-logo"
             src="/logo.png"
-            alt="Genaie Scout"
+            alt="Genaie"
             width={1045}
             height={283}
             priority

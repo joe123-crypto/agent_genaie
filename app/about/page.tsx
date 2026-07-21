@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "We are what we do | Genaie Scout",
+  title: "We are what we do | Genaie",
   description:
-    "Why Genaie Scout exists: to let people spend less time on repetitive job applications and more time on meaningful work.",
+    "Why Genaie exists: to let people spend less time on repetitive job applications and more time on meaningful work.",
 };
 
 export default function AboutPage() {
@@ -37,7 +37,7 @@ export default function AboutPage() {
         <section className="policy-card">
           <h2>Why it exists</h2>
           <p>
-            Genaie Scout exists to give people back attention, momentum, and
+            Genaie exists to give people back attention, momentum, and
             time. The goal is not to avoid work. The goal is to move repetitive
             work to software, so people can focus on work that teaches them,
             challenges them, and moves their lives forward.

@@ -34,7 +34,7 @@ export function DashboardSettings({
       <header className="dashboard-topbar">
         <div>
           <h1>Settings</h1>
-          <p>Manage account links used by Genaie Scout services.</p>
+          <p>Manage account links used by Genaie services.</p>
         </div>
       </header>
 
