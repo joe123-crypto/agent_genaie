@@ -44,7 +44,6 @@ export default async function SettingsPage({ params }: { params: Promise<{ publi
   return (
     <DashboardShell active="settings" publicUserId={publicUserId} userLabel={userLabel}>
       <DashboardSettings
-        calendarConnected={accountStatus?.services.calendar === "connected"}
         gmailConnected={accountStatus?.services.gmail === "connected"}
         publicUserId={publicUserId}
         statusAvailable={Boolean(accountStatus)}

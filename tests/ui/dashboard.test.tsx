@@ -102,7 +102,7 @@ describe("signed-in dashboard UI", () => {
     expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
     expect(screen.getByRole("img", { name: /robot assistant holding an envelope/i })).toHaveAttribute("src", "/Pasted image (2).png");
     expect(screen.getAllByText(/whatsapp linked/i).length).toBeGreaterThan(0);
-    expect(screen.getByText("Google linked")).toBeVisible();
+    expect(screen.getAllByText("Gmail connected").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Job Scout").length).toBeGreaterThan(0);
     expect(screen.queryByText("Webetu Reservations")).not.toBeInTheDocument();
     expect(screen.getAllByText("No live schedule reported yet").length).toBeGreaterThan(0);
@@ -195,12 +195,12 @@ describe("signed-in dashboard UI", () => {
     expect(screen.queryByText("Reserve Meals")).not.toBeInTheDocument();
   });
 
-  it("reports partial Google access and hides Webetu from the dashboard services", () => {
+  it("reports Gmail access and hides Webetu from the dashboard services", () => {
     const input = readyInput({
       account: {
         available: true,
         data: {
-          services: { calendar: "not_connected", gmail: "connected", webetu: "connected" },
+          services: { gmail: "connected", webetu: "connected" },
           whatsappLinked: false,
         },
       },
@@ -212,8 +212,8 @@ describe("signed-in dashboard UI", () => {
     });
     const model = buildDashboardViewModel(input);
 
-    expect(model.connections.google.state).toBe("partial");
-    expect(model.connections.google.label).toBe("Google partially linked");
+    expect(model.connections.google.state).toBe("connected");
+    expect(model.connections.google.label).toBe("Gmail connected");
     expect(model.services).toEqual([]);
     expect(model.cronRows).toEqual([]);
     expect(model.nextRunLabel).toBe("No run scheduled");
@@ -372,7 +372,6 @@ describe("signed-in dashboard UI", () => {
   it("links Settings cards to Google and WhatsApp management", () => {
     render(
       <DashboardSettings
-        calendarConnected={false}
         gmailConnected
         publicUserId={publicUserId}
         whatsappLinked={false}
@@ -380,7 +379,7 @@ describe("signed-in dashboard UI", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Settings" })).toBeVisible();
-    expect(screen.getByRole("link", { name: /connect google/i })).toHaveAttribute("href", `/${publicUserId}/connect-gmail`);
+    expect(screen.getByRole("link", { name: /connect gmail/i })).toHaveAttribute("href", `/${publicUserId}/connect-gmail`);
     expect(screen.getByRole("link", { name: /whatsapp linking/i })).toHaveAttribute("href", `/${publicUserId}/whatsapp`);
     expect(screen.getByText("Gmail connected")).toBeVisible();
     expect(screen.getByText("WhatsApp not linked")).toBeVisible();
@@ -390,7 +389,6 @@ describe("signed-in dashboard UI", () => {
   it("shows unavailable Settings states without calling them disconnected", () => {
     render(
       <DashboardSettings
-        calendarConnected={false}
         gmailConnected={false}
         publicUserId={publicUserId}
         statusAvailable={false}
@@ -399,7 +397,6 @@ describe("signed-in dashboard UI", () => {
     );
 
     expect(screen.getByText("Gmail status unavailable")).toBeVisible();
-    expect(screen.getByText("Calendar status unavailable")).toBeVisible();
     expect(screen.getByText("WhatsApp status unavailable")).toBeVisible();
     expect(screen.queryByText("WhatsApp not linked")).not.toBeInTheDocument();
   });

@@ -105,7 +105,7 @@ export function DashboardOverview({
         <article className="overview-status-card">
           <span className="overview-icon"><Mail aria-hidden="true" /></span>
           <div>
-            <span>Google</span>
+            <span>Gmail</span>
             <strong>{connections.google.label}</strong>
             <p>{connections.google.detail}</p>
           </div>

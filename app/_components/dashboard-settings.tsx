@@ -1,5 +1,4 @@
 import {
-  CalendarCheck,
   ChevronRight,
   Mail,
   MessageCircle,
@@ -8,7 +7,6 @@ import {
 import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
 type DashboardSettingsProps = {
-  calendarConnected: boolean;
   gmailConnected: boolean;
   publicUserId: string;
   statusAvailable?: boolean;
@@ -17,16 +15,13 @@ type DashboardSettingsProps = {
 };
 
 export function DashboardSettings({
-  calendarConnected,
   gmailConnected,
   publicUserId,
   statusAvailable = true,
   whatsappLinked,
   whatsappMaskedPhone,
 }: DashboardSettingsProps) {
-  const googleConnected = gmailConnected && calendarConnected;
   const gmailLabel = !statusAvailable ? "Gmail status unavailable" : gmailConnected ? "Gmail connected" : "Gmail not linked";
-  const calendarLabel = !statusAvailable ? "Calendar status unavailable" : calendarConnected ? "Calendar connected" : "Calendar not linked";
   const whatsappLabel = !statusAvailable ? "WhatsApp status unavailable" : whatsappLinked ? "WhatsApp linked" : "WhatsApp not linked";
 
   return (
@@ -48,11 +43,10 @@ export function DashboardSettings({
         <a className="settings-card" href={`/${publicUserId}/connect-gmail`}>
           <span className="overview-icon"><Mail aria-hidden="true" /></span>
           <div>
-            <h2>Connect Google</h2>
-            <p>Manage Gmail and Calendar access for job applications.</p>
+            <h2>Connect Gmail</h2>
+            <p>Manage Gmail access for job applications.</p>
             <div className="settings-pills">
               <StatusPill kind={!statusAvailable ? "error" : gmailConnected ? "complete" : "unlinked"}>{gmailLabel}</StatusPill>
-              <StatusPill kind={!statusAvailable ? "error" : calendarConnected ? "complete" : "unlinked"}>{calendarLabel}</StatusPill>
             </div>
           </div>
           <ChevronRight aria-hidden="true" />
@@ -78,12 +72,12 @@ export function DashboardSettings({
           <p>
             {!statusAvailable
               ? "Connection coverage is temporarily unavailable."
-              : googleConnected && whatsappLinked
+              : gmailConnected && whatsappLinked
               ? "Core account links are ready for service automation."
-              : "Connect Google to unlock job applications. WhatsApp is optional — link it to get updates in chat."}
+              : "Connect Gmail to unlock job applications. WhatsApp is optional — link it to get updates in chat."}
           </p>
         </div>
-        <CalendarCheck aria-hidden="true" />
+        <Mail aria-hidden="true" />
       </section>
     </>
   );

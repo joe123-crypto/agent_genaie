@@ -46,7 +46,7 @@ export default async function TermsOfServicePage() {
           </section>
           <section className="policy-card">
             <h2>3. Your Account and Connected Services</h2>
-            <p>To apply on your behalf, Genaie may use your Gmail (send-only), Google Calendar (to create events), and, optionally, your linked WhatsApp number to deliver results and reminders.</p>
+            <p>To apply on your behalf, Genaie may use your Gmail (send-only) and, optionally, your linked WhatsApp number to deliver results and reminders.</p>
             <p>You are responsible for keeping these connections valid and for revoking any access you no longer wish to grant. For details on exactly how each permission is used, see our <a href="/privacy-policy">Privacy &amp; Policy</a>.</p>
           </section>
           <section className="policy-card">

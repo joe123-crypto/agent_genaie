@@ -20,7 +20,7 @@ function missingCopy(missing: unknown, conversionStatus?: unknown) {
     : [];
   const labels: Record<string, string> = {
     phone_link: "WhatsApp link",
-    gmail_connection: "Google connection",
+    gmail_connection: "Gmail connection",
     sender_email: "sender email",
     cv: "CV",
     target_roles: "target role",
@@ -110,7 +110,7 @@ let activeConversionPoll = null;
 
 const labels = {
   phone_link: "WhatsApp link",
-  gmail_connection: "Google connection",
+  gmail_connection: "Gmail connection",
   sender_email: "sender email",
   cv: "CV",
   target_roles: "target role",
@@ -244,7 +244,7 @@ if (initialCvConversionPending) {
       </div>
       <div className="status-row" aria-label="Job Scout requirements">
         <StatusPill kind={whatsappLinked ? "complete" : "pending"}>{whatsappLinked ? "WhatsApp updates: On" : "WhatsApp updates: Off (optional)"}</StatusPill>
-        <StatusPill kind={googleConnected ? "complete" : "unlinked"}>{googleConnected ? "Google: Connected" : "Google: Not connected"}</StatusPill>
+        <StatusPill kind={googleConnected ? "complete" : "unlinked"}>{googleConnected ? "Gmail: Connected" : "Gmail: Not connected"}</StatusPill>
         <StatusPill data-cv-status kind={cvAvailable ? "complete" : "pending"}>
           {cvAvailable ? "CV: Ready" : cvConversionStatus === "pending" ? "CV: Processing" : "CV: Missing"}
         </StatusPill>
@@ -299,7 +299,7 @@ if (initialCvConversionPending) {
         </label>
         <div className="actions">
           <button data-save type="submit">Save Job Scout setup</button>
-          <a className="button secondary" href={connectPath}>Connect Google</a>
+          <a className="button secondary" href={connectPath}>Connect Gmail</a>
           {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
           <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
         </div>

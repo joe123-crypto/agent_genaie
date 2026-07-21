@@ -50,12 +50,10 @@ export default async function ConnectGmailPage({
 
   // The user doc already fetched above records connection state.
   const gmailConnected = (routeUser as { services?: { gmail?: string } }).services?.gmail === "connected";
-  const calendarConnected = (routeUser as { services?: { calendar?: string } }).services?.calendar === "connected";
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? "signed-in user";
 
   const connectScript = `
 const gmailStatusEl = document.querySelector("[data-gmail-status]");
-const calendarStatusEl = document.querySelector("[data-calendar-status]");
 const statusEl = document.querySelector("[data-status]");
 const connectButton = document.querySelector("[data-connect]");
 const disconnectButton = document.querySelector("[data-disconnect]");
@@ -88,18 +86,16 @@ async function readJson(response) {
 
 async function loadGoogleStatus() {
   setPill(gmailStatusEl, "Gmail: Checking...", "loading");
-  setPill(calendarStatusEl, "Calendar: Checking...", "loading");
   const status = await readJson(await fetch("/auth/google/status", { method: "GET", credentials: "same-origin" }));
   if (status.connected) {
     setPill(gmailStatusEl, "Gmail: Connected", "complete");
-    connectButton.textContent = "Reconnect Google";
+    connectButton.textContent = "Reconnect Gmail";
     disconnectButton.hidden = false;
   } else {
     setPill(gmailStatusEl, "Gmail: Not connected", "unlinked");
-    connectButton.textContent = "Connect Google";
+    connectButton.textContent = "Connect Gmail";
     disconnectButton.hidden = true;
   }
-  setPill(calendarStatusEl, status.calendarConnected ? "Calendar: Connected" : "Calendar: Not connected", status.calendarConnected ? "complete" : "unlinked");
 }
 
 connectButton.addEventListener("click", async function() {
@@ -114,7 +110,7 @@ connectButton.addEventListener("click", async function() {
     }));
     window.location.href = payload.url;
   } catch (err) {
-    setStatus(err.message || "Could not start Google connection.", "error");
+    setStatus(err.message || "Could not start Gmail connection.", "error");
     setBusy(false);
   }
 });
@@ -129,10 +125,10 @@ disconnectButton.addEventListener("click", async function() {
       credentials: "same-origin",
       body: "{}"
     }));
-    setStatus("Google access disconnected.", "complete");
+    setStatus("Gmail access disconnected.", "complete");
     await loadGoogleStatus();
   } catch (err) {
-    setStatus(err.message || "Could not disconnect Google access.", "error");
+    setStatus(err.message || "Could not disconnect Gmail access.", "error");
   } finally { setBusy(false); }
 });
 
@@ -164,20 +160,19 @@ if (signOutButton) signOutButton.addEventListener("click", async function() {
     || verified.email
     || "Account";
   const connectPanel = (
-    <section className="panel panel-narrow dashboard-form-panel" aria-labelledby="connect-google-title">
-      <h1 id="connect-google-title">Connect Google</h1>
-      <p>Connect Gmail and Calendar for job applications.</p>
+    <section className="panel panel-narrow dashboard-form-panel" aria-labelledby="connect-gmail-title">
+      <h1 id="connect-gmail-title">Connect Gmail</h1>
+      <p>Connect Gmail so Genaie can send job applications on your behalf.</p>
       <div data-signed-in>
         <div className="meta">
           <span>Signed in as <strong data-user-email>{email}</strong></span>
-          <div className="status-row" aria-label="Google connection status">
+          <div className="status-row" aria-label="Gmail connection status">
             <StatusPill data-gmail-status kind={gmailConnected ? "complete" : "unlinked"}>{gmailConnected ? "Gmail: Connected" : "Gmail: Not connected"}</StatusPill>
-            <StatusPill data-calendar-status kind={calendarConnected ? "complete" : "unlinked"}>{calendarConnected ? "Calendar: Connected" : "Calendar: Not connected"}</StatusPill>
           </div>
         </div>
         <div className="actions actions-spaced">
-          <button data-connect type="button">{gmailConnected ? "Reconnect Google" : "Connect Google"}</button>
-          <button className="danger" data-disconnect type="button" hidden={!gmailConnected}>Disconnect Google</button>
+          <button data-connect type="button">{gmailConnected ? "Reconnect Gmail" : "Connect Gmail"}</button>
+          <button className="danger" data-disconnect type="button" hidden={!gmailConnected}>Disconnect Gmail</button>
           {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
           {onboardingMode ? <button className="secondary" data-sign-out type="button">Sign out</button> : null}
         </div>

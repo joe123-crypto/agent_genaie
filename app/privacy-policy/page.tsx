@@ -55,16 +55,11 @@ export default async function PrivacyPolicyPage() {
             <p>Your number is stored in a hashed form and shown masked in the interface. You can unlink it at any time from Settings.</p>
           </section>
           <section className="policy-card">
-            <h2>Google permissions (Gmail &amp; Calendar)</h2>
-            <p>Gmail and Calendar access are granted together as a single Google connection. Connecting grants both permissions, and revoking removes both at once.</p>
-            <h3>Gmail</h3>
+            <h2>Gmail permission</h2>
             <p>The Gmail permission requested by Genaie is send-only. It allows the agent to send emails on your behalf so it can complete job applications.</p>
             <p>This permission is not used to read your emails. It is not used for anything other than sending job application emails for services you have enabled.</p>
-            <h3>Calendar</h3>
-            <p>The Calendar permission allows Genaie to create calendar events on your behalf, so it can add reminders and scheduled items for services you have enabled.</p>
-            <p>This permission is used only to add and manage events the agent creates. It is not used to read or share your existing calendar entries.</p>
             <h3>Revoking access</h3>
-            <p>You can revoke Google access at any time from the Connect Google page, which removes both the Gmail and Calendar permissions together. You are encouraged to revoke permissions that you no longer need.</p>
+            <p>You can revoke Gmail access at any time from the Connect Gmail page. You are encouraged to revoke permissions that you no longer need.</p>
           </section>
           <section className="policy-card">
             <h2>Job application records</h2>
@@ -82,7 +77,7 @@ export default async function PrivacyPolicyPage() {
           </section>
           <section className="policy-card">
             <h2>Service providers and disclosures</h2>
-            <p>Genaie relies on a small number of trusted providers to run the service: Google Firebase and Firestore for authentication and data storage, Cloudflare R2 for storing your CV file, Google APIs for the Gmail and Calendar features described above, Vercel for hosting and basic usage analytics, and WhatsApp for delivering messages you have opted into.</p>
+            <p>Genaie relies on a small number of trusted providers to run the service: Google Firebase and Firestore for authentication and data storage, Cloudflare R2 for storing your CV file, Google APIs for the Gmail feature described above, Vercel for hosting and basic usage analytics, and WhatsApp for delivering messages you have opted into.</p>
             <p>Genaie does not sell your personal information. Information is disclosed only to these providers as needed to run the service, or where required by law.</p>
           </section>
           <section className="policy-card">
@@ -92,7 +87,7 @@ export default async function PrivacyPolicyPage() {
           </section>
           <section className="policy-card">
             <h2>Your choices</h2>
-            <p>You remain in control of your information. From within the app you can replace or remove your CV on the Job Scout page, unlink your WhatsApp number from Settings, and revoke Gmail and Calendar access from the Connect Google page.</p>
+            <p>You remain in control of your information. From within the app you can replace or remove your CV on the Job Scout page, unlink your WhatsApp number from Settings, and revoke Gmail access from the Connect Gmail page.</p>
             <p>You can also request access to, correction of, or deletion of your information by contacting us at the address below.</p>
           </section>
           <section className="policy-card">

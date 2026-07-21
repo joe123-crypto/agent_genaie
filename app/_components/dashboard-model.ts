@@ -119,7 +119,7 @@ export type DashboardModelInput = {
 
 const missingLabels: Record<string, string> = {
   phone_link: "WhatsApp link",
-  gmail_connection: "Google connection",
+  gmail_connection: "Gmail connection",
   sender_email: "sender email",
   cv: "CV",
   cv_conversion: "CV conversion",
@@ -175,27 +175,19 @@ function missingCopy(missing: unknown, conversionPending = false) {
 function googleConnection(account: DashboardModelInput["account"]): DashboardConnection {
   if (!account.available || !account.data) {
     return {
-      detail: "Google connection status could not be loaded.",
-      label: "Google status unavailable",
+      detail: "Gmail connection status could not be loaded.",
+      label: "Gmail status unavailable",
       state: "unavailable",
     };
   }
 
   const gmailConnected = account.data.services?.gmail === "connected";
-  const calendarConnected = account.data.services?.calendar === "connected";
-  if (gmailConnected && calendarConnected) {
-    return { detail: "Gmail + Calendar", label: "Google linked", state: "connected" };
-  }
-  if (gmailConnected || calendarConnected) {
-    return {
-      detail: gmailConnected ? "Gmail connected; Calendar not linked." : "Calendar connected; Gmail not linked.",
-      label: "Google partially linked",
-      state: "partial",
-    };
+  if (gmailConnected) {
+    return { detail: "Gmail send-only access", label: "Gmail connected", state: "connected" };
   }
   return {
-    detail: "Connect Gmail and Calendar in Settings.",
-    label: "Google not linked",
+    detail: "Connect Gmail in Settings.",
+    label: "Gmail not linked",
     state: "disconnected",
   };
 }
@@ -255,7 +247,7 @@ function jobScoutService(input: DashboardModelInput): DashboardService | null {
         : conversionPending
           ? "CV processing"
           : "CV missing",
-      status.gmailConnected ? "Google connected" : "Google not linked",
+      status.gmailConnected ? "Gmail connected" : "Gmail not linked",
       status.linked ? "WhatsApp updates on" : "WhatsApp updates off (optional)",
       missingCopy(status.missingRequirements, conversionPending),
     ],
