@@ -125,6 +125,26 @@ export function validateCanonicalCvHtml(bytes: Buffer) {
   if (/\son[a-z]+\s*=/i.test(html) || /(?:href|src)\s*=\s*["']?\s*javascript:/i.test(html)) {
     throw httpError(400, "CV HTML contains executable content.");
   }
+  if (/(?:href|src|srcset|poster|action)\s*=\s*["']?\s*(?:https?:)?\/\//i.test(html) || /(?:@import\s+(?:url\()?|url\()\s*["']?\s*(?:https?:)?\/\//i.test(html)) {
+    throw httpError(400, "CV HTML must be self-contained.");
+  }
+  const visibleText = html
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "\n")
+    .replace(/<[^>]+>/g, "\n")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+  const visibleLines = visibleText.split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (visibleLines.some((line) => /^(?:file:\/\/|about:blank)/i.test(line))) {
+    throw httpError(400, "CV HTML contains browser print chrome.");
+  }
+  if (visibleLines.some((line) => /^\d+\s*\/\s*\d+$/.test(line))) {
+    throw httpError(400, "CV HTML contains a browser page counter.");
+  }
+  if (visibleLines.some((line) => /^\d{1,2}\/\d{1,2}\/\d{2,4},?\s+\d{1,2}:\d{2}\s+(?:AM|PM)$/i.test(line))) {
+    throw httpError(400, "CV HTML contains a browser print timestamp.");
+  }
   return html;
 }
 

@@ -18,6 +18,10 @@ test("canonical CV HTML accepts styled documents and rejects executable content"
   assert.match(validateCanonicalCvHtml(safe), /<main>CV<\/main>/);
   assert.throws(() => validateCanonicalCvHtml(Buffer.from("<html><body><script>alert(1)</script></body></html>")));
   assert.throws(() => validateCanonicalCvHtml(Buffer.from("<html><body><a href=\"javascript:alert(1)\">x</a></body></html>")));
+  assert.throws(() => validateCanonicalCvHtml(Buffer.from("<html><body><img src=\"https://tracker.example/p.gif\"></body></html>")));
+  assert.throws(() => validateCanonicalCvHtml(Buffer.from("<html><head><style>body{background:url(https://tracker.example/p.gif)}</style></head><body>CV</body></html>")));
+  assert.throws(() => validateCanonicalCvHtml(Buffer.from("<html><body><p>file:///home/joseph/cv.html</p></body></html>")));
+  assert.throws(() => validateCanonicalCvHtml(Buffer.from("<html><body><p>5/19/26, 3:47 PM</p><p>1/2</p></body></html>")));
   assert.throws(() => validateCanonicalCvHtml(Buffer.from("<p>fragment only</p>")));
 });
 
