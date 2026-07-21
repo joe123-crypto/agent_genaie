@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Image from "next/image";
 
 export const metadata: Metadata = {
-  title: "Genaie Scout | Your AI job scout",
+  title: "Genaie | Your AI job scout",
   description:
-    "Genaie Scout searches and applies for jobs on your behalf, then reports every application straight to your WhatsApp.",
+    "Genaie searches and applies for jobs on your behalf, then reports every application straight to your WhatsApp.",
 };
 
 function FacebookIcon() {
@@ -204,7 +204,7 @@ function LandingFooter() {
             id="landing-footer-title"
             className="landing-footer-logo"
             src="/logo-white.png"
-            alt="Genaie Scout"
+            alt="Genaie"
             width={1045}
             height={283}
           />
@@ -264,7 +264,7 @@ function LandingFooter() {
           </a>
         </p>
         <p className="landing-footer-copyright">
-          © 2026 Genaie Scout. All rights reserved.
+          © 2026 Genaie. All rights reserved.
         </p>
       </div>
     </footer>
@@ -315,10 +315,10 @@ export default function RootPage() {
     <main className="landing-page">
       <div className="landing-canvas" id="home">
         <header className="landing-header">
-          <a className="landing-brand" href="#home" aria-label="Genaie Scout home">
+          <a className="landing-brand" href="#home" aria-label="Genaie home">
             <Image
               src="/logo.png"
-              alt="Genaie Scout"
+              alt="Genaie"
               width={1045}
               height={283}
               priority
@@ -343,7 +343,7 @@ export default function RootPage() {
               Your personal agent that hunts for jobs while you live your life
             </h1>
             <p>
-              Upload your CV and tell Genaie Scout the role you want. Your
+              Upload your CV and tell Genaie the role you want. Your
               agent searches openings, applies on your behalf, and reports
               every application straight to your WhatsApp.
             </p>

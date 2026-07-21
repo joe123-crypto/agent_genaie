@@ -35,8 +35,8 @@ export function DashboardShell({
   return (
     <main className="dashboard-app">
       <aside className="dashboard-sidebar" aria-label="Dashboard navigation">
-        <a className="dashboard-brand" href={basePath} aria-label="Genaie Scout home">
-          <Image src="/logo.png" alt="Genaie Scout" width={1045} height={283} />
+        <a className="dashboard-brand" href={basePath} aria-label="Genaie home">
+          <Image src="/logo.png" alt="Genaie" width={1045} height={283} />
         </a>
         <nav className="dashboard-nav" aria-label="Primary dashboard navigation">
           {navItems.map((item) => {
