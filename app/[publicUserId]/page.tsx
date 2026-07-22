@@ -3,9 +3,10 @@ import { redirect, notFound } from "next/navigation";
 import { buildDashboardViewModel } from "@/app/_components/dashboard-model";
 import { DashboardOverview } from "@/app/_components/dashboard-overview";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
+import { summarizeApplications } from "@/app/_components/application-history-model";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { listDashboardTasksForUser } from "@/src/domains/dashboard";
-import { getJobScoutStatusForUser } from "@/src/domains/job-scout";
+import { getJobScoutStatusForUser, listJobApplications } from "@/src/domains/job-scout";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
 import { getWebetuCredentialStatus } from "@/src/domains/webetu";
@@ -39,16 +40,18 @@ export default async function DashboardPage({ params }: { params: Promise<{ publ
     redirect("/login");
   }
 
-  const [accountResult, jobScoutResult, webetuResult, telemetryResult] = await Promise.allSettled([
+  const [accountResult, jobScoutResult, webetuResult, telemetryResult, applicationsResult] = await Promise.allSettled([
     getSignedInAccountStatus(uid),
     getJobScoutStatusForUser(uid),
     getWebetuCredentialStatus(uid),
     listDashboardTasksForUser(uid),
+    listJobApplications(uid),
   ]);
   const accountStatus = accountResult.status === "fulfilled" ? accountResult.value : null;
   const jobScoutStatus = jobScoutResult.status === "fulfilled" ? jobScoutResult.value : null;
   const webetuStatus = webetuResult.status === "fulfilled" ? webetuResult.value : null;
   const telemetry = telemetryResult.status === "fulfilled" ? telemetryResult.value : null;
+  const applicationStats = summarizeApplications(applicationsResult.status === "fulfilled" ? applicationsResult.value : []);
   const dashboard = buildDashboardViewModel({
     account: { available: accountResult.status === "fulfilled", data: accountStatus },
     jobScout: { available: jobScoutResult.status === "fulfilled", data: jobScoutStatus },
@@ -66,7 +69,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ publ
 
   return (
     <DashboardShell active="overview" publicUserId={publicUserId} userLabel={userLabel}>
-      <DashboardOverview {...dashboard} />
+      <DashboardOverview {...dashboard} applicationStats={applicationStats} publicUserId={publicUserId} />
     </DashboardShell>
   );
 }

@@ -3,17 +3,23 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
+  CircleAlert,
   Clock3,
   FileText,
+  ListChecks,
   Mail,
   MessageCircle,
   Send,
   Utensils,
 } from "lucide-react";
 import type { ConnectionState, DashboardCronRow, DashboardService, DashboardViewModel } from "@/app/_components/dashboard-model";
+import type { ApplicationSummary } from "@/app/_components/application-history-model";
 import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
-export type DashboardOverviewProps = DashboardViewModel;
+export type DashboardOverviewProps = DashboardViewModel & {
+  applicationStats: ApplicationSummary;
+  publicUserId: string;
+};
 
 function CronIcon({ icon }: { icon: DashboardCronRow["icon"] }) {
   if (icon === "utensils") return <Utensils aria-hidden="true" />;
@@ -34,6 +40,7 @@ function statusDotClass(state: ConnectionState | DashboardCronRow["statusKind"])
 }
 
 export function DashboardOverview({
+  applicationStats,
   connections,
   cronRows,
   hasStatusError,
@@ -42,6 +49,7 @@ export function DashboardOverview({
   lastDeliveryLabel,
   nextRunCopy,
   nextRunLabel,
+  publicUserId,
   services,
   telemetryAvailable,
   whatsappSuggestionHref,
@@ -116,6 +124,33 @@ export function DashboardOverview({
             <span>Registered Services</span>
             <strong>{services.length}</strong>
             <p>{services.length > 0 ? services.map((service) => service.name).join(", ") : "No services registered yet."}</p>
+          </div>
+        </article>
+      </section>
+
+      <section className="overview-metrics" aria-label="Job application activity">
+        <article>
+          <span className="overview-icon"><BriefcaseBusiness aria-hidden="true" /></span>
+          <div>
+            <span>Applications Sent</span>
+            <strong>{applicationStats.sent}</strong>
+            <p><a className="overview-inline-link" href={`/${publicUserId}/application-history`}>View application history</a></p>
+          </div>
+        </article>
+        <article>
+          <span className="overview-icon"><CircleAlert aria-hidden="true" /></span>
+          <div>
+            <span>Needs Action</span>
+            <strong>{applicationStats.actionRequired}</strong>
+            <p>{applicationStats.actionRequired > 0 ? "Applications waiting on you" : "Nothing needs your attention"}</p>
+          </div>
+        </article>
+        <article>
+          <span className="overview-icon"><ListChecks aria-hidden="true" /></span>
+          <div>
+            <span>Total Evaluated</span>
+            <strong>{applicationStats.total}</strong>
+            <p>Jobs your agent reviewed</p>
           </div>
         </article>
       </section>

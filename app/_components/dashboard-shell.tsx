@@ -2,12 +2,13 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import {
   BriefcaseBusiness,
+  ClipboardList,
   Home,
   Settings,
 } from "lucide-react";
 import { DashboardAccountMenu } from "@/app/_components/dashboard-account-menu";
 
-type DashboardSection = "overview" | "job-scout" | "webetu" | "settings";
+type DashboardSection = "overview" | "job-scout" | "application-history" | "webetu" | "settings";
 
 type DashboardShellProps = {
   active: DashboardSection;
@@ -21,6 +22,7 @@ type DashboardShellProps = {
 const navItems = [
   { key: "overview", label: "Overview", href: "", icon: Home },
   { key: "job-scout", label: "Job Scout", href: "/job-scout", icon: BriefcaseBusiness },
+  { key: "application-history", label: "Application History", href: "/application-history", icon: ClipboardList },
   { key: "settings", label: "Settings", href: "/settings", icon: Settings },
 ] as const;
 
