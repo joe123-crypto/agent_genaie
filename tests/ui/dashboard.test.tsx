@@ -20,6 +20,8 @@ vi.mock("next/image", () => ({
 
 const publicUserId = "usr_1234567890abcdef";
 
+const emptyApplicationStats = { sent: 0, actionRequired: 0, skipped: 0, total: 0 };
+
 function readyInput(overrides: Partial<DashboardModelInput> = {}): DashboardModelInput {
   return {
     account: {
@@ -82,6 +84,7 @@ describe("signed-in dashboard UI", () => {
     expect(links.map((link) => link.textContent)).toEqual([
       "Overview",
       "Job Scout",
+      "Application History",
       "Settings",
     ]);
     expect(screen.getByRole("link", { name: /overview/i })).toHaveAttribute("aria-current", "page");
@@ -97,7 +100,7 @@ describe("signed-in dashboard UI", () => {
   });
 
   it("shows connection status and no dummy cron rows when telemetry is empty", () => {
-    render(<DashboardOverview {...dashboardModel()} />);
+    render(<DashboardOverview {...dashboardModel()} applicationStats={emptyApplicationStats} publicUserId={publicUserId} />);
 
     expect(screen.getByRole("heading", { name: "Overview" })).toBeVisible();
     expect(screen.getByRole("img", { name: /robot assistant holding an envelope/i })).toHaveAttribute("src", "/Pasted image (2).png");
@@ -122,7 +125,7 @@ describe("signed-in dashboard UI", () => {
     });
 
     expect(model.whatsappSuggestionHref).toBe(`/${publicUserId}/whatsapp`);
-    render(<DashboardOverview {...model} />);
+    render(<DashboardOverview {...model} applicationStats={emptyApplicationStats} publicUserId={publicUserId} />);
     expect(screen.getByText(/want updates on whatsapp/i)).toBeVisible();
     expect(screen.getByRole("link", { name: /link your number/i })).toHaveAttribute(
       "href",
@@ -133,6 +136,8 @@ describe("signed-in dashboard UI", () => {
   it("renders active cron rows and metrics from live telemetry", () => {
     render(
       <DashboardOverview
+        applicationStats={emptyApplicationStats}
+        publicUserId={publicUserId}
         {...dashboardModel({
           telemetry: {
             available: true,
