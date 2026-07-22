@@ -1,14 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  putObject,
-  getPresignedGetUrl,
-  objectExists,
-  deleteObject,
-  deleteObjectsByPrefix,
-  listObjectKeysByPrefix,
-} from "@/src/domains/r2-storage";
+import { putObject, getPresignedGetUrl, objectExists, deleteObject } from "@/src/domains/r2-storage";
 import { cvPendingObjectKey } from "@/src/domains/job-scout";
 
 // Live round-trip against an S3-compatible server (MinIO in CI) using the app's
@@ -42,21 +35,4 @@ test("CV object round-trips: put -> exists -> presigned GET -> delete", opts, as
 
 test("objectExists returns false for a missing key (404 branch)", opts, async () => {
   assert.equal(await objectExists(`ci-missing-${Date.now()}/cv/cv.pdf`), false);
-});
-
-test("prefix deletion removes every object and leaves neighboring users intact", opts, async () => {
-  const id = `ci-prefix-${Date.now()}`;
-  const prefix = `${id}/`;
-  const neighbor = `${id}-neighbor/cv/base/cv.html`;
-  await Promise.all([
-    putObject(`${prefix}cv/base/cv.html`, Buffer.from("one"), "text/html"),
-    putObject(`${prefix}applications/app-1/1/cv.pdf`, Buffer.from("two"), "application/pdf"),
-    putObject(neighbor, Buffer.from("neighbor"), "text/html"),
-  ]);
-
-  assert.equal((await listObjectKeysByPrefix(prefix)).length, 2);
-  assert.equal(await deleteObjectsByPrefix(prefix), 2);
-  assert.deepEqual(await listObjectKeysByPrefix(prefix), []);
-  assert.equal(await objectExists(neighbor), true);
-  await deleteObject(neighbor);
 });

@@ -14,7 +14,6 @@ import {
   userProfileFromRecord,
   normalizeAccountLinkNextPath,
 } from "@/src/lib/utils";
-import { resetTargetFingerprint } from "@/src/domains/user-reset";
 
 // These normalizers define the field shapes that get written to Firestore. The
 // tests pin the defaults, clamps, and validation so a refactor can't silently
@@ -54,12 +53,6 @@ test("normalizeJobPreferences honors autoApply=false and role aliases", () => {
   assert.equal(normalizeJobPreferences({ autoApply: false }).autoApply, false);
   // `roles` is an accepted alias for `targetRoles`.
   assert.deepEqual(normalizeJobPreferences({ roles: ["Dev"] }).targetRoles, ["Dev"]);
-});
-
-test("reset target fingerprints are stable across UID ordering and duplicates", () => {
-  const first = resetTargetFingerprint("phone-hash", ["uid-b", "uid-a", "uid-a"]);
-  const second = resetTargetFingerprint("phone-hash", ["uid-a", "uid-b"]);
-  assert.equal(first, second);
 });
 
 test("normalizeJobPreferences caps promptNotes at 12 items", () => {

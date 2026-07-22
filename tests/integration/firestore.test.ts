@@ -21,7 +21,6 @@ import {
 } from "@/src/domains/job-scout";
 import { listDashboardTasksForUser, upsertDashboardTaskStatus } from "@/src/domains/dashboard";
 import { syncUserToCentralData } from "@/src/domains/users";
-import { getUserResetInventory, resetUserAccount } from "@/src/domains/user-reset";
 
 // Live round-trip against the Firestore emulator (started by CI via
 // `firebase emulators:exec`, which sets FIRESTORE_EMULATOR_HOST). This proves the
@@ -66,71 +65,6 @@ test("syncUserToCentralData reports new vs existing onboarding state", authOpts,
   const skipped = await syncUserToCentralData(uid);
   assert.equal(skipped.isNewUser, false);
   assert.equal(skipped.onboardingRequired, false);
-});
-
-test("full user reset discovers historical UIDs and deletes identity, service, and auth state", authOpts, async () => {
-  const db = getFirestoreDb();
-  const auth = getFirebaseAdminAuth();
-  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const currentUid = `it-reset-current-${suffix}`;
-  const oldUid = `it-reset-old-${suffix}`;
-  const phone = "+213563719936";
-  const phoneHash = whatsappPhoneHash(phone);
-  await Promise.all([
-    auth.createUser({ uid: currentUid, email: `${currentUid}@example.com` }),
-    auth.createUser({ uid: oldUid, email: `${oldUid}@example.com` }),
-    db.collection("users").doc(currentUid).set({ profile: { emailLower: `${currentUid}@example.com` } }),
-    db.collection("users").doc(oldUid).set({ profile: { emailLower: `${oldUid}@example.com` } }),
-    db.collection("phoneLinksByUser").doc(currentUid).set({ userId: currentUid, phone, phoneHash, status: "active" }),
-    db.collection("phoneLinksByPhone").doc(phoneHash).set({ userId: currentUid, phone, phoneHash, status: "active" }),
-    db.collection("jobScoutDeliveryByPhone").doc(phoneHash).set({ userId: currentUid, phoneHash, status: "active" }),
-    db.collection("accountLinkInvites").doc(`old-${suffix}`).set({ phone, phoneHash, usedBy: oldUid, status: "completed" }),
-    db.collection("jobScoutProfiles").doc(currentUid).set({ userId: currentUid, setupStatus: "ready" }),
-    db.collection("jobScoutProfiles").doc(oldUid).set({ userId: oldUid, setupStatus: "ready" }),
-    db.collection("credentialRefs").doc(credentialRefId(currentUid, "gmail", "oauth2")).set({ userId: currentUid }),
-    db.collection("jobApplications").doc(`application-${suffix}`).set({ userId: oldUid }),
-    db.collection("dashboardTaskStatus").doc(`${oldUid}_search_apply_jobs`).set({ userId: oldUid }),
-    db.collection("webetuPreferences").doc(oldUid).set({ userId: oldUid }),
-    db.collection("webetuOverrides").doc(`${oldUid}_2026-07-22`).set({ userId: oldUid }),
-  ]);
-
-  const storage = new Map<string, string[]>([
-    [currentUid, [`${currentUid}/cv/base/cv.html`]],
-    [oldUid, [`${oldUid}/applications/example/1/cv.pdf`]],
-  ]);
-  const inventory = await getUserResetInventory(phone, [], {
-    listObjectKeysByPrefix: async (prefix: string) => storage.get(prefix.slice(0, -1)) || [],
-  });
-  assert.deepEqual(inventory.userIds, [currentUid, oldUid].sort());
-  assert.equal(inventory.authUserIds.length, 2);
-  assert.equal(inventory.r2ObjectTotal, 2);
-
-  const result = await resetUserAccount({
-    confirmation: `DELETE ${phone}`,
-    expectedUserIds: inventory.userIds,
-    fingerprint: inventory.fingerprint,
-    phone,
-    phoneHash,
-  }, {
-    deleteLocalTokens: () => undefined,
-    deleteObjectsByPrefix: async (prefix: string) => {
-      const uid = prefix.slice(0, -1);
-      const count = storage.get(uid)?.length || 0;
-      storage.delete(uid);
-      return count;
-    },
-    listObjectKeysByPrefix: async (prefix: string) => storage.get(prefix.slice(0, -1)) || [],
-    loadGmailTokens: async () => null,
-    revokeToken: async () => "revoked",
-  });
-
-  assert.equal(result.remaining.documentTotal, 0);
-  assert.equal(result.remaining.r2ObjectTotal, 0);
-  assert.deepEqual(result.remaining.authUserIds, []);
-  assert.equal((await db.collection("phoneLinksByPhone").doc(phoneHash).get()).exists, false);
-  assert.equal((await db.collection("accountLinkInvites").where("phoneHash", "==", phoneHash).get()).empty, true);
-  await assert.rejects(auth.getUser(currentUid), (error: any) => error?.code === "auth/user-not-found");
-  await assert.rejects(auth.getUser(oldUid), (error: any) => error?.code === "auth/user-not-found");
 });
 
 test("saveJobScoutProfile writes the expected jobScoutProfiles document shape", opts, async () => {

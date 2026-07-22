@@ -4,7 +4,6 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
-  ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { config, requireConfig } from "@/src/config";
@@ -51,31 +50,6 @@ export async function getPresignedGetUrl(key: string, expiresInSeconds = 300) {
 
 export async function deleteObject(key: string) {
   await getR2Client().send(new DeleteObjectCommand({ Bucket: config.r2Bucket, Key: key }));
-}
-
-export async function listObjectKeysByPrefix(prefix: string) {
-  const keys: string[] = [];
-  let continuationToken: string | undefined;
-  do {
-    const page = await getR2Client().send(new ListObjectsV2Command({
-      Bucket: config.r2Bucket,
-      Prefix: prefix,
-      ContinuationToken: continuationToken,
-    }));
-    for (const object of page.Contents ?? []) {
-      if (object.Key) keys.push(object.Key);
-    }
-    continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
-  } while (continuationToken);
-  return keys;
-}
-
-export async function deleteObjectsByPrefix(prefix: string) {
-  const keys = await listObjectKeysByPrefix(prefix);
-  for (let index = 0; index < keys.length; index += 25) {
-    await Promise.all(keys.slice(index, index + 25).map((key) => deleteObject(key)));
-  }
-  return keys.length;
 }
 
 export async function objectExists(key: string) {
