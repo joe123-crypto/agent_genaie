@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
         targetRoles: [targetRole],
         locations: [targetLocation],
         country,
+        autoApply: checked(form, "autoApply"),
       },
       cvFileRef,
       profileConfirmed: true,

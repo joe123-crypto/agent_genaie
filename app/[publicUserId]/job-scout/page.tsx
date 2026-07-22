@@ -95,6 +95,8 @@ export default async function JobScoutSetupPage({
   const cvUploaded = !!jobScoutStatus?.cvUploaded;
   const cvConversionStatus = String(jobScoutStatus?.cvConversionStatus || "missing");
   const ready = !!jobScoutStatus?.ready;
+  const autoApply = !!jobScoutStatus?.configured
+    && jobScoutStatus?.preferences?.autoApply !== false;
 
   const pageScript = `
 const form = document.querySelector("[data-job-scout-form]");
@@ -296,6 +298,10 @@ if (initialCvConversionPending) {
         <label className="check">
           <input name="safetyAcknowledged" type="checkbox" defaultChecked={!!jobScoutStatus?.safetyAcknowledged} required />
           <span>I will not pay upfront, I understand job scams exist, and Genaie is not accountable if I am scammed.</span>
+        </label>
+        <label className="check">
+          <input name="autoApply" type="checkbox" defaultChecked={autoApply} />
+          <span>Automatically submit suitable applications for me. Leave this off if you only want suggestions.</span>
         </label>
         <div className="actions">
           <button data-save type="submit">Save Job Scout setup</button>
