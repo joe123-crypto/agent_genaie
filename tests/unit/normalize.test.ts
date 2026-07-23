@@ -24,7 +24,7 @@ test("normalizeJobPreferences applies documented defaults", () => {
   assert.equal(prefs.country, "dz");
   assert.equal(prefs.language, "fr");
   assert.equal(prefs.autoApply, true);
-  assert.equal(prefs.maxApplicationsPerRun, 2);
+  assert.equal(prefs.maxApplicationsPerRun, 1);
   assert.deepEqual(prefs.targetRoles, []);
   // Exact key set of the stored preferences object.
   assert.deepEqual(Object.keys(prefs).sort(), [
@@ -46,7 +46,7 @@ test("normalizeJobPreferences clamps maxApplicationsPerRun to 0..5", () => {
   assert.equal(normalizeJobPreferences({ maxApplicationsPerRun: 99 }).maxApplicationsPerRun, 5);
   assert.equal(normalizeJobPreferences({ maxApplicationsPerRun: -1 }).maxApplicationsPerRun, 0);
   assert.equal(normalizeJobPreferences({ maxApplicationsPerRun: 3 }).maxApplicationsPerRun, 3);
-  assert.equal(normalizeJobPreferences({ maxApplicationsPerRun: "oops" }).maxApplicationsPerRun, 2);
+  assert.equal(normalizeJobPreferences({ maxApplicationsPerRun: "oops" }).maxApplicationsPerRun, 1);
 });
 
 test("normalizeJobPreferences honors autoApply=false and role aliases", () => {

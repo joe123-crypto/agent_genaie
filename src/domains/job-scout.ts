@@ -245,23 +245,27 @@ export async function saveJobScoutProfile(
   const onboarding = userData.onboarding || {};
   const onboardingChannel = storedOnboardingChannel(onboarding.channel);
   const onboardingStatus = String(onboarding.status ?? "");
+  const userPayload: Record<string, any> = {
+    services: {
+      jobs: "subscribed",
+    },
+    updatedAt: FieldValue.serverTimestamp(),
+  };
   if (
     cvHtmlRef
     && onboarding.selectedService === "jobs"
     && onboardingChannel === "chat"
     && (onboardingStatus === "required" || onboardingStatus === "in_progress")
   ) {
-    batch.set(db.collection("users").doc(safeUid), {
-      onboarding: {
-        selectedService: "jobs",
-        channel: "chat",
-        status: "completed",
-        completedAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
+    userPayload.onboarding = {
+      selectedService: "jobs",
+      channel: "chat",
+      status: "completed",
+      completedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+    };
   }
+  batch.set(db.collection("users").doc(safeUid), userPayload, { merge: true });
   await batch.commit();
   return {
     ok: true,
@@ -406,20 +410,23 @@ export async function finalizeJobScoutCvHtml(input: {
     const userDoc = await userRef.get();
     const onboarding = userDoc.exists ? userDoc.data()?.onboarding || {} : {};
     const onboardingStatus = String(onboarding.status ?? "");
-    if (
-      onboarding.selectedService === "jobs"
-      && (onboardingStatus === "required" || onboardingStatus === "in_progress")
-    ) {
-      await userRef.set({
-        onboarding: {
+    if (onboarding.selectedService === "jobs") {
+      const userPayload: Record<string, any> = {
+        services: {
+          jobs: "subscribed",
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      if (onboardingStatus === "required" || onboardingStatus === "in_progress") {
+        userPayload.onboarding = {
           selectedService: "jobs",
           channel: storedOnboardingChannel(onboarding.channel) || "web",
           status: "completed",
           completedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
-        },
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
+        };
+      }
+      await userRef.set(userPayload, { merge: true });
     }
   }
 
@@ -681,6 +688,7 @@ async function buildJobScoutSubscriber(
     cvConversionStatus,
     cvAvailable,
     cvUploaded,
+    subscriptionStatus: userData.services?.jobs === "subscribed" ? "subscribed" : "not_subscribed",
     onboardingChannel,
     onboardingStatus,
     onboardingNextStep,
@@ -764,7 +772,7 @@ export async function getJobScoutStatusForUser(
       country: preferences.country || null,
       language: preferences.language || null,
       autoApply: preferences.autoApply !== false,
-      maxApplicationsPerRun: preferences.maxApplicationsPerRun ?? 2,
+      maxApplicationsPerRun: preferences.maxApplicationsPerRun ?? 1,
     },
   };
 }
@@ -843,7 +851,7 @@ export async function getJobScoutStatusForPhone(phoneInput: string) {
       country: preferences.country || null,
       language: preferences.language || null,
       autoApply: preferences.autoApply !== false,
-      maxApplicationsPerRun: preferences.maxApplicationsPerRun ?? 2,
+      maxApplicationsPerRun: preferences.maxApplicationsPerRun ?? 1,
     },
   };
 }

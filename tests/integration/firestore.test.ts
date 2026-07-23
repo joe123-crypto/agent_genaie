@@ -19,6 +19,7 @@ import {
   listJobApplications,
   resetJobScoutProfileForPhone,
 } from "@/src/domains/job-scout";
+import { completeOnboarding } from "@/src/domains/onboarding";
 import { listDashboardTasksForUser, upsertDashboardTaskStatus } from "@/src/domains/dashboard";
 import { syncUserToCentralData } from "@/src/domains/users";
 
@@ -127,7 +128,113 @@ test("saveJobScoutProfile writes the expected jobScoutProfiles document shape", 
   assert.ok(data.safetyAcknowledgedAt, "safety acknowledgement timestamp present");
   assert.ok(data.createdAt, "createdAt server timestamp present");
   assert.ok(data.updatedAt, "updatedAt server timestamp present");
-  assert.equal((await db.collection("users").doc(uid).get()).data()?.onboarding?.status, "completed");
+  const user = (await db.collection("users").doc(uid).get()).data();
+  assert.equal(user?.onboarding?.status, "completed");
+  assert.equal(user?.services?.jobs, "subscribed");
+});
+
+test("web-first Job Scout profile save subscribes without requiring WhatsApp", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-profile-web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await Promise.all([
+    db.collection("users").doc(uid).set({
+      profile: { email: "web-applicant@example.com", displayName: "Web Applicant" },
+      onboarding: {
+        selectedService: "jobs",
+        channel: "web",
+        status: "in_progress",
+        whatsappSkippedAt: new Date(),
+      },
+      services: { jobs: "not_subscribed" },
+    }),
+    db.collection("credentialRefs").doc(credentialRefId(uid, "gmail", "oauth2")).set({
+      userId: uid,
+      service: "gmail",
+      purpose: "oauth2",
+      status: "active",
+    }),
+  ]);
+  saveUserTokens(tokenStoreKeyForUid(uid), {
+    access_token: "test-access-token",
+    refresh_token: "test-refresh-token",
+    expiry_date: Date.now() + 3600_000,
+  });
+
+  await saveJobScoutProfile({
+    userId: uid,
+    preferences: {
+      targetRoles: ["Software Engineer"],
+      locations: ["Harare"],
+      country: "ZW",
+    },
+    cvHtmlRef: `${uid}/cv/base/cv.html`,
+    profileConfirmed: true,
+    safetyAcknowledged: true,
+  }, { objectExists: async () => true });
+
+  const [userDoc, profileDoc, phoneDoc] = await Promise.all([
+    db.collection("users").doc(uid).get(),
+    db.collection("jobScoutProfiles").doc(uid).get(),
+    db.collection("phoneLinksByUser").doc(uid).get(),
+  ]);
+  assert.equal(userDoc.data()?.services?.jobs, "subscribed");
+  assert.equal(userDoc.data()?.onboarding?.status, "in_progress");
+  assert.equal(profileDoc.data()?.preferences?.maxApplicationsPerRun, 1);
+  assert.equal(phoneDoc.exists, false);
+});
+
+test("completeOnboarding repairs a stale service flag without replacing completion metadata", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-onboarding-repair-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await db.collection("users").doc(uid).set({
+    profile: { email: "repair@example.com", displayName: "Repair User" },
+    onboarding: {
+      selectedService: "jobs",
+      channel: "web",
+      status: "completed",
+      completedAt: "original-completion",
+    },
+    services: { jobs: "not_subscribed" },
+  });
+
+  await completeOnboarding(uid);
+
+  const user = (await db.collection("users").doc(uid).get()).data();
+  assert.equal(user?.services?.jobs, "subscribed");
+  assert.equal(user?.onboarding?.status, "completed");
+  assert.equal(user?.onboarding?.completedAt, "original-completion");
+});
+
+test("invalid Job Scout profile input does not subscribe the user", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-profile-invalid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await db.collection("users").doc(uid).set({
+    profile: { email: "invalid@example.com", displayName: "Invalid User" },
+    onboarding: { selectedService: "jobs", channel: "web", status: "in_progress" },
+    services: { jobs: "not_subscribed" },
+  });
+
+  await assert.rejects(
+    () => saveJobScoutProfile({
+      userId: uid,
+      preferences: {
+        targetRoles: [],
+        locations: ["Harare"],
+        country: "ZW",
+      },
+      cvHtmlRef: `${uid}/cv/base/cv.html`,
+      profileConfirmed: true,
+      safetyAcknowledged: true,
+    }, { objectExists: async () => true }),
+    (err: any) => err.status === 400,
+  );
+
+  const [userDoc, profileDoc] = await Promise.all([
+    db.collection("users").doc(uid).get(),
+    db.collection("jobScoutProfiles").doc(uid).get(),
+  ]);
+  assert.equal(userDoc.data()?.services?.jobs, "not_subscribed");
+  assert.equal(profileDoc.exists, false);
 });
 
 test("Job Scout uses the canonical account-link invite and WhatsApp page", opts, async () => {

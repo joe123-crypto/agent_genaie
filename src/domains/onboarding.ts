@@ -252,19 +252,27 @@ export async function completeOnboarding(uidInput: string) {
   const uid = validateFirebaseUid(uidInput);
   const status = await getOnboardingStatus(uid);
   if (!status.selectedService) throw httpError(400, "Select a service before completing onboarding.");
-  if (status.completed) return status;
   if (status.skipped) throw httpError(409, "Onboarding was skipped.");
-  if (status.nextStep !== "dashboard") throw httpError(409, "Onboarding requirements are not complete.");
+  if (!status.completed && status.nextStep !== "dashboard") {
+    throw httpError(409, "Onboarding requirements are not complete.");
+  }
 
   const db = getFirestoreDb();
-  await db.collection("users").doc(uid).set({
-    onboarding: {
+  const now = FieldValue.serverTimestamp();
+  const payload: Record<string, any> = {
+    services: {
+      [status.selectedService]: "subscribed",
+    },
+    updatedAt: now,
+  };
+  if (!status.completed) {
+    payload.onboarding = {
       selectedService: status.selectedService,
       status: "completed",
-      completedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    updatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
+      completedAt: now,
+      updatedAt: now,
+    };
+  }
+  await db.collection("users").doc(uid).set(payload, { merge: true });
   return getOnboardingStatus(uid);
 }

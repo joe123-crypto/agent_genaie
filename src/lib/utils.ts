@@ -123,7 +123,7 @@ function normalizeLocaleCode(value: unknown, fallback: string) {
 
 export function normalizeJobPreferences(input: any = {}) {
   const source = input && typeof input === "object" ? input : {};
-  const maxApplications = Number.parseInt(source.maxApplicationsPerRun ?? "2", 10);
+  const maxApplications = Number.parseInt(source.maxApplicationsPerRun ?? "1", 10);
   return {
     targetRoles: normalizeStringList(source.targetRoles ?? source.roles),
     locations: normalizeStringList(source.locations),
@@ -135,7 +135,7 @@ export function normalizeJobPreferences(input: any = {}) {
     exclusions: normalizeStringList(source.exclusions),
     promptNotes: normalizeStringList(source.promptNotes ?? source.notes, 12),
     autoApply: source.autoApply === false ? false : true,
-    maxApplicationsPerRun: Number.isFinite(maxApplications) ? Math.min(Math.max(maxApplications, 0), 5) : 2,
+    maxApplicationsPerRun: Number.isFinite(maxApplications) ? Math.min(Math.max(maxApplications, 0), 5) : 1,
   };
 }
 
