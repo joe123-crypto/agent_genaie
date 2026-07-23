@@ -1,12 +1,13 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
 import {
   Ban,
-  CheckCircle2,
+  Check,
   CircleAlert,
   CircleDashed,
   Info,
   LoaderCircle,
   Unlink,
+  X,
 } from "lucide-react";
 
 export type StatusKind =
@@ -22,7 +23,7 @@ export type StatusKind =
 function StatusGlyph() {
   return (
     <span className="status-icon-set" aria-hidden="true">
-      <CheckCircle2 data-status-icon="complete" />
+      <Check data-status-icon="complete" />
       <Unlink data-status-icon="unlinked" />
       <CircleDashed data-status-icon="pending" />
       <CircleAlert data-status-icon="warning" />
@@ -73,6 +74,9 @@ export function StatusNotice({
     >
       <StatusGlyph />
       <span data-status-label>{children}</span>
+      <span className="status-dismiss" aria-hidden="true">
+        <X />
+      </span>
     </div>
   );
 }
