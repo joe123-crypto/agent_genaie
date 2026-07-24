@@ -855,6 +855,32 @@ button.password-toggle {
   gap: 12px;
 }
 
+.dashboard-nav-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.dashboard-nav-trigger {
+  display: none;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.dashboard-nav-trigger:hover {
+  background: var(--surface);
+}
+
+.dashboard-nav-trigger svg {
+  width: 22px;
+  height: 22px;
+}
+
 .dashboard-nav-link {
   display: grid;
   min-height: 58px;
@@ -1408,12 +1434,28 @@ button.password-toggle {
   }
 
   .dashboard-sidebar {
-    position: static;
+    position: relative;
     height: auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: center;
     gap: 18px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
     padding: 20px;
+  }
+
+  .dashboard-brand {
+    grid-column: 1;
+  }
+
+  .dashboard-nav-wrap {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .dashboard-nav-trigger {
+    display: grid;
   }
 
   .overview-hero {
@@ -1425,7 +1467,33 @@ button.password-toggle {
   }
 
   .dashboard-nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 30;
+    display: none;
+    width: min(280px, calc(100vw - 40px));
+    grid-template-columns: 1fr;
+    gap: 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--background);
+    box-shadow: 0 12px 30px rgb(17 17 17 / 10%);
+    padding: 6px;
+  }
+
+  .dashboard-nav.is-open {
+    display: grid;
+  }
+
+  .dashboard-nav-link {
+    min-height: 48px;
+    border-radius: 6px;
+    padding: 0 12px;
+  }
+
+  .dashboard-account {
+    grid-column: 1 / -1;
   }
 
   .dashboard-account-menu {
@@ -1652,6 +1720,32 @@ button.password-toggle {
   display: grid;
   align-content: start;
   gap: 12px;
+}
+
+.dashboard-nav-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.dashboard-nav-trigger {
+  display: none;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.dashboard-nav-trigger:hover {
+  background: var(--surface);
+}
+
+.dashboard-nav-trigger svg {
+  width: 22px;
+  height: 22px;
 }
 
 .dashboard-nav-link {
@@ -2207,12 +2301,28 @@ button.password-toggle {
   }
 
   .dashboard-sidebar {
-    position: static;
+    position: relative;
     height: auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: center;
     gap: 18px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
     padding: 20px;
+  }
+
+  .dashboard-brand {
+    grid-column: 1;
+  }
+
+  .dashboard-nav-wrap {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .dashboard-nav-trigger {
+    display: grid;
   }
 
   .overview-hero {
@@ -2224,7 +2334,33 @@ button.password-toggle {
   }
 
   .dashboard-nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 30;
+    display: none;
+    width: min(280px, calc(100vw - 40px));
+    grid-template-columns: 1fr;
+    gap: 4px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--background);
+    box-shadow: 0 12px 30px rgb(17 17 17 / 10%);
+    padding: 6px;
+  }
+
+  .dashboard-nav.is-open {
+    display: grid;
+  }
+
+  .dashboard-nav-link {
+    min-height: 48px;
+    border-radius: 6px;
+    padding: 0 12px;
+  }
+
+  .dashboard-account {
+    grid-column: 1 / -1;
   }
 
   .dashboard-account-menu {
