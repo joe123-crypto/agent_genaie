@@ -55,4 +55,51 @@ describe("Genaie Scout landing page", () => {
     expect(scene?.querySelectorAll(".landing-line").length).toBeGreaterThan(5);
     expect(scene?.querySelectorAll(".landing-dot")).toHaveLength(3);
   });
+
+  it("presents the pricing plans below the how-to section", () => {
+    render(createElement(RootPage));
+
+    const howToHeading = screen.getByRole("heading", { name: /see it in action/i });
+    const pricingHeading = screen.getByRole("heading", {
+      name: /choose your job hunt pace/i,
+    });
+
+    expect(
+      howToHeading.compareDocumentPosition(pricingHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    expect(screen.getByRole("heading", { name: /free plan/i })).toBeVisible();
+    expect(screen.getByText(/try genaie to test it in work/i)).toBeVisible();
+    expect(screen.getByText("$0")).toBeVisible();
+    expect(screen.getByText(/max 10 applications\/month/i)).toBeVisible();
+    expect(screen.getByText(/limited cv customization/i)).toBeVisible();
+    expect(screen.getByText(/^limited sources$/i)).toBeVisible();
+
+    expect(screen.getByRole("heading", { name: /pro plan/i })).toBeVisible();
+    expect(screen.getByText("$5/month")).toBeVisible();
+    expect(screen.getByText(/max 30 applications\/month/i)).toBeVisible();
+    expect(screen.getByText(/broad cv customizations/i)).toBeVisible();
+
+    expect(screen.getByRole("heading", { name: /ultra plan/i })).toBeVisible();
+    expect(screen.getByText("$10/month")).toBeVisible();
+    expect(screen.getByText(/max 100 applications\/month/i)).toBeVisible();
+    expect(
+      screen.getByText(/unlimited cv and cover letter customization/i),
+    ).toBeVisible();
+    expect(screen.getAllByText(/unlimited sources/i)).toHaveLength(2);
+
+    expect(screen.getByRole("link", { name: /start free/i })).toHaveAttribute(
+      "href",
+      "/login",
+    );
+    expect(screen.getByRole("link", { name: /contact for pro/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("mailto:genaie2027@gmail.com"),
+    );
+    expect(screen.getByRole("link", { name: /contact for ultra/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("mailto:genaie2027@gmail.com"),
+    );
+  });
 });
