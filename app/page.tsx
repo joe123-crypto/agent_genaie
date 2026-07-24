@@ -1,5 +1,14 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import {
+  BriefcaseBusiness,
+  CircleCheck,
+  Crown,
+  Database,
+  FileText,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Genaie | Your AI job scout",
@@ -151,6 +160,114 @@ function HowTo() {
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
         />
+      </div>
+    </section>
+  );
+}
+
+type PricingFeature = {
+  label: string;
+  Icon: LucideIcon;
+};
+
+type PricingPlan = {
+  name: string;
+  description: string;
+  price: string;
+  features: PricingFeature[];
+  ctaLabel: string;
+  ctaHref: string;
+  featured?: boolean;
+};
+
+const pricingPlans: PricingPlan[] = [
+  {
+    name: "Free Plan",
+    description: "Try Genaie to test it in work",
+    price: "$0",
+    features: [
+      { label: "Max 10 applications/month", Icon: BriefcaseBusiness },
+      { label: "Limited CV customization", Icon: FileText },
+      { label: "Limited sources", Icon: Database },
+    ],
+    ctaLabel: "Start free",
+    ctaHref: "/login",
+  },
+  {
+    name: "Pro Plan",
+    description: "More applications and stronger profile matching.",
+    price: "$5/month",
+    features: [
+      { label: "Max 30 applications/month", Icon: BriefcaseBusiness },
+      { label: "Broad CV customizations", Icon: Sparkles },
+      { label: "Unlimited sources", Icon: Database },
+    ],
+    ctaLabel: "Contact for Pro",
+    ctaHref: "mailto:genaie2027@gmail.com?subject=Genaie%20Pro%20Plan",
+    featured: true,
+  },
+  {
+    name: "Ultra Plan",
+    description: "Highest volume with full application customization.",
+    price: "$10/month",
+    features: [
+      { label: "Max 100 applications/month", Icon: BriefcaseBusiness },
+      { label: "Unlimited CV and cover letter customization", Icon: Crown },
+      { label: "Unlimited sources", Icon: Database },
+    ],
+    ctaLabel: "Contact for Ultra",
+    ctaHref: "mailto:genaie2027@gmail.com?subject=Genaie%20Ultra%20Plan",
+  },
+];
+
+function Pricing() {
+  return (
+    <section className="landing-pricing" aria-labelledby="landing-pricing-title">
+      <div className="landing-pricing-copy">
+        <h2 id="landing-pricing-title">Choose your job hunt pace</h2>
+        <p>
+          Start with a focused trial, then scale up when you want more applications
+          and deeper customization.
+        </p>
+      </div>
+
+      <div className="landing-pricing-grid">
+        {pricingPlans.map((plan) => (
+          <article
+            className={`landing-pricing-card${plan.featured ? " is-featured" : ""}`}
+            key={plan.name}
+          >
+            <div className="landing-pricing-card-header">
+              {plan.featured ? (
+                <Sparkles aria-hidden="true" />
+              ) : (
+                <CircleCheck aria-hidden="true" />
+              )}
+              <div>
+                <h3>{plan.name}</h3>
+                <p>{plan.description}</p>
+              </div>
+            </div>
+
+            <p className="landing-pricing-price">{plan.price}</p>
+
+            <ul className="landing-pricing-features">
+              {plan.features.map(({ label, Icon }) => (
+                <li key={`${plan.name}-${label}`}>
+                  <Icon aria-hidden="true" />
+                  <span>{label}</span>
+                </li>
+              ))}
+            </ul>
+
+            <a
+              className={`button landing-pricing-button${plan.featured ? "" : " secondary"}`}
+              href={plan.ctaHref}
+            >
+              {plan.ctaLabel}
+            </a>
+          </article>
+        ))}
       </div>
     </section>
   );
@@ -368,6 +485,7 @@ export default function RootPage() {
 
         <TrustedBy />
         <HowTo />
+        <Pricing />
         <LandingFooter />
       </div>
     </main>
