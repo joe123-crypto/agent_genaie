@@ -88,10 +88,18 @@ describe("signed-in dashboard UI", () => {
       "Settings",
     ]);
     expect(screen.getByRole("link", { name: /overview/i })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByText("Genaie Scout")).toBeVisible();
+    expect(screen.getByRole("img", { name: /genaie/i })).toBeVisible();
     expect(screen.queryByRole("img", { name: /robot/i })).not.toBeInTheDocument();
 
-    const accountButton = screen.getByRole("button", { name: /joseph/i });
+    const navButton = screen.getByRole("button", { name: /open dashboard navigation/i });
+    expect(navButton).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(navButton);
+    expect(navButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /close dashboard navigation/i })).toBeVisible();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(navButton).toHaveAttribute("aria-expanded", "false");
+
+    const accountButton = screen.getByRole("button", { name: /account menu for joseph/i });
     expect(accountButton).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(accountButton);
     expect(accountButton).toHaveAttribute("aria-expanded", "true");
