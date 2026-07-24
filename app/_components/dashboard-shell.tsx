@@ -24,8 +24,10 @@ export function DashboardShell({
         <a className="dashboard-brand" href={basePath} aria-label="Genaie home">
           <Image src="/logo.png" alt="Genaie" width={1045} height={283} />
         </a>
-        <DashboardNavMenu active={active} basePath={basePath} />
-        <DashboardAccountMenu userLabel={userLabel} />
+        <div className="dashboard-header-actions">
+          <DashboardNavMenu active={active} basePath={basePath} />
+          <DashboardAccountMenu userLabel={userLabel} />
+        </div>
       </aside>
       <section className="dashboard-content">{children}</section>
     </main>

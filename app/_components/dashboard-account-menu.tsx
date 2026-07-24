@@ -37,6 +37,8 @@ export function DashboardAccountMenu({ userLabel = "Account" }: DashboardAccount
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
+  const displayLabel = userLabel || "Account";
+  const buttonLabel = userLabel ? `Account menu for ${displayLabel}` : "Account menu";
 
   useEffect(() => {
     if (!open) return;
@@ -77,12 +79,13 @@ export function DashboardAccountMenu({ userLabel = "Account" }: DashboardAccount
         aria-controls={menuId}
         aria-expanded={open}
         aria-haspopup="menu"
+        aria-label={buttonLabel}
         onClick={() => setOpen((value) => !value)}
       >
         <span className="dashboard-user-avatar" aria-hidden="true">
           <UserRound />
         </span>
-        <span className="dashboard-user-label">{userLabel || "Account"}</span>
+        <span className="dashboard-user-label">{displayLabel}</span>
         <ChevronDown className={open ? "is-open" : undefined} aria-hidden="true" />
       </button>
       {open ? (

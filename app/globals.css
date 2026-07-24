@@ -831,7 +831,7 @@ button.password-toggle {
   top: 0;
   display: grid;
   height: 100svh;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 34px;
   border-right: 1px solid var(--border);
   padding: 54px 28px 28px;
@@ -853,6 +853,13 @@ button.password-toggle {
   display: grid;
   align-content: start;
   gap: 12px;
+}
+
+.dashboard-header-actions {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 34px;
 }
 
 .dashboard-nav-wrap {
@@ -1437,7 +1444,7 @@ button.password-toggle {
     position: relative;
     height: auto;
     grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto auto;
+    grid-template-rows: auto;
     align-items: center;
     gap: 18px;
     border-right: 0;
@@ -1449,8 +1456,12 @@ button.password-toggle {
     grid-column: 1;
   }
 
-  .dashboard-nav-wrap {
+  .dashboard-header-actions {
     grid-column: 2;
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    gap: 8px;
     justify-self: end;
   }
 
@@ -1493,12 +1504,40 @@ button.password-toggle {
   }
 
   .dashboard-account {
-    grid-column: 1 / -1;
+    border-top: 0;
+  }
+
+  .dashboard-user {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    grid-template-columns: 1fr;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0;
+  }
+
+  .dashboard-user:hover:not(:disabled) {
+    background: var(--surface);
+  }
+
+  .dashboard-user-avatar {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+  }
+
+  .dashboard-user-label,
+  .dashboard-user > svg {
+    display: none;
   }
 
   .dashboard-account-menu {
     top: calc(100% + 8px);
     bottom: auto;
+    left: auto;
+    width: min(230px, calc(100vw - 40px));
   }
 
   .dashboard-content {
@@ -1709,7 +1748,7 @@ button.password-toggle {
   top: 0;
   display: grid;
   height: 100svh;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 34px;
   border-right: 1px solid var(--border);
   padding: 54px 28px 28px;
@@ -1720,6 +1759,13 @@ button.password-toggle {
   display: grid;
   align-content: start;
   gap: 12px;
+}
+
+.dashboard-header-actions {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 34px;
 }
 
 .dashboard-nav-wrap {
@@ -2304,7 +2350,7 @@ button.password-toggle {
     position: relative;
     height: auto;
     grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto auto;
+    grid-template-rows: auto;
     align-items: center;
     gap: 18px;
     border-right: 0;
@@ -2316,8 +2362,12 @@ button.password-toggle {
     grid-column: 1;
   }
 
-  .dashboard-nav-wrap {
+  .dashboard-header-actions {
     grid-column: 2;
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    gap: 8px;
     justify-self: end;
   }
 
@@ -2360,12 +2410,40 @@ button.password-toggle {
   }
 
   .dashboard-account {
-    grid-column: 1 / -1;
+    border-top: 0;
+  }
+
+  .dashboard-user {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    grid-template-columns: 1fr;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0;
+  }
+
+  .dashboard-user:hover:not(:disabled) {
+    background: var(--surface);
+  }
+
+  .dashboard-user-avatar {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+  }
+
+  .dashboard-user-label,
+  .dashboard-user > svg {
+    display: none;
   }
 
   .dashboard-account-menu {
     top: calc(100% + 8px);
     bottom: auto;
+    left: auto;
+    width: min(230px, calc(100vw - 40px));
   }
 
   .dashboard-content {

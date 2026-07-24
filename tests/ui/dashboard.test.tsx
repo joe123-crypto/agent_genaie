@@ -99,7 +99,7 @@ describe("signed-in dashboard UI", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(navButton).toHaveAttribute("aria-expanded", "false");
 
-    const accountButton = screen.getByRole("button", { name: /joseph/i });
+    const accountButton = screen.getByRole("button", { name: /account menu for joseph/i });
     expect(accountButton).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(accountButton);
     expect(accountButton).toHaveAttribute("aria-expanded", "true");
