@@ -1788,6 +1788,7 @@ button.password-toggle {
 }
 
 .dashboard-form-panel {
+  justify-self: center;
   width: min(900px, 100%);
 }
 
