@@ -87,7 +87,7 @@ export default async function WhatsAppLinkingPage({
     : whatsappLinked
       ? `This account is linked to ${accountStatus?.maskedPhone || "your WhatsApp number"}. Revoke it before linking a different number.`
       : onboardingMode
-        ? "Optional: link your WhatsApp to get job application updates in chat. You can skip this and link any time from Settings."
+        ? "link your WhatsApp to get job application updates in chat"
         : "Enter a WhatsApp number, then open the bot link to complete verification.";
 
   const whatsappScript = `
