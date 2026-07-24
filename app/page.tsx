@@ -222,7 +222,11 @@ const pricingPlans: PricingPlan[] = [
 
 function Pricing() {
   return (
-    <section className="landing-pricing" aria-labelledby="landing-pricing-title">
+    <section
+      className="landing-pricing"
+      id="pricing"
+      aria-labelledby="landing-pricing-title"
+    >
       <div className="landing-pricing-copy">
         <h2 id="landing-pricing-title">Choose your job hunt pace</h2>
         <p>
@@ -447,8 +451,7 @@ export default function RootPage() {
               Home
             </a>
             <a href="/about">About</a>
-            <a href="/privacy-policy">Privacy &amp; Policy</a>
-            <a href="/terms-of-service">Terms of Service</a>
+            <a href="#pricing">Pricing</a>
           </nav>
 
           <SocialPlaceholders />
