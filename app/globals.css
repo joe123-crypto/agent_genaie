@@ -3158,7 +3158,8 @@ a.button.landing-cta:hover {
   color: #ffffff;
 }
 
-a.button.landing-pricing-button {
+a.button.landing-pricing-button,
+button.landing-pricing-button {
   width: 100%;
   margin-top: auto;
   min-height: 42px;
@@ -3166,15 +3167,57 @@ a.button.landing-pricing-button {
   font-size: 0.95rem;
 }
 
-.landing-pricing-card.is-featured a.button.landing-pricing-button {
+.landing-pricing-form {
+  margin-top: auto;
+}
+
+.landing-pricing-form button.landing-pricing-button {
+  margin-top: 0;
+}
+
+.landing-pricing-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 18px 54px rgba(71, 143, 119, 0.18);
+}
+
+.landing-pricing-card.is-featured a.button.landing-pricing-button,
+.landing-pricing-card.is-featured button.landing-pricing-button {
   border-color: #ffffff;
   background: #ffffff;
   color: #050505;
 }
 
-.landing-pricing-card.is-featured a.button.landing-pricing-button:hover {
+.landing-pricing-card.is-featured a.button.landing-pricing-button:hover,
+.landing-pricing-card.is-featured button.landing-pricing-button:hover {
   border-color: #e9f3f0;
   background: #e9f3f0;
+}
+
+.pricing-page {
+  min-height: 100svh;
+  background: var(--surface);
+  padding: clamp(28px, 5vw, 58px) 0 clamp(42px, 6vw, 76px);
+}
+
+.pricing-page-header {
+  width: min(1180px, calc(100% - 96px));
+  margin: 0 auto;
+  display: grid;
+  gap: 12px;
+}
+
+.pricing-page-header h1 {
+  font-size: clamp(2.1rem, 5vw, 3.6rem);
+  line-height: 1.05;
+}
+
+.pricing-page-header p {
+  max-width: 640px;
+  font-size: clamp(0.95rem, 1.5vw, 1.08rem);
+}
+
+.pricing-page-section {
+  padding-bottom: 0;
 }
 
 .landing-footer {
@@ -3295,6 +3338,10 @@ a.button.landing-pricing-button {
     width: min(100% - 64px, 1120px);
   }
 
+  .pricing-page-header {
+    width: min(100% - 64px, 1120px);
+  }
+
   .landing-pricing-grid {
     grid-template-columns: 1fr;
   }
@@ -3322,6 +3369,10 @@ a.button.landing-pricing-button {
   .landing-pricing {
     width: calc(100% - 40px);
     padding-top: 2.25rem;
+  }
+
+  .pricing-page-header {
+    width: calc(100% - 40px);
   }
 
   .landing-pricing-card {
@@ -3357,6 +3408,10 @@ a.button.landing-pricing-button {
 
 @media (max-width: 430px) {
   .landing-pricing {
+    width: calc(100% - 30px);
+  }
+
+  .pricing-page-header {
     width: calc(100% - 30px);
   }
 

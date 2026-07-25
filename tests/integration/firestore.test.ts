@@ -21,7 +21,7 @@ import {
 } from "@/src/domains/job-scout";
 import { completeOnboarding } from "@/src/domains/onboarding";
 import { listDashboardTasksForUser, upsertDashboardTaskStatus } from "@/src/domains/dashboard";
-import { syncUserToCentralData } from "@/src/domains/users";
+import { selectSignedInPlan, syncUserToCentralData } from "@/src/domains/users";
 
 // Live round-trip against the Firestore emulator (started by CI via
 // `firebase emulators:exec`, which sets FIRESTORE_EMULATOR_HOST). This proves the
@@ -56,16 +56,43 @@ test("syncUserToCentralData reports new vs existing onboarding state", authOpts,
 
   const doc = await db.collection("users").doc(uid).get();
   assert.equal(doc.data()?.onboarding?.status, "required");
+  assert.equal(doc.data()?.plan, null);
+  assert.equal(first.plan, null);
+  assert.equal(first.planRequired, true);
 
   const second = await syncUserToCentralData(uid);
   assert.equal(second.isNewUser, false);
   assert.equal(second.onboardingRequired, true);
   assert.equal(second.publicUserId, first.publicUserId);
+  assert.equal(second.planRequired, true);
 
-  await db.collection("users").doc(uid).set({ onboarding: { status: "skipped" } }, { merge: true });
+  await db.collection("users").doc(uid).set({ onboarding: { status: "skipped" }, plan: "free" }, { merge: true });
   const skipped = await syncUserToCentralData(uid);
   assert.equal(skipped.isNewUser, false);
   assert.equal(skipped.onboardingRequired, false);
+  assert.equal(skipped.plan, "free");
+  assert.equal(skipped.planRequired, false);
+});
+
+test("selectSignedInPlan validates and stores the user plan", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-plan-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await db.collection("users").doc(uid).set({
+    profile: { email: "plan@example.com", displayName: "Plan User" },
+    onboarding: { status: "required" },
+    plan: null,
+  });
+
+  const selected = await selectSignedInPlan(uid, "pro");
+  assert.equal(selected.plan, "pro");
+  const user = (await db.collection("users").doc(uid).get()).data();
+  assert.equal(user?.plan, "pro");
+  assert.ok(user?.planSelectedAt);
+
+  await assert.rejects(
+    () => selectSignedInPlan(uid, "enterprise"),
+    /plan must be free, pro, or ultra/i,
+  );
 });
 
 test("saveJobScoutProfile writes the expected jobScoutProfiles document shape", opts, async () => {

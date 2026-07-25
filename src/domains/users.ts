@@ -2,6 +2,23 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getFirestoreDb, getFirebaseAdminAuth } from "@/src/firebase/admin";
 import { httpError, userProfileFromRecord, generatePublicUserId, validateFirebaseUid, normalizePhone, whatsappPhoneHash, maskPhone, isActivePhoneLink } from "@/src/lib/utils";
 
+export const USER_PLANS = ["free", "pro", "ultra"] as const;
+export type UserPlan = typeof USER_PLANS[number];
+
+export function normalizeUserPlan(value: unknown): UserPlan | null {
+  const plan = String(value ?? "").trim().toLowerCase();
+  return USER_PLANS.includes(plan as UserPlan) ? plan as UserPlan : null;
+}
+
+export function hasSelectedPlan(value: unknown) {
+  return normalizeUserPlan(value) !== null;
+}
+
+export function pricingGatePath(nextPath: string) {
+  const path = nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/";
+  return `/pricing?next=${encodeURIComponent(path)}`;
+}
+
 export async function syncUserToCentralData(uid: string) {
   const safeUid = validateFirebaseUid(uid);
   const db = getFirestoreDb();
@@ -12,6 +29,8 @@ export async function syncUserToCentralData(uid: string) {
   let publicUserId: string | null = null;
   let isNewUser = false;
   let onboardingRequired = false;
+  let plan: UserPlan | null = null;
+  let planRequired = true;
   await db.runTransaction(async (t) => {
     const existing = await t.get(centralRef);
     if (!existing.exists) {
@@ -19,9 +38,12 @@ export async function syncUserToCentralData(uid: string) {
       publicUserId = newPublicUserId;
       isNewUser = true;
       onboardingRequired = true;
+      plan = null;
+      planRequired = true;
       t.set(centralRef, {
         ...data,
         createdAt: FieldValue.serverTimestamp(),
+        plan: null,
         publicUserId: newPublicUserId,
         onboarding: {
           status: "required",
@@ -40,6 +62,8 @@ export async function syncUserToCentralData(uid: string) {
       const newPublicId = await ensurePublicUserId(db, safeUid, current.publicUserId, t);
       publicUserId = newPublicId;
       onboardingRequired = onboardingStatusRequiresAttention(current.onboarding);
+      plan = normalizeUserPlan(current.plan);
+      planRequired = !plan;
       t.update(centralRef, {
         "profile.email": data.profile.email,
         "profile.emailLower": data.profile.emailLower,
@@ -55,7 +79,7 @@ export async function syncUserToCentralData(uid: string) {
       });
     }
   });
-  return { publicUserId, isNewUser, onboardingRequired };
+  return { publicUserId, isNewUser, onboardingRequired, plan, planRequired };
 }
 
 function onboardingStatusRequiresAttention(onboarding: any) {
@@ -120,6 +144,7 @@ export async function getSignedInAccountStatus(uid: string) {
   return {
     userId: safeUid,
     publicUserId: data.publicUserId ?? null,
+    plan: normalizeUserPlan(data.plan),
     email: data.profile?.email ?? null,
     profile: {
       email: data.profile?.email ?? null,
@@ -138,6 +163,24 @@ export async function getSignedInAccountStatus(uid: string) {
     maskedPhone: phone ? maskPhone(phone) : null,
     phoneHash: phoneHash ? String(phoneHash).slice(0, 12) : null,
   };
+}
+
+export async function selectSignedInPlan(uidInput: string, planInput: unknown) {
+  const uid = validateFirebaseUid(uidInput);
+  const plan = normalizeUserPlan(planInput);
+  if (!plan) throw httpError(400, "plan must be free, pro, or ultra.");
+
+  const db = getFirestoreDb();
+  const userRef = db.collection("users").doc(uid);
+  const doc = await userRef.get();
+  if (!doc.exists) throw httpError(404, "User profile not found.");
+  await userRef.set({
+    plan,
+    planSelectedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return { plan };
 }
 
 export async function updateSignedInDisplayName(uid: string, displayNameInput: unknown) {

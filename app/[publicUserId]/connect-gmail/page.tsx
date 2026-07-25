@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
-import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
@@ -47,6 +47,8 @@ export default async function ConnectGmailPage({
   }
 
   const onboardingPath = `/${publicUserId}/onboarding`;
+  const accountStatus = await getSignedInAccountStatus(uid).catch(() => null);
+  if (!accountStatus?.plan) redirect(pricingGatePath(connectPath));
 
   // The user doc already fetched above records connection state.
   const gmailConnected = (routeUser as { services?: { gmail?: string } }).services?.gmail === "connected";

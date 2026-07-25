@@ -6,7 +6,7 @@ import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { listJobApplications } from "@/src/domains/job-scout";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
-import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 
 export const runtime = "nodejs";
 
@@ -42,6 +42,7 @@ export default async function ApplicationHistoryPage({ params }: { params: Promi
     listJobApplications(uid),
   ]);
   const accountStatus = accountResult.status === "fulfilled" ? accountResult.value : null;
+  if (!accountStatus?.plan) redirect(pricingGatePath(`/${publicUserId}/application-history`));
   const apps = appsResult.status === "fulfilled" ? appsResult.value : [];
   const history = buildApplicationHistory(apps, publicUserId);
 

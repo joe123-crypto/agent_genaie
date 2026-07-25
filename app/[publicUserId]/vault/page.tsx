@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
-import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 import { getWebetuCredentialStatus } from "@/src/domains/webetu";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
@@ -47,6 +47,8 @@ export default async function VaultPage({
   }
 
   const onboardingPath = `/${publicUserId}/onboarding`;
+  const accountStatus = await getSignedInAccountStatus(uid).catch(() => null);
+  if (!accountStatus?.plan) redirect(pricingGatePath(vaultPath));
 
   const webetuStatus = await getWebetuCredentialStatus(uid).catch(() => null);
   const webetuConfigured = !!webetuStatus?.configured;
