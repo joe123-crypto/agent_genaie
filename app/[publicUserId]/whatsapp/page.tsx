@@ -81,6 +81,13 @@ export default async function WhatsAppLinkingPage({
     }
   }
 
+  // Once WhatsApp is linked the onboarding step is satisfied, so continue automatically
+  // instead of offering a redundant manual button. The invite/token confirm flow and the
+  // chat handoff have their own navigation and are excluded.
+  if (onboardingMode && !tokenMode && !chatHandoff && whatsappLinked) {
+    redirect(onboardingPath);
+  }
+
   const statusLabel = tokenMode ? "Ready to link" : whatsappLinked ? "Linked" : "Not linked";
   const statusKind = tokenMode ? "pending" : whatsappLinked ? "complete" : "unlinked";
   const statusCopy = tokenMode
@@ -296,9 +303,7 @@ if (switchButton) switchButton.addEventListener("click", async function() {
             <button className="danger" data-whatsapp-revoke type="button" hidden={!whatsappLinked}>Revoke WhatsApp link</button>
             {chatHandoffUrl ? <a className="button" href={chatHandoffUrl}>Continue in WhatsApp</a> : null}
             {onboardingMode && !chatHandoff ? (
-              whatsappLinked
-                ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a>
-                : <button className="secondary" data-whatsapp-skip type="button">Skip for now</button>
+              <button className="secondary" data-whatsapp-skip type="button">Skip for now</button>
             ) : null}
             <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
           </div>

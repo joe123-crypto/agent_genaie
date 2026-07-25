@@ -109,7 +109,18 @@ const missingStatus = document.querySelector("[data-missing]");
 const cvInput = document.querySelector("[data-cv]");
 const cvName = document.querySelector("[data-cv-name]");
 const initialCvConversionPending = ${JSON.stringify(cvConversionStatus === "pending")};
+const onboardingMode = ${JSON.stringify(onboardingMode)};
+const onboardingPath = ${JSON.stringify(onboardingPath)};
 let activeConversionPoll = null;
+
+function maybeAdvanceOnboarding(payload) {
+  if (onboardingMode && payload && payload.ready) {
+    setMessage("Job Scout setup saved. Continuing onboarding...", "complete");
+    window.location.assign(onboardingPath);
+    return true;
+  }
+  return false;
+}
 
 const labels = {
   phone_link: "WhatsApp link",
@@ -203,6 +214,7 @@ form.addEventListener("submit", async function(event) {
       setMessage("PDF uploaded. Preparing it for Job Scout...", "loading");
       payload = await waitForCvConversion(payload);
     }
+    if (maybeAdvanceOnboarding(payload)) return;
     setMessage(
       payload.ready
         ? "Job Scout setup saved and ready."
@@ -223,6 +235,7 @@ form.addEventListener("submit", async function(event) {
 if (initialCvConversionPending) {
   setMessage("Your uploaded PDF is being prepared for Job Scout...", "loading");
   waitForCvConversion({ cvConversionStatus: "pending" }).then(function(payload) {
+    if (maybeAdvanceOnboarding(payload)) return;
     setMessage(
       payload.ready
         ? "Your CV is ready."
@@ -307,7 +320,6 @@ if (initialCvConversionPending) {
         <div className="actions">
           <button data-save type="submit">Save Job Scout setup</button>
           <a className="button secondary" href={connectPath}>Connect Gmail</a>
-          {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
           <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
         </div>
       </form>
