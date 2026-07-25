@@ -2846,7 +2846,7 @@ a.button.landing-cta:hover {
     grid-column: 1 / -1;
     grid-row: 2;
     justify-content: flex-start;
-    gap: clamp(20px, 8vw, 40px);
+    gap: 24px;
   }
 
   .landing-nav a {
@@ -2911,8 +2911,8 @@ a.button.landing-cta:hover {
   }
 
   .landing-nav {
-    justify-content: space-between;
-    gap: 12px;
+    justify-content: flex-start;
+    gap: 20px;
   }
 
   .landing-nav a {
