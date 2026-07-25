@@ -102,6 +102,8 @@ export function Pricing({
       <div className="landing-pricing-grid">
         {pricingPlans.map((plan) => {
           const isSelected = selectedPlan === plan.id;
+          const isPaidPlan = plan.id !== "free";
+          const showSelectionForm = mode === "selection" && !isPaidPlan;
 
           return (
             <article
@@ -131,7 +133,7 @@ export function Pricing({
                 ))}
               </ul>
 
-              {mode === "selection" ? (
+              {showSelectionForm ? (
                 <form className="landing-pricing-form" action="/account/plan/select" method="post">
                   <input type="hidden" name="plan" value={plan.id} />
                   <input type="hidden" name="next" value={nextHref} />
