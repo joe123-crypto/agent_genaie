@@ -175,7 +175,6 @@ if (signOutButton) signOutButton.addEventListener("click", async function() {
         <div className="actions actions-spaced">
           <button data-connect type="button">{gmailConnected ? "Reconnect Gmail" : "Connect Gmail"}</button>
           <button className="danger" data-disconnect type="button" hidden={!gmailConnected}>Disconnect Gmail</button>
-          {onboardingMode ? <a className="button secondary" href={onboardingPath}>Continue onboarding</a> : null}
           {onboardingMode ? <button className="secondary" data-sign-out type="button">Sign out</button> : null}
         </div>
       </div>
