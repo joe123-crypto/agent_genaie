@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
-import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 import { getJobScoutStatusForUser } from "@/src/domains/job-scout";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
@@ -77,6 +77,7 @@ export default async function JobScoutSetupPage({
     getSignedInAccountStatus(uid).catch(() => null),
     getJobScoutStatusForUser(uid).catch(() => null),
   ]);
+  if (!accountStatus?.plan) redirect(pricingGatePath(setupPath));
 
   const onboardingPath = `/${publicUserId}/onboarding`;
   const connectPath = `/${publicUserId}/connect-gmail${onboardingMode ? "?onboarding=1" : ""}`;

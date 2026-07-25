@@ -65,7 +65,7 @@ describe("Job Scout setup automatic applications", () => {
       id: "fresh-user",
       profile: { email: "fresh@example.com", displayName: "Fresh User" },
     });
-    mocks.getSignedInAccountStatus.mockResolvedValue({ whatsappLinked: false });
+    mocks.getSignedInAccountStatus.mockResolvedValue({ plan: "free", whatsappLinked: false });
   });
 
   afterEach(cleanup);

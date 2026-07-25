@@ -45,6 +45,7 @@ async function loadOnboardingDependencies(uid: string, selectedService: Onboardi
     gmailConnected: !!jobScoutStatus?.gmailConnected,
     jobScoutReady: !!jobScoutStatus?.ready,
     webetuConfigured: !!webetuStatus?.configured,
+    plan: accountStatus?.plan ?? null,
     jobScoutStatus,
     webetuStatus,
   };
@@ -76,6 +77,7 @@ export async function getOnboardingStatus(uidInput: string) {
 
   return {
     publicUserId: dependencies.publicUserId ?? user.publicUserId ?? null,
+    plan: dependencies.plan,
     selectedService,
     channel,
     status,

@@ -8,7 +8,7 @@ import { SESSION_COOKIE_NAME } from "@/src/config";
 import { listDashboardTasksForUser } from "@/src/domains/dashboard";
 import { getJobScoutStatusForUser, listJobApplications } from "@/src/domains/job-scout";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
-import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 import { getWebetuCredentialStatus } from "@/src/domains/webetu";
 
 export const runtime = "nodejs";
@@ -48,6 +48,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ publ
     listJobApplications(uid),
   ]);
   const accountStatus = accountResult.status === "fulfilled" ? accountResult.value : null;
+  if (!accountStatus?.plan) redirect(pricingGatePath(`/${publicUserId}`));
   const jobScoutStatus = jobScoutResult.status === "fulfilled" ? jobScoutResult.value : null;
   const webetuStatus = webetuResult.status === "fulfilled" ? webetuResult.value : null;
   const telemetry = telemetryResult.status === "fulfilled" ? telemetryResult.value : null;

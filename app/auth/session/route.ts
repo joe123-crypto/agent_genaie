@@ -51,6 +51,8 @@ export async function POST(req: NextRequest) {
       publicUserId: syncResult.publicUserId,
       isNewUser: syncResult.isNewUser,
       onboardingRequired: syncResult.onboardingRequired,
+      plan: syncResult.plan,
+      planRequired: syncResult.planRequired,
     });
     response.headers.set("Set-Cookie", sessionCookieHeader(sessionCookie));
     return response;

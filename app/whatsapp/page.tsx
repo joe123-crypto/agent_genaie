@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
-import { syncUserToCentralData } from "@/src/domains/users";
+import { pricingGatePath, syncUserToCentralData } from "@/src/domains/users";
 
 export const runtime = "nodejs";
 
@@ -22,5 +22,8 @@ export default async function WhatsAppHandoffPage({
 
   const synced = await syncUserToCentralData(verified.uid);
   if (!synced.publicUserId) redirect("/login");
+  if (!synced.plan && !token) {
+    redirect(pricingGatePath(`/${synced.publicUserId}/whatsapp`));
+  }
   redirect(`/${synced.publicUserId}/whatsapp${suffix}`);
 }

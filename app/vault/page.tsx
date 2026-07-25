@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
-import { syncUserToCentralData, getSignedInAccountStatus } from "@/src/domains/users";
+import { syncUserToCentralData, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 
 export const runtime = "nodejs";
 
@@ -22,6 +22,10 @@ export default async function VaultRedirectPage() {
 
   await syncUserToCentralData(uid);
   const status = await getSignedInAccountStatus(uid).catch(() => null);
-  if (status?.publicUserId) redirect(`/${status.publicUserId}/vault`);
+  if (status?.publicUserId) {
+    const nextPath = `/${status.publicUserId}/vault`;
+    if (!status.plan) redirect(pricingGatePath(nextPath));
+    redirect(nextPath);
+  }
   redirect("/login?next=/vault");
 }

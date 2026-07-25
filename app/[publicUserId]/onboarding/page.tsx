@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
-import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 import {
   completeOnboarding,
   getOnboardingStatus,
@@ -39,6 +39,7 @@ export default async function OnboardingPage({ params }: { params: Promise<{ pub
   }
 
   const status = await getOnboardingStatus(uid);
+  if (!status.plan) redirect(pricingGatePath(onboardingPath));
   if (status.completed || status.skipped || !status.onboardingRequired) redirect(homePath);
   if (status.nextStep === "dashboard") {
     await completeOnboarding(uid);

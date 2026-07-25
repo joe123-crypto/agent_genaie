@@ -39,6 +39,8 @@ export type SessionResult = {
   publicUserId?: string;
   isNewUser?: boolean;
   onboardingRequired?: boolean;
+  plan?: "free" | "pro" | "ultra" | null;
+  planRequired?: boolean;
 };
 
 type ErrorPayload = {
@@ -69,6 +71,15 @@ export function destinationForSession(session: SessionResult, nextPath: string) 
   const whatsappInviteMatch = safePath.match(/^\/whatsapp\/?(\?token=[^#]+)$/);
   if (publicUserId && whatsappInviteMatch) {
     return `/${publicUserId}/whatsapp${whatsappInviteMatch[1]}`;
+  }
+  if (session.planRequired && publicUserId) {
+    const genericScopedMatch = safePath.match(/^\/(connect-gmail|vault|whatsapp)\/?(\?.*)?$/);
+    const gatedNext = session.onboardingRequired || safePath === "/"
+      ? `/${publicUserId}/onboarding`
+      : genericScopedMatch
+        ? `/${publicUserId}/${genericScopedMatch[1]}${genericScopedMatch[2] || ""}`
+        : safePath;
+    return `/pricing?next=${encodeURIComponent(gatedNext)}`;
   }
   if (session.onboardingRequired && publicUserId) {
     return `/${publicUserId}/onboarding`;

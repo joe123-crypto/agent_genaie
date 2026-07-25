@@ -3,7 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { DashboardSettings } from "@/app/_components/dashboard-settings";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { SESSION_COOKIE_NAME } from "@/src/config";
-import { getSignedInAccountStatus, resolvePublicUser, syncUserToCentralData } from "@/src/domains/users";
+import { getSignedInAccountStatus, pricingGatePath, resolvePublicUser, syncUserToCentralData } from "@/src/domains/users";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 
 export const runtime = "nodejs";
@@ -34,6 +34,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ publi
   }
 
   const accountStatus = await getSignedInAccountStatus(uid).catch(() => null);
+  if (!accountStatus?.plan) redirect(pricingGatePath(settingsPath));
   const userLabel =
     accountStatus?.profile.displayName
     || accountStatus?.profile.email

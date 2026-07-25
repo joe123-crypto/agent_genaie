@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
-import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 import {
   getAccountLinkInvite,
   whatsappBotLink,
@@ -59,6 +59,7 @@ export default async function WhatsAppLinkingPage({
     tokenMode ? getAccountLinkInvite(token) : Promise.resolve(null),
     onboardingMode ? getOnboardingStatus(uid).catch(() => null) : Promise.resolve(null),
   ]);
+  if (!tokenMode && !accountStatus?.plan) redirect(pricingGatePath(pagePath));
   const homePath = `/${publicUserId}`;
   const onboardingPath = `/${publicUserId}/onboarding`;
   const onboardingTotal = onboardingStatus?.selectedService === "webetu" ? 3 : 4;

@@ -18,7 +18,7 @@ test("safeNext only permits same-origin paths", () => {
 });
 
 test("destinationForSession routes onboarding and user-scoped pages", () => {
-  const session = { ok: true as const, publicUserId: "usr_123", onboardingRequired: false };
+  const session = { ok: true as const, publicUserId: "usr_123", onboardingRequired: false, plan: "free" as const, planRequired: false };
   assert.equal(destinationForSession(session, "/"), "/usr_123");
   assert.equal(destinationForSession(session, "/vault?tab=cv"), "/usr_123/vault?tab=cv");
   assert.equal(destinationForSession(session, "/connect-gmail"), "/usr_123/connect-gmail");
@@ -30,6 +30,29 @@ test("destinationForSession routes onboarding and user-scoped pages", () => {
   assert.equal(
     destinationForSession({ ...session, onboardingRequired: true }, "/vault"),
     "/usr_123/onboarding",
+  );
+});
+
+test("destinationForSession sends users without a plan to pricing first", () => {
+  const session = {
+    ok: true as const,
+    publicUserId: "usr_123",
+    onboardingRequired: true,
+    plan: null,
+    planRequired: true,
+  };
+
+  assert.equal(
+    destinationForSession(session, "/"),
+    "/pricing?next=%2Fusr_123%2Fonboarding",
+  );
+  assert.equal(
+    destinationForSession({ ...session, onboardingRequired: false }, "/vault?tab=cv"),
+    "/pricing?next=%2Fusr_123%2Fvault%3Ftab%3Dcv",
+  );
+  assert.equal(
+    destinationForSession(session, "/whatsapp?token=abc"),
+    "/usr_123/whatsapp?token=abc",
   );
 });
 
