@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 
@@ -40,12 +40,34 @@ describe("Genaie Scout landing page", () => {
 
   it("includes the expected navigation and animation-ready artwork", () => {
     const { container } = render(createElement(RootPage));
+    const primaryNavigation = within(
+      screen.getByRole("navigation", { name: /primary navigation/i }),
+    );
+    const legalFooterNavigation = within(
+      screen.getByRole("navigation", { name: /legal footer links/i }),
+    );
 
-    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "#home");
-    expect(screen.getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
-    expect(screen.getByRole("link", { name: /privacy & policy/i })).toHaveAttribute(
+    expect(primaryNavigation.getByRole("link", { name: "Home" })).toHaveAttribute(
+      "href",
+      "#home",
+    );
+    expect(primaryNavigation.getByRole("link", { name: "About" })).toHaveAttribute(
+      "href",
+      "/about",
+    );
+    expect(primaryNavigation.getByRole("link", { name: "Pricing" })).toHaveAttribute(
+      "href",
+      "#pricing",
+    );
+    expect(primaryNavigation.queryByRole("link", { name: /privacy & policy/i })).toBeNull();
+    expect(primaryNavigation.queryByRole("link", { name: /terms of service/i })).toBeNull();
+    expect(legalFooterNavigation.getByRole("link", { name: /privacy policy/i })).toHaveAttribute(
       "href",
       "/privacy-policy",
+    );
+    expect(legalFooterNavigation.getByRole("link", { name: /terms of service/i })).toHaveAttribute(
+      "href",
+      "/terms-of-service",
     );
     expect(screen.getByRole("img", { name: /facebook link coming soon/i })).toBeVisible();
     expect(screen.getByRole("img", { name: /whatsapp link coming soon/i })).toBeVisible();
