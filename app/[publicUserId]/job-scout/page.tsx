@@ -307,7 +307,7 @@ if (initialCvConversionPending) {
         </label>
         <label className="check">
           <input name="profileConfirmed" type="checkbox" defaultChecked={!!jobScoutStatus?.profileConfirmed} required />
-          <span>I confirm my profile and job preferences are accurate.</span>
+          <span>I have read and agree to the <a href="/terms-of-service" target="_blank" rel="noopener noreferrer">Terms of Service</a>.</span>
         </label>
         <label className="check">
           <input name="safetyAcknowledged" type="checkbox" defaultChecked={!!jobScoutStatus?.safetyAcknowledged} required />

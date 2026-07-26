@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     const targetRole = requiredText(form, "targetRole", "Target role");
     const targetLocation = requiredText(form, "targetLocation", "Target location");
     const country = countryCode(form);
-    if (!checked(form, "profileConfirmed")) throw httpError(400, "Profile confirmation is required.");
+    if (!checked(form, "profileConfirmed")) throw httpError(400, "Terms of Service acceptance is required.");
     if (!checked(form, "safetyAcknowledged")) throw httpError(400, "Scam-safety terms acknowledgement is required.");
 
     await updateSignedInDisplayName(user.uid, displayName);
