@@ -1438,6 +1438,7 @@ button.password-toggle {
 @media (max-width: 820px) {
   .dashboard-app {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .dashboard-sidebar {
@@ -2344,6 +2345,7 @@ button.password-toggle {
 @media (max-width: 820px) {
   .dashboard-app {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .dashboard-sidebar {
