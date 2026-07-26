@@ -90,8 +90,6 @@ export default async function JobScoutSetupPage({
   const targetRole = firstValue(jobScoutStatus?.preferences?.targetRoles);
   const targetLocation = firstValue(jobScoutStatus?.preferences?.locations);
   const country = jobScoutStatus?.preferences?.country ?? "dz";
-  const whatsappLinked = !!accountStatus?.whatsappLinked;
-  const googleConnected = !!jobScoutStatus?.gmailConnected;
   const cvAvailable = !!jobScoutStatus?.cvAvailable;
   const cvUploaded = !!jobScoutStatus?.cvUploaded;
   const cvConversionStatus = String(jobScoutStatus?.cvConversionStatus || "missing");
@@ -259,8 +257,6 @@ if (initialCvConversionPending) {
         <StatusPill data-ready-status kind={ready ? "complete" : "pending"}>{ready ? "Ready" : cvConversionStatus === "pending" ? "Processing" : "Draft"}</StatusPill>
       </div>
       <div className="status-row" aria-label="Job Scout requirements">
-        <StatusPill kind={whatsappLinked ? "complete" : "pending"}>{whatsappLinked ? "WhatsApp updates: On" : "WhatsApp updates: Off (optional)"}</StatusPill>
-        <StatusPill kind={googleConnected ? "complete" : "unlinked"}>{googleConnected ? "Gmail: Connected" : "Gmail: Not connected"}</StatusPill>
         <StatusPill data-cv-status kind={cvAvailable ? "complete" : "pending"}>
           {cvAvailable ? "CV: Ready" : cvConversionStatus === "pending" ? "CV: Processing" : "CV: Missing"}
         </StatusPill>
