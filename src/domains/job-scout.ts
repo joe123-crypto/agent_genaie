@@ -1047,7 +1047,7 @@ export async function recordJobApplication(body: any) {
   if (!company) throw httpError(400, "company is required.");
   if (!role) throw httpError(400, "role is required.");
   const status = String(body.status ?? "applied").trim();
-  if (!["applied", "skipped", "action_required", "physical_submission", "failed"].includes(status)) {
+  if (!["applied", "skipped", "action_required", "physical_submission", "failed", "pending_approval", "approved"].includes(status)) {
     throw httpError(400, "status is invalid.");
   }
   const applicationEmail = String(body.applicationEmail ?? body.application_email ?? "").trim() || null;
@@ -1125,4 +1125,33 @@ export async function recordJobApplication(body: any) {
     }
   });
   return { ok: true, id, created, updated, skippedExisting: !created && !updated };
+}
+
+// User-facing approve/reject for applications the agent surfaced but did not
+// auto-submit (auto-apply off). Only records still awaiting approval may move,
+// which guards against double-approval or racing the agent's dispatch loop.
+export async function decideJobApplication(input: {
+  userId: string;
+  applicationId: string;
+  decision: "approve" | "reject";
+}) {
+  const safeUid = validateFirebaseUid(input.userId);
+  const applicationId = normalizeApplicationId(input.applicationId);
+  if (input.decision !== "approve" && input.decision !== "reject") {
+    throw httpError(400, "decision must be approve or reject.");
+  }
+  const status = input.decision === "approve" ? "approved" : "skipped";
+  const db = getFirestoreDb();
+  const docRef = db.collection("jobApplications").doc(applicationId);
+  await db.runTransaction(async (t) => {
+    const doc = await t.get(docRef);
+    if (!doc.exists) throw httpError(404, "Application not found.");
+    const data = doc.data() || {};
+    if (data.userId !== safeUid) throw httpError(403, "You cannot change this application.");
+    if (data.status !== "pending_approval") {
+      throw httpError(409, "This application is no longer awaiting approval.");
+    }
+    t.update(docRef, { status, updatedAt: FieldValue.serverTimestamp() });
+  });
+  return { ok: true, id: applicationId, status };
 }

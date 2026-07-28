@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ publ
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!sessionCookie) {
-    return NextResponse.redirect(new URL(`/login?next=/${publicUserId}/application-history`, req.url));
+    return NextResponse.redirect(new URL(`/login?next=/${publicUserId}/applications/history`, req.url));
   }
 
   const [verified, routeUser] = await Promise.all([
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ publ
     resolvePublicUser(publicUserId).catch(() => null),
   ]);
   if (!verified) {
-    return NextResponse.redirect(new URL(`/login?next=/${publicUserId}/application-history`, req.url));
+    return NextResponse.redirect(new URL(`/login?next=/${publicUserId}/applications/history`, req.url));
   }
   // Only the owner of the route may download their own artifacts.
   if (!routeUser || verified.uid !== routeUser.id) return notFound();

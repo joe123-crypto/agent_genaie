@@ -1,31 +1,33 @@
 import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
-import { ApplicationHistory } from "@/app/_components/application-history";
+import { ApplicationApproval } from "@/app/_components/application-approval";
 import { buildApplicationHistory } from "@/app/_components/application-history-model";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
+import { StatusNotice } from "@/app/_components/status-ui";
 import { SESSION_COOKIE_NAME } from "@/src/config";
-import { listJobApplications } from "@/src/domains/job-scout";
+import { getJobScoutStatusForUser, listJobApplications } from "@/src/domains/job-scout";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 
 export const runtime = "nodejs";
 
-export default async function ApplicationHistoryPage({ params }: { params: Promise<{ publicUserId: string }> }) {
+export default async function ApplicationApprovalPage({ params }: { params: Promise<{ publicUserId: string }> }) {
   const { publicUserId } = await params;
 
   if (!/^usr_[A-Za-z0-9_-]{16}$/.test(publicUserId)) notFound();
 
+  const approvalPath = `/${publicUserId}/applications/approval`;
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
-  if (!sessionCookie) redirect(`/login?next=/${publicUserId}/application-history`);
+  if (!sessionCookie) redirect(`/login?next=${encodeURIComponent(approvalPath)}`);
 
   const [verified, routeUser] = await Promise.all([
     verifyFirebaseSessionCookie(sessionCookie).catch(() => null),
     resolvePublicUser(publicUserId).catch(() => null),
   ]);
 
-  if (!verified) redirect(`/login?next=/${publicUserId}/application-history`);
+  if (!verified) redirect(`/login?next=${encodeURIComponent(approvalPath)}`);
   const uid = verified.uid;
 
   if (!routeUser) notFound();
@@ -33,18 +35,25 @@ export default async function ApplicationHistoryPage({ params }: { params: Promi
   if (uid !== routeUser.id) {
     await syncUserToCentralData(uid);
     const myStatus = await getSignedInAccountStatus(uid).catch(() => null);
-    if (myStatus?.publicUserId) redirect(`/${myStatus.publicUserId}/application-history`);
+    if (myStatus?.publicUserId) redirect(`/${myStatus.publicUserId}/applications/approval`);
     redirect("/login");
   }
 
-  const [accountResult, appsResult] = await Promise.allSettled([
+  await syncUserToCentralData(uid);
+  const [accountResult, appsResult, jobScoutResult] = await Promise.allSettled([
     getSignedInAccountStatus(uid),
     listJobApplications(uid),
+    getJobScoutStatusForUser(uid),
   ]);
   const accountStatus = accountResult.status === "fulfilled" ? accountResult.value : null;
-  if (!accountStatus?.plan) redirect(pricingGatePath(`/${publicUserId}/application-history`));
+  if (!accountStatus?.plan) redirect(pricingGatePath(approvalPath));
+
   const apps = appsResult.status === "fulfilled" ? appsResult.value : [];
-  const history = buildApplicationHistory(apps, publicUserId);
+  const jobScoutStatus = jobScoutResult.status === "fulfilled" ? jobScoutResult.value : null;
+  const autoApply = jobScoutStatus?.preferences?.autoApply !== false;
+  const pending = buildApplicationHistory(apps, publicUserId).rows.filter(
+    (row) => row.status === "pending_approval",
+  );
 
   const userLabel =
     accountStatus?.profile.displayName
@@ -54,8 +63,13 @@ export default async function ApplicationHistoryPage({ params }: { params: Promi
     || "Account";
 
   return (
-    <DashboardShell active="application-history" publicUserId={publicUserId} userLabel={userLabel}>
-      <ApplicationHistory rows={history.rows} />
+    <DashboardShell active="applications" publicUserId={publicUserId} userLabel={userLabel}>
+      {autoApply ? (
+        <StatusNotice kind="info" variant="block">
+          Automatic submission is on, so your agent applies without waiting for approval. Turn it off in Job Scout setup if you want to approve each job here.
+        </StatusNotice>
+      ) : null}
+      <ApplicationApproval rows={pending} />
     </DashboardShell>
   );
 }
