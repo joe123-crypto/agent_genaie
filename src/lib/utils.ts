@@ -134,7 +134,7 @@ export function normalizeJobPreferences(input: any = {}) {
     skills: normalizeStringList(source.skills),
     exclusions: normalizeStringList(source.exclusions),
     promptNotes: normalizeStringList(source.promptNotes ?? source.notes, 12),
-    autoApply: source.autoApply === false ? false : true,
+    autoApply: source.autoApply === true,
     maxApplicationsPerRun: Number.isFinite(maxApplications) ? Math.min(Math.max(maxApplications, 0), 5) : 1,
   };
 }

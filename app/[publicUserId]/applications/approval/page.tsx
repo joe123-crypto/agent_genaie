@@ -50,7 +50,7 @@ export default async function ApplicationApprovalPage({ params }: { params: Prom
 
   const apps = appsResult.status === "fulfilled" ? appsResult.value : [];
   const jobScoutStatus = jobScoutResult.status === "fulfilled" ? jobScoutResult.value : null;
-  const autoApply = jobScoutStatus?.preferences?.autoApply !== false;
+  const autoApply = jobScoutStatus?.preferences?.autoApply === true;
   const pending = buildApplicationHistory(apps, publicUserId).rows.filter(
     (row) => row.status === "pending_approval",
   );

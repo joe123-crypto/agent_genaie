@@ -771,7 +771,7 @@ export async function getJobScoutStatusForUser(
       locations: preferences.locations || [],
       country: preferences.country || null,
       language: preferences.language || null,
-      autoApply: preferences.autoApply !== false,
+      autoApply: preferences.autoApply === true,
       maxApplicationsPerRun: preferences.maxApplicationsPerRun ?? 1,
     },
   };
@@ -850,7 +850,7 @@ export async function getJobScoutStatusForPhone(phoneInput: string) {
       locations: preferences.locations || [],
       country: preferences.country || null,
       language: preferences.language || null,
-      autoApply: preferences.autoApply !== false,
+      autoApply: preferences.autoApply === true,
       maxApplicationsPerRun: preferences.maxApplicationsPerRun ?? 1,
     },
   };
