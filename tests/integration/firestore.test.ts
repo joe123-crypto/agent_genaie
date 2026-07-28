@@ -604,7 +604,17 @@ test("recordJobApplication uses jobApplicationId as the doc ID and a valid statu
     userId: uid,
     company: "Acme",
     role: "Backend Engineer",
-    status: "applied",
+    status: "pending_approval",
+    applicationEmail: "jobs@acme.example",
+    candidateSnapshot: {
+      source: "jsearch",
+      sourceUrl: "https://jobs.example/acme-backend",
+      company: "Acme",
+      role: "Backend Engineer",
+      description: "Build and operate backend services.",
+      applicationEmail: "jobs@acme.example",
+      applyLinks: ["https://jobs.example/acme-backend/apply"],
+    },
   });
   assert.equal(result.id, jobApplicationId(uid, "Acme", "Backend Engineer"));
 
@@ -614,10 +624,12 @@ test("recordJobApplication uses jobApplicationId as the doc ID and a valid statu
   assert.equal(data.company, "Acme"); // stored trimmed (only the doc ID lowercases)
   assert.equal(data.subscriptionId, `${uid}_jobs`);
   assert.ok(
-    ["applied", "skipped", "action_required", "physical_submission", "failed"].includes(data.status),
+    ["applied", "pending_approval", "approved", "skipped", "action_required", "physical_submission", "failed"].includes(data.status),
     "status is one of the allowed enum values",
   );
   assert.equal(data.artifactRefs, undefined);
+  assert.equal(data.candidateSnapshot.description, "Build and operate backend services.");
+  assert.deepEqual(data.candidateSnapshot.applyLinks, ["https://jobs.example/acme-backend/apply"]);
 
   const listed = await listJobApplications(uid);
   assert.equal(listed.length, 1);

@@ -35,6 +35,8 @@ test("buildApplicationHistory maps status to StatusPill kinds", () => {
       { applicationId: "a1", company: "Acme", role: "Engineer", status: "applied" },
       { applicationId: "a2", company: "Beta", role: "Analyst", status: "action_required" },
       { applicationId: "a3", company: "Cyan", role: "Designer", status: "failed" },
+      { applicationId: "a4", company: "Delta", role: "Driver", status: "pending_approval" },
+      { applicationId: "a5", company: "Echo", role: "Editor", status: "approved" },
     ],
     publicUserId,
   );
@@ -42,6 +44,8 @@ test("buildApplicationHistory maps status to StatusPill kinds", () => {
   assert.equal(byId.a1.statusKind, "complete");
   assert.equal(byId.a2.statusKind, "warning");
   assert.equal(byId.a3.statusKind, "error");
+  assert.equal(byId.a4.statusLabel, "Awaiting approval");
+  assert.equal(byId.a5.statusLabel, "Approved");
 });
 
 test("buildApplicationHistory drops records missing company/role/id", () => {
