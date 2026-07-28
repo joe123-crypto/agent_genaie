@@ -94,7 +94,8 @@ export default async function JobScoutSetupPage({
   const cvUploaded = !!jobScoutStatus?.cvUploaded;
   const cvConversionStatus = String(jobScoutStatus?.cvConversionStatus || "missing");
   const ready = !!jobScoutStatus?.ready;
-  const autoApply = jobScoutStatus?.preferences?.autoApply === true;
+  const autoApply = !!jobScoutStatus?.configured
+    && jobScoutStatus?.preferences?.autoApply === true;
 
   const pageScript = `
 const form = document.querySelector("[data-job-scout-form]");
