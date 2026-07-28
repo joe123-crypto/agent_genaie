@@ -540,6 +540,44 @@ function applicationArtifactRefsFromRecord(
   return refs;
 }
 
+const JOB_APPLICATION_SNAPSHOT_FIELDS = [
+  "candidateId",
+  "agentCandidateId",
+  "source",
+  "sourceUrl",
+  "sourcePostUrl",
+  "sourceChannelJid",
+  "sourcePostId",
+  "company",
+  "role",
+  "location",
+  "description",
+  "closing",
+  "applicationEmail",
+] as const;
+
+function normalizeJobApplicationCandidateSnapshot(
+  input: unknown,
+  fallback: Record<string, unknown>,
+) {
+  const source = input && typeof input === "object"
+    ? input as Record<string, unknown>
+    : {};
+  const snapshot: Record<string, unknown> = {};
+  for (const field of JOB_APPLICATION_SNAPSHOT_FIELDS) {
+    const fallbackValue = fallback[field];
+    const value = source[field] ?? fallbackValue;
+    const limit = field === "description" ? 8000 : field.includes("Url") ? 2000 : 500;
+    const text = String(value ?? "").trim().slice(0, limit);
+    if (text) snapshot[field] = text;
+  }
+  for (const field of ["applyLinks", "applicationEmails"] as const) {
+    const values = normalizeStringList(source[field]).slice(0, 10);
+    if (values.length) snapshot[field] = values.map((value) => value.slice(0, 2000));
+  }
+  return snapshot;
+}
+
 export async function resetJobScoutProfileForPhone(
   phoneInput: string,
   dependencies: { deleteObject: typeof deleteObject } = { deleteObject },
@@ -1069,6 +1107,14 @@ export async function recordJobApplication(body: any) {
     finalUrl: String(evidenceInput.finalUrl ?? "").trim().slice(0, 2000) || null,
     filledFields: normalizeStringList(evidenceInput.filledFields).slice(0, 30),
   };
+  const candidateSnapshot = normalizeJobApplicationCandidateSnapshot(body.candidateSnapshot, {
+    company,
+    role,
+    source,
+    sourceUrl,
+    closing,
+    applicationEmail,
+  });
   const replace = body.replace === true;
   const db = getFirestoreDb();
   const id = jobApplicationId(safeUid, company, role);
@@ -1106,6 +1152,7 @@ export async function recordJobApplication(body: any) {
       attemptCount,
       lastAttemptAt: attemptCount > 0 ? now : null,
       evidence,
+      candidateSnapshot,
       appliedAt: status === "applied" ? now : null,
       updatedAt: now,
     };
