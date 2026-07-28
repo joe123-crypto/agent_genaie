@@ -134,7 +134,7 @@ export function DashboardOverview({
           <div>
             <span>Applications Sent</span>
             <strong>{applicationStats.sent}</strong>
-            <p><a className="overview-inline-link" href={`/${publicUserId}/application-history`}>View application history</a></p>
+            <p><a className="overview-inline-link" href={`/${publicUserId}/applications/history`}>View application history</a></p>
           </div>
         </article>
         <article>

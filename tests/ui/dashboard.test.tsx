@@ -84,7 +84,7 @@ describe("signed-in dashboard UI", () => {
     expect(links.map((link) => link.textContent)).toEqual([
       "Overview",
       "Job Scout",
-      "Application History",
+      "Applications",
       "Settings",
     ]);
     expect(screen.getByRole("link", { name: /overview/i })).toHaveAttribute("aria-current", "page");

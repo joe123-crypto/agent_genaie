@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 
-export type DashboardSection = "overview" | "job-scout" | "application-history" | "webetu" | "settings";
+export type DashboardSection = "overview" | "job-scout" | "applications" | "webetu" | "settings";
 
 type DashboardNavMenuProps = {
   active: DashboardSection;
@@ -27,7 +27,7 @@ const navItems: ReadonlyArray<{
 }> = [
   { key: "overview", label: "Overview", href: "", icon: Home },
   { key: "job-scout", label: "Job Scout", href: "/job-scout", icon: BriefcaseBusiness },
-  { key: "application-history", label: "Application History", href: "/application-history", icon: ClipboardList },
+  { key: "applications", label: "Applications", href: "/applications", icon: ClipboardList },
   { key: "settings", label: "Settings", href: "/settings", icon: Settings },
 ];
 

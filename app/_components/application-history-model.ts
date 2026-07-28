@@ -9,7 +9,9 @@ export type ApplicationStatus =
   | "skipped"
   | "action_required"
   | "physical_submission"
-  | "failed";
+  | "failed"
+  | "pending_approval"
+  | "approved";
 
 export type ApplicationArtifactLink = {
   kind: "cv" | "cover_letter_pdf" | "cover_letter_text";
@@ -52,6 +54,8 @@ const STATUS_KINDS: Record<ApplicationStatus, StatusKind> = {
   physical_submission: "info",
   skipped: "pending",
   failed: "error",
+  pending_approval: "warning",
+  approved: "info",
 };
 
 const STATUS_LABELS: Record<ApplicationStatus, string> = {
@@ -60,6 +64,8 @@ const STATUS_LABELS: Record<ApplicationStatus, string> = {
   physical_submission: "Physical submission",
   skipped: "Skipped",
   failed: "Failed",
+  pending_approval: "Awaiting approval",
+  approved: "Approved",
 };
 
 function normalizeStatus(value: unknown): ApplicationStatus {

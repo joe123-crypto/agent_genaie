@@ -23,7 +23,8 @@ test("normalizeJobPreferences applies documented defaults", () => {
   const prefs = normalizeJobPreferences(undefined);
   assert.equal(prefs.country, "dz");
   assert.equal(prefs.language, "fr");
-  assert.equal(prefs.autoApply, true);
+  // Auto-apply is opt-in: unset means the user must approve applications.
+  assert.equal(prefs.autoApply, false);
   assert.equal(prefs.maxApplicationsPerRun, 1);
   assert.deepEqual(prefs.targetRoles, []);
   // Exact key set of the stored preferences object.
@@ -49,8 +50,11 @@ test("normalizeJobPreferences clamps maxApplicationsPerRun to 0..5", () => {
   assert.equal(normalizeJobPreferences({ maxApplicationsPerRun: "oops" }).maxApplicationsPerRun, 1);
 });
 
-test("normalizeJobPreferences honors autoApply=false and role aliases", () => {
+test("normalizeJobPreferences honors autoApply opt-in and role aliases", () => {
+  // Only an explicit true opts into auto-submission; anything else stays off.
+  assert.equal(normalizeJobPreferences({ autoApply: true }).autoApply, true);
   assert.equal(normalizeJobPreferences({ autoApply: false }).autoApply, false);
+  assert.equal(normalizeJobPreferences({ autoApply: "true" }).autoApply, false);
   // `roles` is an accepted alias for `targetRoles`.
   assert.deepEqual(normalizeJobPreferences({ roles: ["Dev"] }).targetRoles, ["Dev"]);
 });

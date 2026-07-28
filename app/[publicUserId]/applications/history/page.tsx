@@ -18,14 +18,14 @@ export default async function ApplicationHistoryPage({ params }: { params: Promi
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
-  if (!sessionCookie) redirect(`/login?next=/${publicUserId}/application-history`);
+  if (!sessionCookie) redirect(`/login?next=/${publicUserId}/applications/history`);
 
   const [verified, routeUser] = await Promise.all([
     verifyFirebaseSessionCookie(sessionCookie).catch(() => null),
     resolvePublicUser(publicUserId).catch(() => null),
   ]);
 
-  if (!verified) redirect(`/login?next=/${publicUserId}/application-history`);
+  if (!verified) redirect(`/login?next=/${publicUserId}/applications/history`);
   const uid = verified.uid;
 
   if (!routeUser) notFound();
@@ -33,7 +33,7 @@ export default async function ApplicationHistoryPage({ params }: { params: Promi
   if (uid !== routeUser.id) {
     await syncUserToCentralData(uid);
     const myStatus = await getSignedInAccountStatus(uid).catch(() => null);
-    if (myStatus?.publicUserId) redirect(`/${myStatus.publicUserId}/application-history`);
+    if (myStatus?.publicUserId) redirect(`/${myStatus.publicUserId}/applications/history`);
     redirect("/login");
   }
 
@@ -42,7 +42,7 @@ export default async function ApplicationHistoryPage({ params }: { params: Promi
     listJobApplications(uid),
   ]);
   const accountStatus = accountResult.status === "fulfilled" ? accountResult.value : null;
-  if (!accountStatus?.plan) redirect(pricingGatePath(`/${publicUserId}/application-history`));
+  if (!accountStatus?.plan) redirect(pricingGatePath(`/${publicUserId}/applications/history`));
   const apps = appsResult.status === "fulfilled" ? appsResult.value : [];
   const history = buildApplicationHistory(apps, publicUserId);
 
@@ -54,7 +54,7 @@ export default async function ApplicationHistoryPage({ params }: { params: Promi
     || "Account";
 
   return (
-    <DashboardShell active="application-history" publicUserId={publicUserId} userLabel={userLabel}>
+    <DashboardShell active="applications" publicUserId={publicUserId} userLabel={userLabel}>
       <ApplicationHistory rows={history.rows} />
     </DashboardShell>
   );
