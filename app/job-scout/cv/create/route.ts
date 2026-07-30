@@ -46,6 +46,9 @@ export async function POST(req: NextRequest) {
 
     // buildCvHtml validates required fields (full name) and escapes every value;
     // validateCanonicalCvHtml inside finalizeJobScoutCvHtml is the safety net.
+    // The professional summary is optional here — if the user leaves it blank the
+    // canonical CV simply has no summary section; the background job-scout agent
+    // writes a tailored summary when it personalizes the CV per application.
     const html = buildCvHtml(payload);
     try {
       await finalizeJobScoutCvHtml({
