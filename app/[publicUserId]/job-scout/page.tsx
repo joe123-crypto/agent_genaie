@@ -287,6 +287,10 @@ if (initialCvConversionPending) {
           </span>
           <span className="file-note" data-cv-name>No new file selected</span>
         </label>
+        <div className="actions">
+          <span className="file-note">No PDF? Build one by filling in your details instead.</span>
+          <a className="button secondary" href={`/${publicUserId}/create-cv`}>Create CV</a>
+        </div>
         <div className="grid">
           <label>
             Target role
