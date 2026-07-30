@@ -286,11 +286,11 @@ if (initialCvConversionPending) {
                 : "Upload a PDF CV, max 4 MB. Job Scout prepares it automatically for applications."}
           </span>
           <span className="file-note" data-cv-name>No new file selected</span>
-          <div className="actions">
-            <span className="file-note">No PDF? Build one by filling in your details instead.</span>
-            <a className="button secondary" href={`/${publicUserId}/create-cv`}>Create CV</a>
-          </div>
         </label>
+        <div className="actions">
+          <span className="file-note">No PDF? Build one by filling in your details instead.</span>
+          <a className="button secondary" href={`/${publicUserId}/create-cv`}>Create CV</a>
+        </div>
         <div className="grid">
           <label>
             Target role
