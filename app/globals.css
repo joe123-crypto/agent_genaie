@@ -314,6 +314,48 @@ form {
   align-items: center;
 }
 
+textarea {
+  width: 100%;
+  min-height: 96px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+textarea:hover {
+  border-color: var(--text-secondary);
+}
+
+textarea:focus-visible {
+  border-color: var(--accent);
+}
+
+.cv-entries {
+  display: grid;
+  gap: 12px;
+}
+
+.cv-entry {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.cv-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
 .actions-spaced {
   margin-top: 20px;
 }
