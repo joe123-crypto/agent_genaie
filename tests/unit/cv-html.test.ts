@@ -50,3 +50,8 @@ test("normalizeCvInput requires a full name and drops empty rows", () => {
   assert.equal(cv.experience.length, 1);
   assert.deepEqual(cv.skills, ["JavaScript", "React", "<b>Design</b>"]);
 });
+
+test("education section heading covers certifications", () => {
+  const html = buildCvHtml(sample);
+  assert.match(html, /<h2>Education &amp; Certifications<\/h2>/);
+});

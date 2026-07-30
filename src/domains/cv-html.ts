@@ -218,7 +218,7 @@ function educationSection(rows: CvEducation[]) {
       }</div></div>`;
     })
     .join("");
-  return `<section><h2>Education</h2>${items}</section>`;
+  return `<section><h2>Education &amp; Certifications</h2>${items}</section>`;
 }
 
 function skillsSection(skills: string[]) {

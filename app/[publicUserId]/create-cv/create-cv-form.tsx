@@ -136,13 +136,14 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
       </div>
 
       <label>
-        Professional summary
+        Professional summary (optional)
         <textarea
           value={summary}
           onChange={(event) => setSummary(event.target.value)}
           maxLength={4000}
           placeholder="A short paragraph about your experience and goals."
         />
+        <span className="file-note">Leave this blank and Job Scout will write one for you from your details.</span>
       </label>
 
       <div className="cv-section-head">
@@ -221,13 +222,13 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
       </div>
 
       <div className="cv-section-head">
-        <h2>Education</h2>
+        <h2>Education &amp; certifications</h2>
         <button
           type="button"
           className="button secondary"
           onClick={() => setEducation((rows) => [...rows, emptyEducation()])}
         >
-          Add education
+          Add education or certification
         </button>
       </div>
       <div className="cv-entries">
@@ -235,15 +236,16 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
           <div className="cv-entry" key={index}>
             <div className="grid">
               <label>
-                Degree or qualification
+                Degree, certification, or qualification
                 <input
                   value={row.degree}
                   onChange={(event) => updateEducation(index, { degree: event.target.value })}
                   maxLength={200}
+                  placeholder="e.g. BSc Computer Science, AWS Certified, PMP"
                 />
               </label>
               <label>
-                Institution
+                Institution or issuer
                 <input
                   value={row.institution}
                   onChange={(event) => updateEducation(index, { institution: event.target.value })}
