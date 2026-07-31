@@ -17,6 +17,7 @@ import {
   getJobScoutStatusForUser,
   recordJobApplication,
   listJobApplications,
+  listJobApplicationsByStatus,
   resetJobScoutProfileForPhone,
 } from "@/src/domains/job-scout";
 import { completeOnboarding } from "@/src/domains/onboarding";
@@ -634,6 +635,42 @@ test("recordJobApplication uses jobApplicationId as the doc ID and a valid statu
   const listed = await listJobApplications(uid);
   assert.equal(listed.length, 1);
   assert.equal((listed[0] as any).id, result.id);
+});
+
+test("listJobApplicationsByStatus returns a bounded global approved queue", opts, async () => {
+  const stamp = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await Promise.all([
+    recordJobApplication({
+      userId: `it-approved-a-${stamp}`,
+      company: "Approved A",
+      role: "Engineer",
+      status: "approved",
+    }),
+    recordJobApplication({
+      userId: `it-approved-b-${stamp}`,
+      company: "Approved B",
+      role: "Engineer",
+      status: "approved",
+    }),
+    recordJobApplication({
+      userId: `it-pending-${stamp}`,
+      company: "Pending",
+      role: "Engineer",
+      status: "pending_approval",
+    }),
+  ]);
+
+  const approved = await listJobApplicationsByStatus("approved", 1);
+  assert.equal(approved.length, 1);
+  assert.equal((approved[0] as any).status, "approved");
+  await assert.rejects(
+    () => listJobApplicationsByStatus("pending_approval", 100),
+    (err: any) => err.status === 400,
+  );
+  await assert.rejects(
+    () => listJobApplicationsByStatus("approved", 101),
+    (err: any) => err.status === 400,
+  );
 });
 
 test("resetJobScoutProfileForPhone leaves inert legacy invite documents untouched", opts, async () => {

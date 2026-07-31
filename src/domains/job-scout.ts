@@ -901,6 +901,27 @@ export async function listJobApplications(userIdInput: string) {
   return snap.docs.map((doc) => doc.data());
 }
 
+export async function listJobApplicationsByStatus(
+  statusInput: string,
+  limitInput: unknown = 100,
+) {
+  const status = String(statusInput ?? "").trim();
+  if (status !== "approved") {
+    throw httpError(400, "status must be approved.");
+  }
+  const limit = Number(limitInput);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw httpError(400, "limit must be an integer between 1 and 100.");
+  }
+  const db = getFirestoreDb();
+  const snap = await db
+    .collection("jobApplications")
+    .where("status", "==", status)
+    .limit(limit)
+    .get();
+  return snap.docs.map((doc) => doc.data());
+}
+
 export type JobApplicationArtifactKind = "cv" | "cover_letter_text" | "cover_letter_pdf";
 
 const APPLICATION_ARTIFACTS: Record<JobApplicationArtifactKind, {

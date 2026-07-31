@@ -4,6 +4,7 @@ import {
   applicationArtifactObjectKey,
   cvHtmlObjectKey,
   cvPendingObjectKey,
+  listJobApplicationsByStatus,
   validateCanonicalCvHtml,
 } from "@/src/domains/job-scout";
 
@@ -41,4 +42,15 @@ test("application artifact keys map allowed kinds to fixed filenames", () => {
   );
   assert.throws(() => applicationArtifactObjectKey({ ...base, attempt: 0, kind: "cv" }));
   assert.throws(() => applicationArtifactObjectKey({ ...base, applicationId: "../other", kind: "cv" }));
+});
+
+test("global application queries are approved-only and bounded", async () => {
+  await assert.rejects(
+    () => listJobApplicationsByStatus("pending_approval", 100),
+    (err: any) => err.status === 400,
+  );
+  await assert.rejects(
+    () => listJobApplicationsByStatus("approved", 101),
+    (err: any) => err.status === 400,
+  );
 });
