@@ -127,7 +127,7 @@ export function normalizeJobPreferences(input: any = {}) {
   return {
     targetRoles: normalizeStringList(source.targetRoles ?? source.roles),
     locations: normalizeStringList(source.locations),
-    country: normalizeLocaleCode(source.country, "dz"),
+    country: normalizeLocaleCode(source.country, "zw"),
     language: normalizeLocaleCode(source.language, "fr"),
     qualifications: normalizeStringList(source.qualifications),
     experience: normalizeStringList(source.experience),

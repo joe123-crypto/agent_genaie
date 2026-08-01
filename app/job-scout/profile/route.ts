@@ -20,7 +20,7 @@ function requiredText(form: FormData, name: string, label: string) {
 }
 
 function countryCode(form: FormData) {
-  const value = String(form.get("country") ?? "dz").replace(/[^A-Za-z]/g, "").toLowerCase();
+  const value = String(form.get("country") ?? "zw").replace(/[^A-Za-z]/g, "").toLowerCase();
   if (!/^[a-z]{2}$/.test(value)) throw httpError(400, "Country must be a two-letter code.");
   return value;
 }

@@ -89,7 +89,7 @@ export default async function JobScoutSetupPage({
     ?? "";
   const targetRole = firstValue(jobScoutStatus?.preferences?.targetRoles);
   const targetLocation = firstValue(jobScoutStatus?.preferences?.locations);
-  const country = jobScoutStatus?.preferences?.country ?? "dz";
+  const country = jobScoutStatus?.preferences?.country ?? "zw";
   const cvAvailable = !!jobScoutStatus?.cvAvailable;
   const cvUploaded = !!jobScoutStatus?.cvUploaded;
   const cvConversionStatus = String(jobScoutStatus?.cvConversionStatus || "missing");
