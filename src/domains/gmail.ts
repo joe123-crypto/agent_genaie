@@ -57,14 +57,17 @@ export function hasCalendarScope(tokens: any): boolean {
   return typeof tokens?.scope === "string" && tokens.scope.split(" ").includes(CALENDAR_SCOPE);
 }
 
-async function loadTokensFromFirestore(tokenStoreKey: string) {
+async function loadTokensFromFirestore(tokenStoreKey: string, uid?: string) {
   try {
     const db = getFirestoreDb();
-    const snap = await db.collection("credentialRefs")
+    // When we have the uid, filter directly to avoid a full collection scan.
+    // Without uid, fall back to scanning all active Gmail creds (legacy path).
+    let query = db.collection("credentialRefs")
       .where("service", "==", "gmail")
       .where("purpose", "==", "oauth2")
-      .where("status", "==", "active")
-      .get();
+      .where("status", "==", "active");
+    if (uid) query = query.where("userId", "==", uid);
+    const snap = await query.get();
     for (const doc of snap.docs) {
       const data = doc.data();
       // Match on the real Firebase UID, or fall back to docs the earlier broken
@@ -101,8 +104,8 @@ async function saveTokensToFirestore(tokenStoreKey: string, tokens: any) {
   }
 }
 
-export async function loadGmailTokens(tokenStoreKey: string) {
-  let tokens = await loadTokensFromFirestore(tokenStoreKey);
+export async function loadGmailTokens(tokenStoreKey: string, uid?: string) {
+  let tokens = await loadTokensFromFirestore(tokenStoreKey, uid);
   if (!tokens || !tokens.access_token) {
     tokens = loadUserTokens(tokenStoreKey);
   }
@@ -111,7 +114,7 @@ export async function loadGmailTokens(tokenStoreKey: string) {
 
 export async function getSendableGmailConnection(uid: string) {
   const tokenStoreKey = tokenStoreKeyForUid(uid);
-  const tokens = await loadGmailTokens(tokenStoreKey);
+  const tokens = await loadGmailTokens(tokenStoreKey, uid);
   return {
     connected: Boolean(tokens?.access_token),
     tokenStoreKey,
