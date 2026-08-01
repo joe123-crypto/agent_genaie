@@ -3068,6 +3068,101 @@ a.button.landing-cta:hover {
   display: block;
 }
 
+/* ── CV Promo / Sliding cards section ────────────────── */
+.landing-cvpromo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(0.75rem, 2vw, 1.25rem);
+  padding: clamp(3rem, 6vw, 5rem) clamp(1rem, 4vw, 2rem);
+  max-width: 1360px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.landing-cvpromo-heading {
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  font-weight: 700;
+  text-align: center;
+  color: var(--foreground);
+  margin: 0;
+}
+
+.landing-cvpromo-subheading {
+  font-size: clamp(0.9rem, 1.5vw, 1.05rem);
+  color: #6b7280;
+  text-align: center;
+  margin: 0;
+  max-width: 560px;
+}
+
+.landing-cvpromo .landing-cta {
+  margin-top: clamp(0.5rem, 2vw, 1rem);
+}
+
+.landing-cvpromo-marquee {
+  width: 100%;
+  margin-top: clamp(1.5rem, 4vw, 3rem);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 8%,
+    #000 92%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 8%,
+    #000 92%,
+    transparent 100%
+  );
+}
+
+.landing-cvpromo-track {
+  display: flex;
+  width: max-content;
+  animation: landing-cvpromo-scroll 40s linear infinite;
+}
+
+.landing-cvpromo-marquee:hover .landing-cvpromo-track {
+  animation-play-state: paused;
+}
+
+.landing-cvpromo-card {
+  flex-shrink: 0;
+  width: 260px;
+  height: 360px;
+  margin-right: clamp(1rem, 2vw, 1.5rem);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 16px 50px rgba(9, 9, 9, 0.08);
+}
+
+.landing-cvpromo-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+@keyframes landing-cvpromo-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-cvpromo-track {
+    animation: none;
+  }
+}
+
 .landing-pricing {
   width: min(1180px, calc(100% - 96px));
   margin: 0 auto;

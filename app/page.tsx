@@ -157,6 +157,43 @@ function HowTo() {
   );
 }
 
+const cvSamples = [
+  "/7a890481f27260c16fc41ad63d221c55.jpg",
+  "/a6ef6ca80af1c7567b46ac46a56a1628.jpg",
+  "/c23d5690603b2937ed866d7124f27f61.jpg",
+  "/e4febe023891b435edc20eb047cfcf28.jpg",
+  "/eb2cfcda29436d3a939f57fff8762f09.jpg",
+];
+
+function CvPromo() {
+  return (
+    <section className="landing-cvpromo" aria-label="Create a CV">
+      <h2 className="landing-cvpromo-heading">Don&apos;t have a CV?</h2>
+      <p className="landing-cvpromo-subheading">
+        Don&apos;t worry, you can create one in seconds.
+      </p>
+      <a className="button landing-cta" href="/login">
+        Create your CV
+      </a>
+      <div className="landing-cvpromo-marquee" aria-hidden="true">
+        <div className="landing-cvpromo-track">
+          {[...cvSamples, ...cvSamples].map((src, index) => (
+            <div className="landing-cvpromo-card" key={`${src}-${index}`}>
+              <Image
+                src={src}
+                alt="Sample CV"
+                width={260}
+                height={360}
+                sizes="260px"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const footerColumns = [
   {
     title: "Navigation",
@@ -368,6 +405,7 @@ export default function RootPage() {
 
         <TrustedBy />
         <HowTo />
+        <CvPromo />
         <Pricing />
         <LandingFooter />
       </div>
