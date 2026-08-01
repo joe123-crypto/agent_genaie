@@ -112,6 +112,13 @@ const featuredUsers: FeaturedUser[] = [
     href: "https://x.com/joseph_mun4335",
     avatar: "/users/joseph_mun4335.jpg",
   },
+  {
+    name: "Wequakavenda Jnr",
+    handle: "wequakavenda.jnr",
+    platform: "Instagram",
+    href: "https://www.instagram.com/wequakavenda.jnr",
+    avatar: "/users/wequakavenda_jnr.jpg",
+  },
 ];
 
 function TrustedBy() {
@@ -120,7 +127,7 @@ function TrustedBy() {
       <p className="landing-trusted-label">Trusted by</p>
       <ul className="landing-trusted-row">
         {featuredUsers.map((user) => (
-          <li key={user.href}>
+          <li key={user.href} className="landing-trusted-item">
             <a
               className="landing-trusted-avatar"
               href={user.href}
@@ -130,6 +137,8 @@ function TrustedBy() {
             >
               <Image src={user.avatar} alt={user.name} width={56} height={56} />
             </a>
+            <span className="landing-trusted-handle">@{user.handle}</span>
+            <span className="landing-trusted-platform">{user.platform}</span>
           </li>
         ))}
       </ul>
