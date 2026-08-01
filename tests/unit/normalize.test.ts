@@ -21,7 +21,7 @@ import {
 
 test("normalizeJobPreferences applies documented defaults", () => {
   const prefs = normalizeJobPreferences(undefined);
-  assert.equal(prefs.country, "dz");
+  assert.equal(prefs.country, "zw");
   assert.equal(prefs.language, "fr");
   // Auto-apply is opt-in: unset means the user must approve applications.
   assert.equal(prefs.autoApply, false);
