@@ -112,6 +112,13 @@ const featuredUsers: FeaturedUser[] = [
     href: "https://x.com/joseph_mun4335",
     avatar: "/users/joseph_mun4335.jpg",
   },
+  {
+    name: "Wequakavenda Jnr",
+    handle: "wequakavenda.jnr",
+    platform: "Instagram",
+    href: "https://www.instagram.com/wequakavenda.jnr",
+    avatar: "/users/wequakavenda_jnr.jpg",
+  },
 ];
 
 function TrustedBy() {
