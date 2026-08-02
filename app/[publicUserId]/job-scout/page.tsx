@@ -1,10 +1,23 @@
 import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
+import {
+  Briefcase,
+  FilePlus2,
+  FileText,
+  Globe,
+  Mail,
+  MapPin,
+  Radar,
+  Save,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 import { getJobScoutStatusForUser } from "@/src/domains/job-scout";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
+import { FieldLabel } from "@/app/_components/field-label";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
@@ -250,9 +263,12 @@ if (initialCvConversionPending) {
   const setupPanel = (
     <section className="panel dashboard-form-panel" aria-labelledby="job-scout-title">
       <div className="panel-head">
-        <div>
-          <h1 id="job-scout-title">Job Scout Setup</h1>
-          <p>Complete the profile Job Scout uses for applications.</p>
+        <div className="panel-head-title">
+          <span className="panel-head-icon"><Radar aria-hidden="true" /></span>
+          <div>
+            <h1 id="job-scout-title">Job Scout Setup</h1>
+            <p>Complete the profile Job Scout uses for applications.</p>
+          </div>
         </div>
         <StatusPill data-ready-status kind={ready ? "complete" : "pending"}>{ready ? "Ready" : cvConversionStatus === "pending" ? "Processing" : "Draft"}</StatusPill>
       </div>
@@ -267,16 +283,16 @@ if (initialCvConversionPending) {
       <form className="form-stack" data-job-scout-form>
         <div className="grid">
           <label>
-            Display name
+            <FieldLabel icon={UserRound}>Display name</FieldLabel>
             <input name="displayName" defaultValue={displayName} maxLength={120} autoComplete="name" required />
           </label>
           <div className="readonly">
-            Email
+            <FieldLabel icon={Mail}>Email</FieldLabel>
             <span>{email}</span>
           </div>
         </div>
         <label>
-          CV PDF
+          <FieldLabel icon={FileText}>CV PDF</FieldLabel>
           <input data-cv name="cv" type="file" accept="application/pdf,.pdf" />
           <span className="file-note">
             {cvAvailable
@@ -289,20 +305,23 @@ if (initialCvConversionPending) {
         </label>
         <div className="actions">
           <span className="file-note">No PDF? Build one by filling in your details instead.</span>
-          <a className="button secondary" href={`/${publicUserId}/create-cv`}>Create CV</a>
+          <a className="button secondary" href={`/${publicUserId}/create-cv`}>
+            <FilePlus2 aria-hidden="true" />
+            Create CV
+          </a>
         </div>
         <div className="grid">
           <label>
-            Target role
+            <FieldLabel icon={Briefcase}>Target role</FieldLabel>
             <input name="targetRole" defaultValue={targetRole} maxLength={200} required />
           </label>
           <label>
-            Target location
+            <FieldLabel icon={MapPin}>Target location</FieldLabel>
             <input name="targetLocation" defaultValue={targetLocation} maxLength={200} required />
           </label>
         </div>
         <label>
-          Country code
+          <FieldLabel icon={Globe}>Country code</FieldLabel>
           <input name="country" defaultValue={country} minLength={2} maxLength={2} pattern="[A-Za-z]{2}" required />
         </label>
         <label className="check">
@@ -318,9 +337,18 @@ if (initialCvConversionPending) {
           <span>Automatically submit suitable applications for me. Leave this off if you only want suggestions.</span>
         </label>
         <div className="actions">
-          <button data-save type="submit">Save Job Scout setup</button>
-          <a className="button secondary" href={connectPath}>Connect Gmail</a>
-          <a className="button secondary" href="/privacy-policy">Privacy &amp; Policy</a>
+          <button data-save type="submit">
+            <Save aria-hidden="true" />
+            Save Job Scout setup
+          </button>
+          <a className="button secondary" href={connectPath}>
+            <Mail aria-hidden="true" />
+            Connect Gmail
+          </a>
+          <a className="button secondary" href="/privacy-policy">
+            <ShieldCheck aria-hidden="true" />
+            Privacy &amp; Policy
+          </a>
         </div>
       </form>
       <StatusNotice data-message />
