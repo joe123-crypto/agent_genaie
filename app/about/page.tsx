@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/site-metadata";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Genaie | We are what we do",
   description:
     "Why Genaie exists: to let people spend less time on repetitive job applications and more time on meaningful work.",
-};
+  path: "/about",
+});
 
 export default function AboutPage() {
   return (

@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/site-metadata";
 import Image from "next/image";
 import { Pricing } from "@/app/_components/pricing";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Genaie | Your AI job scout",
   description:
     "Genaie searches and applies for jobs on your behalf, then reports every application straight to your WhatsApp.",
-};
+  path: "/",
+});
 
 function FacebookIcon() {
   return (

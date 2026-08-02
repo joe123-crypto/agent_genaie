@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/site-metadata";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Pricing } from "@/app/_components/pricing";
@@ -7,11 +8,12 @@ import { getSignedInAccountStatus, normalizeUserPlan, syncUserToCentralData } fr
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { safeNext } from "@/src/auth/login";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Genaie | Pricing",
   description:
     "Choose the Genaie plan that matches your job hunt pace before setting up Job Scout.",
-};
+  path: "/pricing",
+});
 
 export const runtime = "nodejs";
 
