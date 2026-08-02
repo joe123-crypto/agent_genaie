@@ -27,7 +27,7 @@ describe("Genaie Scout landing page", () => {
       }),
     ).toBeVisible();
     expect(screen.getByText(/applies on your behalf/i)).toBeVisible();
-    expect(screen.getByRole("link", { name: /start your job hunt/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /get started/i })).toHaveAttribute(
       "href",
       "/login",
     );
