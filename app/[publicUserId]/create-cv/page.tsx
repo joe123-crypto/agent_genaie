@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
+import { FileUser } from "lucide-react";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
@@ -61,9 +62,12 @@ export default async function CreateCvPage({
     <DashboardShell active="job-scout" publicUserId={publicUserId} userLabel={userLabel}>
       <section className="panel dashboard-form-panel" aria-labelledby="create-cv-title">
         <div className="panel-head">
-          <div>
-            <h1 id="create-cv-title">Create your CV</h1>
-            <p>Fill in your details and Job Scout will build a CV for you — no PDF needed.</p>
+          <div className="panel-head-title">
+            <span className="panel-head-icon"><FileUser aria-hidden="true" /></span>
+            <div>
+              <h1 id="create-cv-title">Create your CV</h1>
+              <p>Fill in your details and Job Scout will build a CV for you — no PDF needed.</p>
+            </div>
           </div>
         </div>
         <CreateCvForm

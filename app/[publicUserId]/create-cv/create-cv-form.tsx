@@ -1,6 +1,25 @@
 "use client";
 
 import { useState } from "react";
+import {
+  AlignLeft,
+  Briefcase,
+  Building2,
+  CalendarDays,
+  FileCheck2,
+  GraduationCap,
+  Mail,
+  MapPin,
+  Phone,
+  Plus,
+  ScrollText,
+  SquarePen,
+  Tags,
+  Trash2,
+  UserRound,
+  X,
+} from "lucide-react";
+import { FieldLabel } from "@/app/_components/field-label";
 import { StatusNotice, type StatusKind } from "@/app/_components/status-ui";
 
 type ExperienceRow = {
@@ -94,7 +113,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
     <form className="form-stack" onSubmit={handleSubmit}>
       <div className="grid">
         <label>
-          Full name
+          <FieldLabel icon={UserRound}>Full name</FieldLabel>
           <input
             value={fullName}
             onChange={(event) => setFullName(event.target.value)}
@@ -104,7 +123,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
           />
         </label>
         <label>
-          Email
+          <FieldLabel icon={Mail}>Email</FieldLabel>
           <input
             type="email"
             value={email}
@@ -116,7 +135,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
       </div>
       <div className="grid">
         <label>
-          Phone
+          <FieldLabel icon={Phone}>Phone</FieldLabel>
           <input
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
@@ -125,7 +144,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
           />
         </label>
         <label>
-          Location
+          <FieldLabel icon={MapPin}>Location</FieldLabel>
           <input
             value={location}
             onChange={(event) => setLocation(event.target.value)}
@@ -136,7 +155,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
       </div>
 
       <label>
-        Professional summary (optional)
+        <FieldLabel icon={AlignLeft}>Professional summary (optional)</FieldLabel>
         <textarea
           value={summary}
           onChange={(event) => setSummary(event.target.value)}
@@ -147,12 +166,16 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
       </label>
 
       <div className="cv-section-head">
-        <h2>Work experience</h2>
+        <h2>
+          <Briefcase aria-hidden="true" />
+          Work experience
+        </h2>
         <button
           type="button"
           className="button secondary"
           onClick={() => setExperience((rows) => [...rows, emptyExperience()])}
         >
+          <Plus aria-hidden="true" />
           Add experience
         </button>
       </div>
@@ -161,7 +184,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
           <div className="cv-entry" key={index}>
             <div className="grid">
               <label>
-                Job title
+                <FieldLabel icon={SquarePen}>Job title</FieldLabel>
                 <input
                   value={row.title}
                   onChange={(event) => updateExperience(index, { title: event.target.value })}
@@ -169,7 +192,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
                 />
               </label>
               <label>
-                Company
+                <FieldLabel icon={Building2}>Company</FieldLabel>
                 <input
                   value={row.company}
                   onChange={(event) => updateExperience(index, { company: event.target.value })}
@@ -179,7 +202,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
             </div>
             <div className="grid">
               <label>
-                Start
+                <FieldLabel icon={CalendarDays}>Start</FieldLabel>
                 <input
                   value={row.start}
                   onChange={(event) => updateExperience(index, { start: event.target.value })}
@@ -188,7 +211,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
                 />
               </label>
               <label>
-                End
+                <FieldLabel icon={CalendarDays}>End</FieldLabel>
                 <input
                   value={row.end}
                   onChange={(event) => updateExperience(index, { end: event.target.value })}
@@ -198,7 +221,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
               </label>
             </div>
             <label>
-              Description
+              <FieldLabel icon={AlignLeft}>Description</FieldLabel>
               <textarea
                 value={row.description}
                 onChange={(event) => updateExperience(index, { description: event.target.value })}
@@ -213,6 +236,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
                   className="button danger"
                   onClick={() => setExperience((rows) => rows.filter((_, i) => i !== index))}
                 >
+                  <Trash2 aria-hidden="true" />
                   Remove
                 </button>
               </div>
@@ -222,12 +246,16 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
       </div>
 
       <div className="cv-section-head">
-        <h2>Education &amp; certifications</h2>
+        <h2>
+          <GraduationCap aria-hidden="true" />
+          Education &amp; certifications
+        </h2>
         <button
           type="button"
           className="button secondary"
           onClick={() => setEducation((rows) => [...rows, emptyEducation()])}
         >
+          <Plus aria-hidden="true" />
           Add education or certification
         </button>
       </div>
@@ -236,7 +264,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
           <div className="cv-entry" key={index}>
             <div className="grid">
               <label>
-                Degree, certification, or qualification
+                <FieldLabel icon={ScrollText}>Degree, certification, or qualification</FieldLabel>
                 <input
                   value={row.degree}
                   onChange={(event) => updateEducation(index, { degree: event.target.value })}
@@ -245,7 +273,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
                 />
               </label>
               <label>
-                Institution or issuer
+                <FieldLabel icon={Building2}>Institution or issuer</FieldLabel>
                 <input
                   value={row.institution}
                   onChange={(event) => updateEducation(index, { institution: event.target.value })}
@@ -255,7 +283,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
             </div>
             <div className="grid">
               <label>
-                Start
+                <FieldLabel icon={CalendarDays}>Start</FieldLabel>
                 <input
                   value={row.start}
                   onChange={(event) => updateEducation(index, { start: event.target.value })}
@@ -264,7 +292,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
                 />
               </label>
               <label>
-                End
+                <FieldLabel icon={CalendarDays}>End</FieldLabel>
                 <input
                   value={row.end}
                   onChange={(event) => updateEducation(index, { end: event.target.value })}
@@ -280,6 +308,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
                   className="button danger"
                   onClick={() => setEducation((rows) => rows.filter((_, i) => i !== index))}
                 >
+                  <Trash2 aria-hidden="true" />
                   Remove
                 </button>
               </div>
@@ -289,7 +318,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
       </div>
 
       <label>
-        Skills
+        <FieldLabel icon={Tags}>Skills</FieldLabel>
         <input
           value={skills}
           onChange={(event) => setSkills(event.target.value)}
@@ -301,9 +330,11 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
 
       <div className="actions">
         <button type="submit" disabled={busy}>
+          <FileCheck2 aria-hidden="true" />
           {busy ? "Creating CV..." : "Create CV"}
         </button>
         <a className="button secondary" href={jobScoutPath}>
+          <X aria-hidden="true" />
           Cancel
         </a>
       </div>
