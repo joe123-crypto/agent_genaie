@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "Genaie | Create CV",
+  description: "Build and customise the CV that Genaie will use when applying for jobs.",
+};
 import { FileUser } from "lucide-react";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";

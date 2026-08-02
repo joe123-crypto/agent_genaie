@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "Genaie | Overview",
+  description: "Your Job Scout dashboard overview — current service health, tasks, and activity.",
+};
 import { buildDashboardViewModel } from "@/app/_components/dashboard-model";
 import { DashboardOverview } from "@/app/_components/dashboard-overview";
 import { DashboardShell } from "@/app/_components/dashboard-shell";

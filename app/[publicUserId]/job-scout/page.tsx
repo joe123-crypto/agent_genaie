@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "Genaie | Job Scout",
+  description: "Set up and manage your Job Scout profile, preferences, and CV.",
+};
 import {
   Briefcase,
   FilePlus2,

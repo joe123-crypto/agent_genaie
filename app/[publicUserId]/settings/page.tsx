@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "Genaie | Settings",
+  description: "Manage your Genaie account preferences and configuration.",
+};
 import { DashboardSettings } from "@/app/_components/dashboard-settings";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { SESSION_COOKIE_NAME } from "@/src/config";
