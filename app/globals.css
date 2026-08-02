@@ -2639,6 +2639,14 @@ button.password-toggle {
   display: inline-grid;
   place-items: center;
   color: #090909;
+  text-decoration: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.landing-social-icon:hover,
+.landing-social-icon:focus-visible {
+  opacity: 0.7;
+  transform: translateY(-1px);
 }
 
 .landing-social-icon svg {

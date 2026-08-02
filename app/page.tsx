@@ -75,21 +75,44 @@ function MailIcon() {
   );
 }
 
-function SocialPlaceholders() {
-  const items = [
-    { label: "Facebook link coming soon", icon: <FacebookIcon /> },
-    { label: "X link coming soon", icon: <XIcon /> },
-    { label: "WhatsApp link coming soon", icon: <WhatsAppIcon /> },
-    { label: "Email link coming soon", icon: <MailIcon /> },
-  ];
+const socialLinks = [
+  {
+    label: "Genaie on Facebook",
+    href: "https://www.facebook.com/share/1E5NjcoGSd/",
+    icon: <FacebookIcon />,
+  },
+  {
+    label: "Genaie on X",
+    href: "https://x.com/joseph_mun4335",
+    icon: <XIcon />,
+  },
+  {
+    label: "Genaie on WhatsApp",
+    href: "https://wa.me/213563719936",
+    icon: <WhatsAppIcon />,
+  },
+  {
+    label: "Email Genaie",
+    href: "mailto:genaie2027@gmail.com",
+    icon: <MailIcon />,
+  },
+];
 
+function SocialLinks() {
   return (
     <ul className="landing-socials" aria-label="Social channels">
-      {items.map((item) => (
+      {socialLinks.map((item) => (
         <li key={item.label}>
-          <span className="landing-social-icon" aria-label={item.label} role="img">
+          <a
+            className="landing-social-icon"
+            href={item.href}
+            aria-label={item.label}
+            {...(item.href.startsWith("http")
+              ? { target: "_blank", rel: "noopener noreferrer" }
+              : {})}
+          >
             {item.icon}
-          </span>
+          </a>
         </li>
       ))}
     </ul>
@@ -235,7 +258,10 @@ const footerColumns = [
         label: "X / Twitter · @joseph_mun4335",
         href: "https://x.com/joseph_mun4335",
       },
-      { label: "Facebook · coming soon", href: "#home" },
+      {
+        label: "Facebook · Genaie",
+        href: "https://www.facebook.com/share/1E5NjcoGSd/",
+      },
       { label: "WhatsApp · +213 563 719 936", href: "https://wa.me/213563719936" },
       { label: "Email · genaie2027@gmail.com", href: "mailto:genaie2027@gmail.com" },
     ],
@@ -380,7 +406,7 @@ export default function RootPage() {
             <a href="#pricing">Pricing</a>
           </nav>
 
-          <SocialPlaceholders />
+          <SocialLinks />
         </header>
 
         <section className="landing-hero" aria-labelledby="landing-title">

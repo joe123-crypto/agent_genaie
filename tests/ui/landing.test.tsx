@@ -69,8 +69,21 @@ describe("Genaie Scout landing page", () => {
       "href",
       "/terms-of-service",
     );
-    expect(screen.getByRole("img", { name: /facebook link coming soon/i })).toBeVisible();
-    expect(screen.getByRole("img", { name: /whatsapp link coming soon/i })).toBeVisible();
+    const socialChannels = within(screen.getByRole("list", { name: /social channels/i }));
+    expect(
+      socialChannels.getByRole("link", { name: /genaie on facebook/i }),
+    ).toHaveAttribute("href", "https://www.facebook.com/share/1E5NjcoGSd/");
+    expect(socialChannels.getByRole("link", { name: /genaie on x/i })).toHaveAttribute(
+      "href",
+      "https://x.com/joseph_mun4335",
+    );
+    expect(
+      socialChannels.getByRole("link", { name: /genaie on whatsapp/i }),
+    ).toHaveAttribute("href", "https://wa.me/213563719936");
+    expect(socialChannels.getByRole("link", { name: /email genaie/i })).toHaveAttribute(
+      "href",
+      "mailto:genaie2027@gmail.com",
+    );
 
     const scene = container.querySelector(".landing-scene");
     expect(scene).toBeInTheDocument();
