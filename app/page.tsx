@@ -412,12 +412,12 @@ export default function RootPage() {
         <section className="landing-hero" aria-labelledby="landing-title">
           <div className="landing-copy" id="about">
             <h1 id="landing-title">
-              Your personal agent that hunts for jobs while you live your life
+              Applying for a job shouldn&apos;t be a full-time job.
             </h1>
             <p>
-              Upload your CV and tell Genaie the role you want. Your
-              agent searches openings, applies on your behalf, and reports
-              every application straight to your WhatsApp.
+              Upload your CV and tell Genaie what you&apos;re looking for. Your
+              personal agent finds matching jobs, applies on your behalf, and
+              sends updates to WhatsApp.
             </p>
             <a className="button landing-cta" href="/login">
               Start your job hunt
