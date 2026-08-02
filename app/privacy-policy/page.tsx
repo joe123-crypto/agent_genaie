@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/site-metadata";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Genaie | Privacy Policy",
-  description: "How Genaie collects, uses, and protects your personal data.",
-};
+  description:
+    "How Genaie collects, uses, and protects your personal data.",
+  path: "/privacy-policy",
+});
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { getSignedInAccountStatus } from "@/src/domains/users";
 

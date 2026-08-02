@@ -18,7 +18,8 @@
     "backup:firestore": "npx tsx scripts/backup-firestore.ts",
     "restore:firestore": "npx tsx scripts/restore-firestore.ts",
     "cleanup:legacy": "npx tsx scripts/cleanup-legacy-data.ts",
-    "migrate:cvs": "npx tsx scripts/migrate-cvs-to-r2.ts"
+    "migrate:cvs": "npx tsx scripts/migrate-cvs-to-r2.ts",
+    "generate:og-image": "node scripts/generate-og-image.mjs"
   },
   "engines": {
     "node": ">=20"

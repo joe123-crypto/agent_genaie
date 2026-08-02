@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/site-metadata";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Genaie | WhatsApp",
-  description: "Link your WhatsApp number to receive Job Scout notifications and updates.",
-};
+  description:
+    "Link your WhatsApp number to receive Job Scout notifications and updates.",
+  path: "/whatsapp",
+});
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { pricingGatePath, syncUserToCentralData } from "@/src/domains/users";
 

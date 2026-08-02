@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/src/lib/site-metadata";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Genaie | Connect Gmail",
-  description: "Link your Gmail account so Genaie can send job applications on your behalf.",
-};
+  description:
+    "Link your Gmail account so Genaie can send job applications on your behalf.",
+  path: "/connect-gmail",
+});
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 
