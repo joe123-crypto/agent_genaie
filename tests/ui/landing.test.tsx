@@ -23,7 +23,7 @@ describe("Genaie Scout landing page", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: /your personal agent that hunts for jobs while you live your life/i,
+        name: /applying for a job shouldn't be a full-time job/i,
       }),
     ).toBeVisible();
     expect(screen.getByText(/applies on your behalf/i)).toBeVisible();
