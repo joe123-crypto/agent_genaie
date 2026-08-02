@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "Genaie | Applications",
+  description: "Browse and manage job applications submitted by your Genaie Job Scout.",
+};
 import { DashboardApplications } from "@/app/_components/dashboard-applications";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { summarizeApplications } from "@/app/_components/application-history-model";

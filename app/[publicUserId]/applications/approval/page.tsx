@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "Genaie | Application Approval",
+  description: "Review and approve job applications before they are submitted on your behalf.",
+};
 import { ApplicationApproval } from "@/app/_components/application-approval";
 import { buildApplicationHistory } from "@/app/_components/application-history-model";
 import { DashboardShell } from "@/app/_components/dashboard-shell";

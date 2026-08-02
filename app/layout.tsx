@@ -10,7 +10,7 @@ const ubuntu = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Agent Genaie",
+  title: "Genaie",
   description: "Genaie dashboard. Manage your Job Scout profile, CV, Gmail, and WhatsApp links.",
 };
 

@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "Genaie | Onboarding",
+  description: "Set up your Genaie account and get your Job Scout ready to apply.",
+};
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";

@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "Genaie | Connect Gmail",
+  description: "Link your Gmail account so Genaie can send job applications on your behalf.",
+};
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";

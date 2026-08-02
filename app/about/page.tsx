@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "We are what we do | Genaie",
+  title: "Genaie | We are what we do",
   description:
     "Why Genaie exists: to let people spend less time on repetitive job applications and more time on meaningful work.",
 };

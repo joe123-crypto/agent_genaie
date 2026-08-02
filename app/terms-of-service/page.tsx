@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE_NAME } from "@/src/config";
+
+export const metadata: Metadata = {
+  title: "Genaie | Terms of Service",
+  description: "Read the Genaie Terms of Service before using the platform.",
+};
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { getSignedInAccountStatus } from "@/src/domains/users";
 

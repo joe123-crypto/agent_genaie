@@ -8,7 +8,7 @@ import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { safeNext } from "@/src/auth/login";
 
 export const metadata: Metadata = {
-  title: "Pricing | Genaie",
+  title: "Genaie | Pricing",
   description:
     "Choose the Genaie plan that matches your job hunt pace before setting up Job Scout.",
 };
