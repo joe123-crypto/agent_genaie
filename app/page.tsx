@@ -420,7 +420,7 @@ export default function RootPage() {
               sends updates to WhatsApp.
             </p>
             <a className="button landing-cta" href="/login">
-              Start your job hunt
+              Get started
             </a>
           </div>
 
