@@ -17,6 +17,7 @@ import {
   Tags,
   Trash2,
   UserRound,
+  Users,
   X,
 } from "lucide-react";
 import { FieldLabel } from "@/app/_components/field-label";
@@ -37,12 +38,24 @@ type EducationRow = {
   end: string;
 };
 
+type RefereeRow = {
+  name: string;
+  position: string;
+  company: string;
+  email: string;
+  phone: string;
+};
+
 function emptyExperience(): ExperienceRow {
   return { title: "", company: "", start: "", end: "", description: "" };
 }
 
 function emptyEducation(): EducationRow {
   return { degree: "", institution: "", start: "", end: "" };
+}
+
+function emptyReferee(): RefereeRow {
+  return { name: "", position: "", company: "", email: "", phone: "" };
 }
 
 type CreateCvFormProps = {
@@ -59,6 +72,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
   const [summary, setSummary] = useState("");
   const [experience, setExperience] = useState<ExperienceRow[]>([emptyExperience()]);
   const [education, setEducation] = useState<EducationRow[]>([emptyEducation()]);
+  const [referees, setReferees] = useState<RefereeRow[]>([emptyReferee()]);
   const [skills, setSkills] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ kind: StatusKind; message: string } | null>(null);
@@ -69,6 +83,10 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
 
   function updateEducation(index: number, patch: Partial<EducationRow>) {
     setEducation((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
+  function updateReferee(index: number, patch: Partial<RefereeRow>) {
+    setReferees((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -94,6 +112,7 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
           experience,
           education,
           skills,
+          referees,
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -163,6 +182,17 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
           placeholder="A short paragraph about your experience and goals."
         />
         <span className="file-note">Leave this blank and Job Scout will write one for you from your details.</span>
+      </label>
+
+      <label>
+        <FieldLabel icon={Tags}>Skills</FieldLabel>
+        <input
+          value={skills}
+          onChange={(event) => setSkills(event.target.value)}
+          maxLength={1000}
+          placeholder="e.g. JavaScript, React, Project management"
+        />
+        <span className="file-note">Separate skills with commas.</span>
       </label>
 
       <div className="cv-section-head">
@@ -317,16 +347,84 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
         ))}
       </div>
 
-      <label>
-        <FieldLabel icon={Tags}>Skills</FieldLabel>
-        <input
-          value={skills}
-          onChange={(event) => setSkills(event.target.value)}
-          maxLength={1000}
-          placeholder="e.g. JavaScript, React, Project management"
-        />
-        <span className="file-note">Separate skills with commas.</span>
-      </label>
+      <div className="cv-section-head">
+        <h2>
+          <Users aria-hidden="true" />
+          Referees
+        </h2>
+        <button
+          type="button"
+          className="button secondary"
+          onClick={() => setReferees((rows) => [...rows, emptyReferee()])}
+        >
+          <Plus aria-hidden="true" />
+          Add referee
+        </button>
+      </div>
+      <div className="cv-entries">
+        {referees.map((row, index) => (
+          <div className="cv-entry" key={index}>
+            <div className="grid">
+              <label>
+                <FieldLabel icon={UserRound}>Name</FieldLabel>
+                <input
+                  value={row.name}
+                  onChange={(event) => updateReferee(index, { name: event.target.value })}
+                  maxLength={200}
+                />
+              </label>
+              <label>
+                <FieldLabel icon={SquarePen}>Position</FieldLabel>
+                <input
+                  value={row.position}
+                  onChange={(event) => updateReferee(index, { position: event.target.value })}
+                  maxLength={200}
+                  placeholder="e.g. Line manager"
+                />
+              </label>
+            </div>
+            <div className="grid">
+              <label>
+                <FieldLabel icon={Building2}>Company or organisation</FieldLabel>
+                <input
+                  value={row.company}
+                  onChange={(event) => updateReferee(index, { company: event.target.value })}
+                  maxLength={200}
+                />
+              </label>
+              <label>
+                <FieldLabel icon={Mail}>Email</FieldLabel>
+                <input
+                  type="email"
+                  value={row.email}
+                  onChange={(event) => updateReferee(index, { email: event.target.value })}
+                  maxLength={200}
+                />
+              </label>
+            </div>
+            <label>
+              <FieldLabel icon={Phone}>Phone</FieldLabel>
+              <input
+                value={row.phone}
+                onChange={(event) => updateReferee(index, { phone: event.target.value })}
+                maxLength={60}
+              />
+            </label>
+            {referees.length > 1 ? (
+              <div className="actions">
+                <button
+                  type="button"
+                  className="button danger"
+                  onClick={() => setReferees((rows) => rows.filter((_, i) => i !== index))}
+                >
+                  <Trash2 aria-hidden="true" />
+                  Remove
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
 
       <div className="actions">
         <button type="submit" disabled={busy}>

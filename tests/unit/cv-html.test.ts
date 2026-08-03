@@ -24,6 +24,10 @@ const sample = {
     { degree: "BSc Mathematics", institution: "Trinity", start: "2015", end: "2018" },
   ],
   skills: "JavaScript, JavaScript, React, <b>Design</b>",
+  referees: [
+    { name: "Charles Babbage", position: "Professor", company: "Cambridge", email: "cb@example.com", phone: "+1 555 0111" },
+    { name: "", position: "", company: "", email: "", phone: "" },
+  ],
 };
 
 test("buildCvHtml produces canonical CV HTML that passes validation", () => {
@@ -54,4 +58,30 @@ test("normalizeCvInput requires a full name and drops empty rows", () => {
 test("education section heading covers certifications", () => {
   const html = buildCvHtml(sample);
   assert.match(html, /<h2>Education &amp; Certifications<\/h2>/);
+});
+
+test("referees section renders and drops empty rows", () => {
+  const cv = normalizeCvInput(sample);
+  assert.equal(cv.referees.length, 1);
+  assert.deepEqual(cv.referees[0], {
+    name: "Charles Babbage",
+    position: "Professor",
+    company: "Cambridge",
+    email: "cb@example.com",
+    phone: "+1 555 0111",
+  });
+  const html = buildCvHtml(sample);
+  assert.match(html, /<h2>Referees<\/h2>/);
+  assert.match(html, /Charles Babbage/);
+  assert.doesNotThrow(() => validateCanonicalCvHtml(Buffer.from(html, "utf8")));
+});
+
+test("buildCvHtml orders sections summary, skills, experience, education, referees", () => {
+  const html = buildCvHtml(sample);
+  const order = ["Summary", "Skills", "Experience", "Education &amp; Certifications", "Referees"].map(
+    (heading) => html.indexOf(`<h2>${heading}</h2>`),
+  );
+  for (const index of order) assert.ok(index >= 0, "each section should be present");
+  const sorted = [...order].sort((a, b) => a - b);
+  assert.deepEqual(order, sorted, "sections should appear in the expected order");
 });
