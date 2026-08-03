@@ -18,6 +18,14 @@ export type CvEducationInput = {
   end?: unknown;
 };
 
+export type CvRefereeInput = {
+  name?: unknown;
+  position?: unknown;
+  company?: unknown;
+  email?: unknown;
+  phone?: unknown;
+};
+
 export type CvInput = {
   fullName?: unknown;
   email?: unknown;
@@ -27,10 +35,12 @@ export type CvInput = {
   experience?: unknown;
   education?: unknown;
   skills?: unknown;
+  referees?: unknown;
 };
 
 type CvExperience = { title: string; company: string; start: string; end: string; description: string };
 type CvEducation = { degree: string; institution: string; start: string; end: string };
+type CvReferee = { name: string; position: string; company: string; email: string; phone: string };
 
 type NormalizedCv = {
   fullName: string;
@@ -41,6 +51,7 @@ type NormalizedCv = {
   experience: CvExperience[];
   education: CvEducation[];
   skills: string[];
+  referees: CvReferee[];
 };
 
 const MAX_LINE = 240;
@@ -49,6 +60,7 @@ const MAX_DESCRIPTION = 4000;
 const MAX_EXPERIENCE = 20;
 const MAX_EDUCATION = 20;
 const MAX_SKILLS = 60;
+const MAX_REFEREES = 10;
 
 function line(value: unknown, max = MAX_LINE) {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -121,6 +133,25 @@ function normalizeSkills(value: unknown): string[] {
   return output;
 }
 
+function normalizeReferees(value: unknown): CvReferee[] {
+  const rows = Array.isArray(value) ? value : [];
+  const output: CvReferee[] = [];
+  for (const raw of rows) {
+    const item = raw && typeof raw === "object" ? (raw as CvRefereeInput) : {};
+    const entry = {
+      name: line(item.name),
+      position: line(item.position),
+      company: line(item.company),
+      email: line(item.email),
+      phone: line(item.phone, 60),
+    };
+    if (!entry.name && !entry.position && !entry.company && !entry.email && !entry.phone) continue;
+    output.push(entry);
+    if (output.length >= MAX_REFEREES) break;
+  }
+  return output;
+}
+
 export function normalizeCvInput(input: CvInput): NormalizedCv {
   const source = input && typeof input === "object" ? input : {};
   const fullName = line(source.fullName);
@@ -134,6 +165,7 @@ export function normalizeCvInput(input: CvInput): NormalizedCv {
     experience: normalizeExperience(source.experience),
     education: normalizeEducation(source.education),
     skills: normalizeSkills(source.skills),
+    referees: normalizeReferees(source.referees),
   };
 }
 
@@ -232,6 +264,24 @@ function summarySection(summary: string) {
   return `<section><h2>Summary</h2>${renderMultiline(summary)}</section>`;
 }
 
+function refereesSection(rows: CvReferee[]) {
+  if (!rows.length) return "";
+  const items = rows
+    .map((row) => {
+      const name = row.name ? `<div class="entry-title">${safeText(row.name)}</div>` : "";
+      const role = [row.position, row.company].filter(Boolean).join(", ");
+      const sub = role ? `<div class="entry-sub">${safeText(role)}</div>` : "";
+      const contact = [row.email, row.phone]
+        .filter(Boolean)
+        .map((part) => `<span>${safeText(part)}</span>`)
+        .join("");
+      const contactLine = contact ? `<div class="contact">${contact}</div>` : "";
+      return `<div class="entry">${name}${sub}${contactLine}</div>`;
+    })
+    .join("");
+  return `<section><h2>Referees</h2>${items}</section>`;
+}
+
 function contactLine(cv: NormalizedCv) {
   const parts = [cv.email, cv.phone, cv.location]
     .filter(Boolean)
@@ -247,9 +297,10 @@ export function buildCvHtml(input: CvInput): string {
   const body = [
     `<header><h1>${safeText(cv.fullName)}</h1>${contactLine(cv)}</header>`,
     summarySection(cv.summary),
+    skillsSection(cv.skills),
     experienceSection(cv.experience),
     educationSection(cv.education),
-    skillsSection(cv.skills),
+    refereesSection(cv.referees),
   ]
     .filter(Boolean)
     .join("");
