@@ -366,7 +366,7 @@ if (initialCvConversionPending) {
       {onboardingMode ? (
         <main className="app-main app-main-center">
           <div className="shell">
-            <OnboardingProgress backHref={onboardingPath} current={4} total={4} />
+            <OnboardingProgress backHref={onboardingPath} current={2} total={2} />
             {setupPanel}
           </div>
         </main>

@@ -28,7 +28,7 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `/{publicUserId}/vault` signed-in Webetu credential vault (legacy; reachable by direct URL only, not linked in navigation).
 - `/{publicUserId}/connect-gmail` authenticated Gmail connect/disconnect page.
 - `/{publicUserId}/job-scout` signed-in Job Scout setup page for CV, target role, target location, and acknowledgements.
-- `/{publicUserId}/onboarding` one-time signup onboarding controller; auto-selects Job Scout and forwards to the next required step. Connecting Gmail is the only required Job Scout onboarding step, so a new user is taken to Connect Gmail right after signing up and then straight to the dashboard; WhatsApp linking and CV/preferences are optional and completed later from the dashboard.
+- `/{publicUserId}/onboarding` one-time signup onboarding controller; auto-selects Job Scout and forwards to the next required step. Job Scout signup requires connecting Gmail and then setting up the Job Scout profile (CV, target role, target location); WhatsApp linking is not part of onboarding and is offered later from the dashboard.
 - `/{publicUserId}/whatsapp` is the canonical WhatsApp linking page. Invite mode shows the originating masked number and confirmation; direct-web mode accepts a number and starts bot verification.
 - `/connect-gmail` and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail OAuth for the signed-in Firebase user.

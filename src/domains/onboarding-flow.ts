@@ -38,13 +38,11 @@ export function calculateOnboardingNextStep(input: {
 }): OnboardingStep {
   if (!input.selectedService) return "service_selection";
   if (input.selectedService === "jobs") {
-    // Streamlined signup: connecting Gmail is the only required onboarding step,
-    // so users reach the dashboard (the "aha" moment) right after signing up.
-    // WhatsApp linking and CV/preferences are optional and completed later from
-    // the dashboard, which already surfaces them as follow-up setup actions.
+    // WhatsApp linking is no longer part of Job Scout signup: it is optional and
+    // offered later from the dashboard. Connecting Gmail and setting up the Job
+    // Scout profile (CV, target role, location) remain required.
     if (!input.gmailConnected) return "connect_google";
-    // Chat-originated onboarding keeps collecting CV/preferences over WhatsApp.
-    if (input.channel === "chat" && !input.jobScoutReady) return "whatsapp_chat";
+    if (!input.jobScoutReady) return input.channel === "chat" ? "whatsapp_chat" : "job_scout";
     return "dashboard";
   }
   if (!input.whatsappLinked) return "whatsapp";

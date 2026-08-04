@@ -172,7 +172,7 @@ if (signOutButton) signOutButton.addEventListener("click", async function() {
       <h1 id="connect-gmail-title">Connect Gmail</h1>
       <p>Connect Gmail so Genaie can send job applications on your behalf.</p>
       {onboardingMode ? (
-        <p className="file-note">This is the only step to finish signing up. Once Gmail is connected we&apos;ll take you straight to your dashboard, where you can add your CV, target roles, and WhatsApp updates whenever you&apos;re ready.</p>
+        <p className="file-note">This is the first of two steps to finish signing up. Next you&apos;ll add your CV and target role. WhatsApp updates are optional and can be set up later from your dashboard.</p>
       ) : null}
       <div data-signed-in>
         <div className="meta">
@@ -196,7 +196,7 @@ if (signOutButton) signOutButton.addEventListener("click", async function() {
       {onboardingMode ? (
         <main className="app-main app-main-center">
           <div className="shell shell-narrow">
-            <OnboardingProgress backHref={onboardingPath} current={1} total={1} />
+            <OnboardingProgress backHref={onboardingPath} current={1} total={2} />
             {connectPanel}
           </div>
         </main>

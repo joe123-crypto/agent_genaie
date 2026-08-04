@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { calculateOnboardingNextStep } from "@/src/domains/onboarding";
 
-test("Job Scout onboarding only requires connecting Gmail", () => {
+test("Job Scout onboarding requires Gmail then the Job Scout profile", () => {
   assert.equal(calculateOnboardingNextStep({
     selectedService: null,
     whatsappLinked: false,
@@ -11,8 +11,8 @@ test("Job Scout onboarding only requires connecting Gmail", () => {
     webetuConfigured: false,
   }), "service_selection");
 
-  // Connecting Gmail is the first (and only) required step, regardless of
-  // WhatsApp linking — that step is no longer part of the required signup flow.
+  // Connecting Gmail is the first required step, regardless of WhatsApp
+  // linking — WhatsApp is no longer part of the signup flow.
   assert.equal(calculateOnboardingNextStep({
     selectedService: "jobs",
     whatsappLinked: false,
@@ -29,13 +29,21 @@ test("Job Scout onboarding only requires connecting Gmail", () => {
     webetuConfigured: false,
   }), "connect_google");
 
-  // Once Gmail is connected, web users go straight to the dashboard; CV and
-  // preferences are completed there rather than gating onboarding.
+  // Once Gmail is connected, the Job Scout profile is still required, and an
+  // unlinked WhatsApp no longer holds the user back from reaching it.
   assert.equal(calculateOnboardingNextStep({
     selectedService: "jobs",
     whatsappLinked: false,
     gmailConnected: true,
     jobScoutReady: false,
+    webetuConfigured: false,
+  }), "job_scout");
+
+  assert.equal(calculateOnboardingNextStep({
+    selectedService: "jobs",
+    whatsappLinked: false,
+    gmailConnected: true,
+    jobScoutReady: true,
     webetuConfigured: false,
   }), "dashboard");
 
