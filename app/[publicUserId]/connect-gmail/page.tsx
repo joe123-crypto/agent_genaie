@@ -171,9 +171,6 @@ if (signOutButton) signOutButton.addEventListener("click", async function() {
     <section className="panel panel-narrow dashboard-form-panel" aria-labelledby="connect-gmail-title">
       <h1 id="connect-gmail-title">Connect Gmail</h1>
       <p>Connect Gmail so Genaie can send job applications on your behalf.</p>
-      {onboardingMode ? (
-        <p className="file-note">This is the first of two steps to finish signing up. Next you&apos;ll add your CV and target role. WhatsApp updates are optional and can be set up later from your dashboard.</p>
-      ) : null}
       <div data-signed-in>
         <div className="meta">
           <span>Signed in as <strong data-user-email>{email}</strong></span>
