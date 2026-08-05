@@ -449,6 +449,91 @@ textarea:focus-visible {
   align-items: center;
 }
 
+.wizard-progress {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.wizard-progress .progress-track {
+  border-radius: 999px;
+}
+
+.wizard-step-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-nav);
+}
+
+.wizard-step {
+  display: grid;
+  gap: 16px;
+}
+
+.wizard-step-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.wizard-step-heading h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.wizard-step-heading p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.wizard-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.wizard-choice button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.wizard-summary {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.wizard-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wizard-summary span {
+  color: var(--text-secondary);
+}
+
+.wizard-summary strong {
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.wizard-hint {
+  color: var(--danger);
+}
+
+.wizard-nav {
+  justify-content: space-between;
+}
+
+@media (max-width: 560px) {
+  .wizard-choice {
+    grid-template-columns: 1fr;
+  }
+}
+
 .status-strip {
   border-radius: var(--radius);
   padding: 14px 16px;

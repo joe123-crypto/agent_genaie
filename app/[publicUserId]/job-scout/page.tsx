@@ -15,7 +15,6 @@ import {
   MapPin,
   Radar,
   Save,
-  ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { SESSION_COOKIE_NAME } from "@/src/config";
@@ -99,7 +98,7 @@ export default async function JobScoutSetupPage({
   if (!accountStatus?.plan) redirect(pricingGatePath(setupPath));
 
   const onboardingPath = `/${publicUserId}/onboarding`;
-  const connectPath = `/${publicUserId}/connect-gmail${onboardingMode ? "?onboarding=1" : ""}`;
+  const createCvPath = `/${publicUserId}/create-cv${onboardingMode ? "?onboarding=1" : ""}`;
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? verified.email ?? "signed-in user";
   const displayName =
     jobScoutStatus?.profile?.displayName
@@ -112,6 +111,7 @@ export default async function JobScoutSetupPage({
   const cvAvailable = !!jobScoutStatus?.cvAvailable;
   const cvUploaded = !!jobScoutStatus?.cvUploaded;
   const cvConversionStatus = String(jobScoutStatus?.cvConversionStatus || "missing");
+  const hasServerCv = cvAvailable || cvUploaded;
   const ready = !!jobScoutStatus?.ready;
   const autoApply = !!jobScoutStatus?.configured
     && jobScoutStatus?.preferences?.autoApply === true;
@@ -151,10 +151,12 @@ const labels = {
 };
 
 function setMessage(text, tone) {
+  if (!message) return;
   message.querySelector("[data-status-label]").textContent = text || "";
   message.dataset.statusKind = tone || "info";
 }
 function setPill(el, text, kind) {
+  if (!el) return;
   el.querySelector("[data-status-label]").textContent = text;
   el.dataset.statusKind = kind || "info";
 }
@@ -181,11 +183,13 @@ function applyStatus(payload) {
     payload.cvAvailable ? "CV: Ready" : payload.cvConversionStatus === "pending" ? "CV: Processing" : "CV: Missing",
     payload.cvAvailable ? "complete" : "pending"
   );
-  missingStatus.querySelector("[data-status-label]").textContent = missingCopy(
-    payload.missingRequirements,
-    payload.cvConversionStatus
-  );
-  missingStatus.dataset.statusKind = payload.ready ? "complete" : payload.cvConversionStatus === "pending" ? "info" : "warning";
+  if (missingStatus) {
+    missingStatus.querySelector("[data-status-label]").textContent = missingCopy(
+      payload.missingRequirements,
+      payload.cvConversionStatus
+    );
+    missingStatus.dataset.statusKind = payload.ready ? "complete" : payload.cvConversionStatus === "pending" ? "info" : "warning";
+  }
 }
 function sleep(ms) {
   return new Promise(function(resolve) { window.setTimeout(resolve, ms); });
@@ -211,43 +215,48 @@ function waitForCvConversion(initialStatus) {
   return activeConversionPoll;
 }
 
-cvInput.addEventListener("change", function() {
-  const file = cvInput.files && cvInput.files[0];
-  cvName.textContent = file ? file.name : "No new file selected";
-});
+if (cvInput) {
+  cvInput.addEventListener("change", function() {
+    const file = cvInput.files && cvInput.files[0];
+    if (cvName) cvName.textContent = file ? file.name : "No new file selected";
+    if (typeof window.__jobScoutWizardCvChanged === "function") window.__jobScoutWizardCvChanged();
+  });
+}
 
-form.addEventListener("submit", async function(event) {
-  event.preventDefault();
-  saveButton.disabled = true;
-  setMessage("Saving Job Scout setup...", "loading");
-  try {
-    let payload = await readJson(await fetch("/job-scout/profile", {
-      method: "POST",
-      credentials: "same-origin",
-      body: new FormData(form)
-    }));
-    applyStatus(payload);
-    if (payload.cvConversionStatus === "pending") {
-      setMessage("PDF uploaded. Preparing it for Job Scout...", "loading");
-      payload = await waitForCvConversion(payload);
+if (form) {
+  form.addEventListener("submit", async function(event) {
+    event.preventDefault();
+    saveButton.disabled = true;
+    setMessage("Saving Job Scout setup...", "loading");
+    try {
+      let payload = await readJson(await fetch("/job-scout/profile", {
+        method: "POST",
+        credentials: "same-origin",
+        body: new FormData(form)
+      }));
+      applyStatus(payload);
+      if (payload.cvConversionStatus === "pending") {
+        setMessage("PDF uploaded. Preparing it for Job Scout...", "loading");
+        payload = await waitForCvConversion(payload);
+      }
+      if (maybeAdvanceOnboarding(payload)) return;
+      setMessage(
+        payload.ready
+          ? "Job Scout setup saved and ready."
+          : payload.cvConversionStatus === "pending"
+            ? "Setup saved. Your PDF is still being processed; you can leave this page."
+            : "Setup saved, but requirements are still missing.",
+        payload.ready ? "complete" : payload.cvConversionStatus === "pending" ? "info" : "warning"
+      );
+      if (cvInput) cvInput.value = "";
+      if (cvName) cvName.textContent = "No new file selected";
+    } catch (err) {
+      setMessage(err.message || "Could not save Job Scout setup.", "error");
+    } finally {
+      saveButton.disabled = false;
     }
-    if (maybeAdvanceOnboarding(payload)) return;
-    setMessage(
-      payload.ready
-        ? "Job Scout setup saved and ready."
-        : payload.cvConversionStatus === "pending"
-          ? "Setup saved. Your PDF is still being processed; you can leave this page."
-          : "Setup saved, but requirements are still missing.",
-      payload.ready ? "complete" : payload.cvConversionStatus === "pending" ? "info" : "warning"
-    );
-    cvInput.value = "";
-    cvName.textContent = "No new file selected";
-  } catch (err) {
-    setMessage(err.message || "Could not save Job Scout setup.", "error");
-  } finally {
-    saveButton.disabled = false;
-  }
-});
+  });
+}
 
 if (initialCvConversionPending) {
   setMessage("Your uploaded PDF is being prepared for Job Scout...", "loading");
@@ -263,10 +272,103 @@ if (initialCvConversionPending) {
     setMessage("Your PDF is uploaded and will continue processing in the background.", "info");
   });
 }
+
+// Multi-step onboarding wizard. Only active when the stepped layout is rendered.
+const wizard = document.querySelector("[data-wizard]");
+if (wizard) {
+  const steps = Array.prototype.slice.call(wizard.querySelectorAll("[data-step]"));
+  const total = steps.length;
+  const backBtn = wizard.querySelector("[data-back]");
+  const nextBtn = wizard.querySelector("[data-next]");
+  const progressBar = wizard.querySelector("[data-wizard-progress]");
+  const stepLabel = wizard.querySelector("[data-wizard-step-label]");
+  const hint = wizard.querySelector("[data-step-hint]");
+  const cvChoiceButtons = Array.prototype.slice.call(wizard.querySelectorAll("[data-cv-choice]"));
+  const cvYesPanel = wizard.querySelector("[data-cv-yes]");
+  const cvNoPanel = wizard.querySelector("[data-cv-no]");
+  const roleInput = wizard.querySelector("[name='targetRole']");
+  const locationInput = wizard.querySelector("[name='targetLocation']");
+  const countryInput = wizard.querySelector("[name='country']");
+  const reviewRole = wizard.querySelector("[data-review-role]");
+  const reviewLocation = wizard.querySelector("[data-review-location]");
+  const reviewCountry = wizard.querySelector("[data-review-country]");
+  const serverCvReady = ${JSON.stringify(hasServerCv)};
+  let current = 1;
+
+  function hasCv() {
+    return serverCvReady || Boolean(cvInput && cvInput.files && cvInput.files.length > 0);
+  }
+  function setHint(text) {
+    if (!hint) return;
+    hint.textContent = text || "";
+    hint.hidden = !text;
+  }
+  function selectCvChoice(choice) {
+    cvChoiceButtons.forEach(function(btn) {
+      btn.setAttribute("aria-pressed", String(btn.dataset.cvChoice === choice));
+    });
+    if (cvYesPanel) cvYesPanel.hidden = choice !== "yes";
+    if (cvNoPanel) cvNoPanel.hidden = choice !== "no";
+    setHint("");
+  }
+  cvChoiceButtons.forEach(function(btn) {
+    btn.addEventListener("click", function() { selectCvChoice(btn.dataset.cvChoice); });
+  });
+  window.__jobScoutWizardCvChanged = function() {
+    if (cvInput && cvInput.files && cvInput.files.length > 0) selectCvChoice("yes");
+    setHint("");
+  };
+
+  function validateStep(n) {
+    if (n === 1) {
+      if (!hasCv()) { setHint("Upload your CV or create one to continue."); return false; }
+      return true;
+    }
+    if (n === 2) {
+      if (!roleInput || !roleInput.value.trim()) { setHint("Enter the role you want Job Scout to target."); return false; }
+      return true;
+    }
+    if (n === 3) {
+      if (!locationInput || !locationInput.value.trim()) { setHint("Enter a target location."); return false; }
+      if (!countryInput || !/^[A-Za-z]{2}$/.test(countryInput.value.trim())) { setHint("Enter a two-letter country code (e.g. zw)."); return false; }
+      return true;
+    }
+    return true;
+  }
+
+  function fillReview() {
+    if (reviewRole && roleInput) reviewRole.textContent = roleInput.value.trim() || "—";
+    if (reviewLocation && locationInput) reviewLocation.textContent = locationInput.value.trim() || "—";
+    if (reviewCountry && countryInput) reviewCountry.textContent = (countryInput.value.trim() || "—").toUpperCase();
+  }
+
+  function render() {
+    steps.forEach(function(step) { step.hidden = Number(step.dataset.step) !== current; });
+    if (progressBar) progressBar.style.width = ((current / total) * 100) + "%";
+    if (stepLabel) stepLabel.textContent = "Step " + current + " of " + total;
+    if (backBtn) backBtn.hidden = current === 1;
+    if (nextBtn) nextBtn.hidden = current === total;
+    if (saveButton) saveButton.hidden = current !== total;
+    if (current === total) fillReview();
+    setHint("");
+  }
+
+  if (nextBtn) nextBtn.addEventListener("click", function() {
+    if (!validateStep(current)) return;
+    if (current < total) { current += 1; render(); }
+  });
+  if (backBtn) backBtn.addEventListener("click", function() {
+    if (current > 1) { current -= 1; render(); }
+  });
+
+  if (serverCvReady) selectCvChoice("yes");
+  render();
+}
 `;
 
   const userLabel = displayName || email;
-  const setupPanel = (
+
+  const dashboardPanel = (
     <section className="panel dashboard-form-panel" aria-labelledby="job-scout-title">
       <div className="panel-head">
         <div className="panel-head-title">
@@ -347,14 +449,133 @@ if (initialCvConversionPending) {
             <Save aria-hidden="true" />
             Save Job Scout setup
           </button>
-          <a className="button secondary" href={connectPath}>
-            <Mail aria-hidden="true" />
-            Connect Gmail
-          </a>
-          <a className="button secondary" href="/privacy-policy">
-            <ShieldCheck aria-hidden="true" />
-            Privacy &amp; Policy
-          </a>
+        </div>
+      </form>
+      <StatusNotice data-message />
+    </section>
+  );
+
+  const onboardingPanel = (
+    <section className="panel dashboard-form-panel" aria-labelledby="job-scout-title">
+      <div className="panel-head">
+        <div className="panel-head-title">
+          <span className="panel-head-icon"><Radar aria-hidden="true" /></span>
+          <div>
+            <h1 id="job-scout-title">Job Scout Setup</h1>
+            <p>Complete the profile Job Scout uses for applications.</p>
+          </div>
+        </div>
+      </div>
+      <form className="form-stack" data-job-scout-form data-wizard>
+        <div className="wizard-progress">
+          <span className="wizard-step-label" data-wizard-step-label>Step 1 of 4</span>
+          <div className="progress-track" role="progressbar" aria-valuemin={1} aria-valuemax={4} aria-valuenow={1}>
+            <span className="progress-value" data-wizard-progress style={{ width: "25%" }} />
+          </div>
+        </div>
+
+        <section className="wizard-step" data-step="1">
+          <div className="wizard-step-heading">
+            <h2>Do you have a CV?</h2>
+            <p>Job Scout applies with your CV. Upload the one you have, or build a fresh one.</p>
+          </div>
+          <div className="wizard-choice" role="group" aria-label="Do you have a CV?">
+            <button type="button" className="button secondary" data-cv-choice="yes" aria-pressed="false">
+              <FileText aria-hidden="true" />
+              Yes, I have one
+            </button>
+            <button type="button" className="button secondary" data-cv-choice="no" aria-pressed="false">
+              <FilePlus2 aria-hidden="true" />
+              No, not yet
+            </button>
+          </div>
+          <div data-cv-yes hidden>
+            <label>
+              <FieldLabel icon={FileText}>Upload your CV (PDF)</FieldLabel>
+              <input data-cv name="cv" type="file" accept="application/pdf,.pdf" />
+              <span className="file-note">
+                {hasServerCv
+                  ? "A CV is already on file. Choose a new PDF only if you want to replace it."
+                  : "Upload a PDF CV, max 4 MB. Job Scout prepares it automatically for applications."}
+              </span>
+              <span className="file-note" data-cv-name>
+                {hasServerCv ? "Using your saved CV." : "No new file selected"}
+              </span>
+            </label>
+          </div>
+          <div data-cv-no hidden>
+            <p className="file-note">No PDF yet? Build one in a few minutes and come back here automatically.</p>
+            <a className="button secondary" href={createCvPath}>
+              <FilePlus2 aria-hidden="true" />
+              Create one
+            </a>
+          </div>
+        </section>
+
+        <section className="wizard-step" data-step="2" hidden>
+          <div className="wizard-step-heading">
+            <h2>What role are you targeting?</h2>
+            <p>Job Scout looks for openings that match this role.</p>
+          </div>
+          <label>
+            <FieldLabel icon={Briefcase}>Target role</FieldLabel>
+            <input name="targetRole" defaultValue={targetRole} maxLength={200} placeholder="e.g. Software Engineer" />
+          </label>
+        </section>
+
+        <section className="wizard-step" data-step="3" hidden>
+          <div className="wizard-step-heading">
+            <h2>Where should we look?</h2>
+            <p>Set the location and country Job Scout searches in.</p>
+          </div>
+          <label>
+            <FieldLabel icon={MapPin}>Target location</FieldLabel>
+            <input name="targetLocation" defaultValue={targetLocation} maxLength={200} placeholder="e.g. Harare" />
+          </label>
+          <label>
+            <FieldLabel icon={Globe}>Country code</FieldLabel>
+            <input name="country" defaultValue={country} minLength={2} maxLength={2} pattern="[A-Za-z]{2}" placeholder="zw" />
+            <span className="file-note">Two-letter country code, e.g. zw for Zimbabwe.</span>
+          </label>
+        </section>
+
+        <section className="wizard-step" data-step="4" hidden>
+          <div className="wizard-step-heading">
+            <h2>Review &amp; confirm</h2>
+            <p>Check your details and agree to the terms before Job Scout starts.</p>
+          </div>
+          <div className="wizard-summary" data-review-summary>
+            <div><span>Target role</span><strong data-review-role>—</strong></div>
+            <div><span>Target location</span><strong data-review-location>—</strong></div>
+            <div><span>Country</span><strong data-review-country>—</strong></div>
+          </div>
+          <label>
+            <FieldLabel icon={UserRound}>Display name</FieldLabel>
+            <input name="displayName" defaultValue={displayName} maxLength={120} autoComplete="name" required />
+          </label>
+          <label className="check">
+            <input name="profileConfirmed" type="checkbox" defaultChecked={!!jobScoutStatus?.profileConfirmed} required />
+            <span>I have read and agree to the <a href="/terms-of-service" target="_blank" rel="noopener noreferrer">Terms of Service</a>.</span>
+          </label>
+          <label className="check">
+            <input name="safetyAcknowledged" type="checkbox" defaultChecked={!!jobScoutStatus?.safetyAcknowledged} required />
+            <span>I will not pay upfront, I understand job scams exist, and Genaie is not accountable if I am scammed.</span>
+          </label>
+          <label className="check">
+            <input name="autoApply" type="checkbox" defaultChecked={autoApply} />
+            <span>Automatically submit suitable applications for me. Leave this off if you only want suggestions.</span>
+          </label>
+        </section>
+
+        <p className="file-note wizard-hint" data-step-hint hidden />
+
+        <div className="actions wizard-nav">
+          <button type="button" className="button secondary" data-back hidden>Back</button>
+          <button type="button" data-next>Next</button>
+          <button data-save type="submit" hidden>
+            <Save aria-hidden="true" />
+            Save Job Scout setup
+          </button>
         </div>
       </form>
       <StatusNotice data-message />
@@ -367,12 +588,12 @@ if (initialCvConversionPending) {
         <main className="app-main app-main-center">
           <div className="shell">
             <OnboardingProgress backHref={onboardingPath} current={2} total={2} />
-            {setupPanel}
+            {onboardingPanel}
           </div>
         </main>
       ) : (
         <DashboardShell active="job-scout" publicUserId={publicUserId} userLabel={userLabel}>
-          {setupPanel}
+          {dashboardPanel}
         </DashboardShell>
       )}
       <script dangerouslySetInnerHTML={{ __html: pageScript }} />

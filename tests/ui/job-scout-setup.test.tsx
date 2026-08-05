@@ -51,7 +51,13 @@ async function renderPage(configured: boolean, autoApply: boolean) {
     searchParams: Promise.resolve({ onboarding: "1" }),
   });
   render(page);
-  return screen.getByRole("checkbox", { name: /automatically submit suitable applications/i });
+  // In onboarding mode the automatic-applications checkbox lives on the review
+  // step, which starts with the `hidden` attribute until the wizard script
+  // advances to it, so include hidden elements when querying.
+  return screen.getByRole("checkbox", {
+    name: /automatically submit suitable applications/i,
+    hidden: true,
+  });
 }
 
 describe("Job Scout setup automatic applications", () => {
