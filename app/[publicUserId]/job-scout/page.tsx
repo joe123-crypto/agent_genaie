@@ -15,7 +15,6 @@ import {
   MapPin,
   Radar,
   Save,
-  ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { SESSION_COOKIE_NAME } from "@/src/config";
@@ -99,7 +98,6 @@ export default async function JobScoutSetupPage({
   if (!accountStatus?.plan) redirect(pricingGatePath(setupPath));
 
   const onboardingPath = `/${publicUserId}/onboarding`;
-  const connectPath = `/${publicUserId}/connect-gmail${onboardingMode ? "?onboarding=1" : ""}`;
   const createCvPath = `/${publicUserId}/create-cv${onboardingMode ? "?onboarding=1" : ""}`;
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? verified.email ?? "signed-in user";
   const displayName =
@@ -451,14 +449,6 @@ if (wizard) {
             <Save aria-hidden="true" />
             Save Job Scout setup
           </button>
-          <a className="button secondary" href={connectPath}>
-            <Mail aria-hidden="true" />
-            Connect Gmail
-          </a>
-          <a className="button secondary" href="/privacy-policy">
-            <ShieldCheck aria-hidden="true" />
-            Privacy &amp; Policy
-          </a>
         </div>
       </form>
       <StatusNotice data-message />
