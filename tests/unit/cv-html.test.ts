@@ -60,6 +60,29 @@ test("education section heading covers certifications", () => {
   assert.match(html, /<h2>Education &amp; Certifications<\/h2>/);
 });
 
+test("education description is optional, normalized, and rendered when present", () => {
+  const cv = normalizeCvInput(sample);
+  // sample's education row has no description — it stays empty rather than undefined.
+  assert.equal(cv.education[0].description, "");
+
+  const withDescription = normalizeCvInput({
+    fullName: "Ada Lovelace",
+    education: [
+      { degree: "BSc Mathematics", institution: "Trinity", description: "Studied analysis & wrote a thesis." },
+      // A row with only a description is still meaningful and must be kept.
+      { degree: "", institution: "", description: "Independent certification in numerical methods." },
+      // A fully empty row is dropped.
+      { degree: "", institution: "", description: "" },
+    ],
+  });
+  assert.equal(withDescription.education.length, 2);
+  assert.equal(withDescription.education[0].description, "Studied analysis & wrote a thesis.");
+
+  const html = buildCvHtml(withDescription);
+  assert.match(html, /Studied analysis/);
+  assert.match(html, /Independent certification in numerical methods/);
+});
+
 test("referees section renders and drops empty rows", () => {
   const cv = normalizeCvInput(sample);
   assert.equal(cv.referees.length, 1);

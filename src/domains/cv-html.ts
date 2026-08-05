@@ -16,6 +16,7 @@ export type CvEducationInput = {
   institution?: unknown;
   start?: unknown;
   end?: unknown;
+  description?: unknown;
 };
 
 export type CvRefereeInput = {
@@ -39,7 +40,7 @@ export type CvInput = {
 };
 
 type CvExperience = { title: string; company: string; start: string; end: string; description: string };
-type CvEducation = { degree: string; institution: string; start: string; end: string };
+type CvEducation = { degree: string; institution: string; start: string; end: string; description: string };
 type CvReferee = { name: string; position: string; company: string; email: string; phone: string };
 
 type NormalizedCv = {
@@ -105,8 +106,9 @@ function normalizeEducation(value: unknown): CvEducation[] {
       institution: line(item.institution),
       start: line(item.start, 60),
       end: line(item.end, 60),
+      description: block(item.description, MAX_DESCRIPTION),
     };
-    if (!entry.degree && !entry.institution) continue;
+    if (!entry.degree && !entry.institution && !entry.description) continue;
     output.push(entry);
     if (output.length >= MAX_EDUCATION) break;
   }
@@ -245,9 +247,10 @@ function educationSection(rows: CvEducation[]) {
       const dates = dateRange(row.start, row.end);
       const degree = row.degree ? `<div class="entry-title">${safeText(row.degree)}</div>` : "";
       const sub = row.institution ? `<div class="entry-sub">${safeText(row.institution)}</div>` : "";
+      const description = row.description ? renderMultiline(row.description) : "";
       return `<div class="entry"><div class="entry-head"><div>${degree}${sub}</div>${
         dates ? `<div class="entry-dates">${dates}</div>` : ""
-      }</div></div>`;
+      }</div>${description}</div>`;
     })
     .join("");
   return `<section><h2>Education &amp; Certifications</h2>${items}</section>`;

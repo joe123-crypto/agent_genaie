@@ -36,6 +36,7 @@ type EducationRow = {
   institution: string;
   start: string;
   end: string;
+  description: string;
 };
 
 type RefereeRow = {
@@ -51,7 +52,7 @@ function emptyExperience(): ExperienceRow {
 }
 
 function emptyEducation(): EducationRow {
-  return { degree: "", institution: "", start: "", end: "" };
+  return { degree: "", institution: "", start: "", end: "", description: "" };
 }
 
 function emptyReferee(): RefereeRow {
@@ -185,14 +186,16 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
       </label>
 
       <label>
-        <FieldLabel icon={Tags}>Skills</FieldLabel>
+        <FieldLabel icon={Tags}>Skills (optional)</FieldLabel>
         <input
           value={skills}
           onChange={(event) => setSkills(event.target.value)}
           maxLength={1000}
           placeholder="e.g. JavaScript, React, Project management"
         />
-        <span className="file-note">Separate skills with commas.</span>
+        <span className="file-note">
+          Separate skills with commas. Leave this blank and Job Scout will choose skills that match each job.
+        </span>
       </label>
 
       <div className="cv-section-head">
@@ -251,13 +254,16 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
               </label>
             </div>
             <label>
-              <FieldLabel icon={AlignLeft}>Description</FieldLabel>
+              <FieldLabel icon={AlignLeft}>Description (optional)</FieldLabel>
               <textarea
                 value={row.description}
                 onChange={(event) => updateExperience(index, { description: event.target.value })}
                 maxLength={4000}
                 placeholder="What you did and achieved in this role."
               />
+              <span className="file-note">
+                Leave this blank and Job Scout will describe this role to fit each job you apply for.
+              </span>
             </label>
             {experience.length > 1 ? (
               <div className="actions">
@@ -331,6 +337,18 @@ export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail 
                 />
               </label>
             </div>
+            <label>
+              <FieldLabel icon={AlignLeft}>Description (optional)</FieldLabel>
+              <textarea
+                value={row.description}
+                onChange={(event) => updateEducation(index, { description: event.target.value })}
+                maxLength={4000}
+                placeholder="Key modules, achievements, or what this qualification covered."
+              />
+              <span className="file-note">
+                Leave this blank and Job Scout will describe this qualification to fit each job you apply for.
+              </span>
+            </label>
             {education.length > 1 ? (
               <div className="actions">
                 <button
