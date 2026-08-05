@@ -38,8 +38,9 @@ export function calculateOnboardingNextStep(input: {
 }): OnboardingStep {
   if (!input.selectedService) return "service_selection";
   if (input.selectedService === "jobs") {
-    // WhatsApp linking is optional for Job Scout: the step is offered but skippable.
-    if (!input.whatsappLinked && !input.whatsappSkipped) return "whatsapp";
+    // WhatsApp linking is no longer part of Job Scout signup: it is optional and
+    // offered later from the dashboard. Connecting Gmail and setting up the Job
+    // Scout profile (CV, target role, location) remain required.
     if (!input.gmailConnected) return "connect_google";
     if (!input.jobScoutReady) return input.channel === "chat" ? "whatsapp_chat" : "job_scout";
     return "dashboard";
