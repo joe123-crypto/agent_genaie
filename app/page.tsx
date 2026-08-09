@@ -346,45 +346,6 @@ function LandingFooter() {
   );
 }
 
-function DecorativeScene() {
-  return (
-    <svg
-      className="landing-scene"
-      viewBox="0 0 680 590"
-      fill="none"
-      aria-hidden="true"
-    >
-      <g className="landing-scene-horizon">
-        <path className="landing-line" pathLength="1" d="M284 270H641" />
-        <path className="landing-line landing-sun" pathLength="1" d="M494 269a47 47 0 1 1 94 0" />
-        <path className="landing-line landing-delay-1" pathLength="1" d="M470 292h73M454 304h105M443 316h130" />
-        <path className="landing-line landing-delay-2" pathLength="1" d="M463 328h8m14 0h16m17 0h9m17 0h14" />
-      </g>
-
-      <g className="landing-scene-platform">
-        <path className="landing-line" pathLength="1" d="M66 375h280v142h113v67" />
-        <path className="landing-line landing-dashed" pathLength="1" d="M459 584h180" />
-      </g>
-
-      <g className="landing-scene-flow">
-        <path
-          className="landing-line landing-delay-1"
-          pathLength="1"
-          d="M316 454c28-34 58-35 95-16 37 19 83 25 128-9 24-18 47-42 66-71"
-        />
-        <path
-          className="landing-line landing-dashed landing-delay-2"
-          pathLength="1"
-          d="M492 478c50-7 91-32 122-78"
-        />
-        <circle className="landing-dot landing-dot-a" cx="438" cy="398" r="11" />
-        <circle className="landing-dot landing-dot-b" cx="476" cy="468" r="5" />
-        <circle className="landing-dot landing-dot-c" cx="567" cy="399" r="3.5" />
-      </g>
-    </svg>
-  );
-}
-
 export default function RootPage() {
   return (
     <main className="landing-page">
@@ -427,15 +388,14 @@ export default function RootPage() {
           </div>
 
           <div className="landing-visual">
-            <DecorativeScene />
             <Image
               className="landing-robot"
-              src="/Pasted image (3).png"
-              alt="Robot assistant holding documents and a suitcase"
-              width={1536}
-              height={1024}
+              src="/hero-robot.png"
+              alt="Robot holding an envelope of documents and a suitcase in front of a city skyline"
+              width={1024}
+              height={1536}
               priority
-              sizes="(max-width: 900px) 88vw, 48vw"
+              sizes="(max-width: 900px) 80vw, 32vw"
             />
           </div>
         </section>
