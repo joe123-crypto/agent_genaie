@@ -3,21 +3,21 @@ import { cookies } from "next/headers";
 import { redirect, notFound } from "next/navigation";
 
 export const metadata: Metadata = {
-  title: "Genaie | Create CV",
-  description: "Build and customise the CV that Genaie will use when applying for jobs.",
+  title: "Genaie | CV Interview",
+  description: "Answer a few questions in a chat and Genaie builds your CV from your answers.",
 };
-import { FileUser, MessagesSquare } from "lucide-react";
+import { MessagesSquare } from "lucide-react";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 import { getJobScoutStatusForUser } from "@/src/domains/job-scout";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
-import { CreateCvForm } from "./create-cv-form";
+import { CvInterview } from "./cv-interview";
 
 export const runtime = "nodejs";
 
-export default async function CreateCvPage({
+export default async function CreateCvInterviewPage({
   params,
   searchParams,
 }: {
@@ -32,7 +32,7 @@ export default async function CreateCvPage({
 
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const pagePath = `/${publicUserId}/create-cv`;
+  const pagePath = `/${publicUserId}/create-cv/interview`;
 
   if (!sessionCookie) redirect(`/login?next=${encodeURIComponent(pagePath)}`);
 
@@ -49,7 +49,7 @@ export default async function CreateCvPage({
   if (uid !== routeUser.id) {
     await syncUserToCentralData(uid);
     const myStatus = await getSignedInAccountStatus(uid).catch(() => null);
-    if (myStatus?.publicUserId) redirect(`/${myStatus.publicUserId}/create-cv`);
+    if (myStatus?.publicUserId) redirect(`/${myStatus.publicUserId}/create-cv/interview`);
     redirect("/login");
   }
 
@@ -69,30 +69,24 @@ export default async function CreateCvPage({
   const userLabel = displayName || email;
   const suffix = onboardingMode ? "?onboarding=1" : "";
   const jobScoutPath = `/${publicUserId}/job-scout${suffix}`;
-  const interviewPath = `/${publicUserId}/create-cv/interview${suffix}`;
+  const formPath = `/${publicUserId}/create-cv${suffix}`;
 
   const panel = (
-    <section className="panel dashboard-form-panel" aria-labelledby="create-cv-title">
+    <section className="panel dashboard-form-panel" aria-labelledby="cv-interview-title">
       <div className="panel-head">
         <div className="panel-head-title">
-          <span className="panel-head-icon"><FileUser aria-hidden="true" /></span>
+          <span className="panel-head-icon"><MessagesSquare aria-hidden="true" /></span>
           <div>
-            <h1 id="create-cv-title">Create your CV</h1>
-            <p>Fill in your details and Job Scout will build a CV for you — no PDF needed.</p>
+            <h1 id="cv-interview-title">Build your CV by chatting</h1>
+            <p>Answer a few questions in your own words and Genaie fills in your CV as you go.</p>
           </div>
         </div>
       </div>
-      <div className="chat-switch">
-        <span className="file-note">Prefer a conversation to filling forms?</span>
-        <a className="chat-switch-link" href={interviewPath}>
-          <MessagesSquare aria-hidden="true" />
-          Build it by chatting instead
-        </a>
-      </div>
-      <CreateCvForm
+      <CvInterview
         jobScoutPath={jobScoutPath}
-        defaultFullName={displayName}
-        defaultEmail={email}
+        formPath={formPath}
+        displayName={displayName}
+        email={email}
       />
     </section>
   );

@@ -23,7 +23,7 @@ import {
 import { FieldLabel } from "@/app/_components/field-label";
 import { StatusNotice, type StatusKind } from "@/app/_components/status-ui";
 
-type ExperienceRow = {
+export type ExperienceRow = {
   title: string;
   company: string;
   start: string;
@@ -31,7 +31,7 @@ type ExperienceRow = {
   description: string;
 };
 
-type EducationRow = {
+export type EducationRow = {
   degree: string;
   institution: string;
   start: string;
@@ -39,7 +39,7 @@ type EducationRow = {
   description: string;
 };
 
-type RefereeRow = {
+export type RefereeRow = {
   name: string;
   position: string;
   company: string;
@@ -63,18 +63,52 @@ type CreateCvFormProps = {
   jobScoutPath: string;
   defaultFullName?: string;
   defaultEmail?: string;
+  // Optional pre-filled values. The AI interview (see cv-interview.tsx) uses
+  // these to hand its extracted data to this form for review before saving.
+  // Each defaults to the form's normal empty state so the plain form path is
+  // unaffected.
+  initialPhone?: string;
+  initialLocation?: string;
+  initialSummary?: string;
+  initialSkills?: string;
+  initialExperience?: ExperienceRow[];
+  initialEducation?: EducationRow[];
+  initialReferees?: RefereeRow[];
 };
 
-export function CreateCvForm({ jobScoutPath, defaultFullName = "", defaultEmail = "" }: CreateCvFormProps) {
+// Fall back to a single blank row (the form's normal starting state) when the
+// caller supplies no rows, so "Remove" stays hidden until the user adds a second.
+function withFallback<T>(rows: T[] | undefined, empty: () => T): T[] {
+  return rows && rows.length > 0 ? rows : [empty()];
+}
+
+export function CreateCvForm({
+  jobScoutPath,
+  defaultFullName = "",
+  defaultEmail = "",
+  initialPhone = "",
+  initialLocation = "",
+  initialSummary = "",
+  initialSkills = "",
+  initialExperience,
+  initialEducation,
+  initialReferees,
+}: CreateCvFormProps) {
   const [fullName, setFullName] = useState(defaultFullName);
   const [email, setEmail] = useState(defaultEmail);
-  const [phone, setPhone] = useState("");
-  const [location, setLocation] = useState("");
-  const [summary, setSummary] = useState("");
-  const [experience, setExperience] = useState<ExperienceRow[]>([emptyExperience()]);
-  const [education, setEducation] = useState<EducationRow[]>([emptyEducation()]);
-  const [referees, setReferees] = useState<RefereeRow[]>([emptyReferee()]);
-  const [skills, setSkills] = useState("");
+  const [phone, setPhone] = useState(initialPhone);
+  const [location, setLocation] = useState(initialLocation);
+  const [summary, setSummary] = useState(initialSummary);
+  const [experience, setExperience] = useState<ExperienceRow[]>(
+    withFallback(initialExperience, emptyExperience),
+  );
+  const [education, setEducation] = useState<EducationRow[]>(
+    withFallback(initialEducation, emptyEducation),
+  );
+  const [referees, setReferees] = useState<RefereeRow[]>(
+    withFallback(initialReferees, emptyReferee),
+  );
+  const [skills, setSkills] = useState(initialSkills);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ kind: StatusKind; message: string } | null>(null);
 
