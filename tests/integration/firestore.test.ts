@@ -512,6 +512,7 @@ test("getJobScoutStatusForUser evaluates signed-in Job Scout readiness", opts, a
     db.collection("jobScoutProfiles").doc(uid).set({
       userId: uid,
       preferences: { targetRoles: ["Developer"], locations: ["Algiers, Algeria"], country: "dz" },
+      onboardingVersion: 2,
       setupStatus: "draft",
     }),
   ]);
@@ -527,8 +528,10 @@ test("getJobScoutStatusForUser evaluates signed-in Job Scout readiness", opts, a
   assert.equal(status.gmailConnected, true);
   assert.equal(status.profile.displayName, "Status User");
   assert.deepEqual(status.preferences.targetRoles, ["Developer"]);
+  // A CV is optional, so its absence no longer blocks readiness; the profile is
+  // held back only by its missing explicit confirmations.
   assert.equal(status.ready, false);
-  assert.ok(status.missingRequirements.includes("cv"));
+  assert.ok(!status.missingRequirements.includes("cv"));
   assert.ok(status.missingRequirements.includes("profile_confirmation"));
   assert.ok(status.missingRequirements.includes("safety_acknowledgement"));
 });
