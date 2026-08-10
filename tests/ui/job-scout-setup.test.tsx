@@ -89,6 +89,10 @@ describe("Job Scout setup automatic applications", () => {
     // Role, location and country all live on the first (visible) step.
     expect(screen.getByRole("textbox", { name: /target role/i })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: /target location/i })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: /country code/i })).toBeInTheDocument();
+    // Country is now a dropdown of country names; its value is the two-letter code.
+    const countrySelect = screen.getByRole("combobox", { name: /country/i }) as HTMLSelectElement;
+    expect(countrySelect).toBeInTheDocument();
+    expect(countrySelect.name).toBe("country");
+    expect(countrySelect.value).toBe("dz");
   });
 });

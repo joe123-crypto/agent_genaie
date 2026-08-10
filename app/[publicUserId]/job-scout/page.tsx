@@ -25,6 +25,7 @@ import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { FieldLabel } from "@/app/_components/field-label";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
+import { COUNTRIES } from "@/app/_data/countries";
 
 export const runtime = "nodejs";
 
@@ -107,6 +108,9 @@ export default async function JobScoutSetupPage({
   const targetRole = firstValue(jobScoutStatus?.preferences?.targetRoles);
   const targetLocation = firstValue(jobScoutStatus?.preferences?.locations);
   const country = jobScoutStatus?.preferences?.country ?? "zw";
+  const countryOptions = COUNTRIES.map((c) => (
+    <option key={c.code} value={c.code}>{c.name}</option>
+  ));
   const cvAvailable = !!jobScoutStatus?.cvAvailable;
   const cvUploaded = !!jobScoutStatus?.cvUploaded;
   const cvConversionStatus = String(jobScoutStatus?.cvConversionStatus || "missing");
@@ -306,7 +310,10 @@ if (wizard) {
   function fillReview() {
     if (reviewRole && roleInput) reviewRole.textContent = roleInput.value.trim() || "—";
     if (reviewLocation && locationInput) reviewLocation.textContent = locationInput.value.trim() || "—";
-    if (reviewCountry && countryInput) reviewCountry.textContent = (countryInput.value.trim() || "—").toUpperCase();
+    if (reviewCountry && countryInput) {
+      const selected = countryInput.selectedOptions && countryInput.selectedOptions[0];
+      reviewCountry.textContent = (selected ? selected.text : countryInput.value.trim().toUpperCase()) || "—";
+    }
   }
 
   function render() {
@@ -393,8 +400,10 @@ if (wizard) {
           </label>
         </div>
         <label>
-          <FieldLabel icon={Globe}>Country code</FieldLabel>
-          <input name="country" defaultValue={country} minLength={2} maxLength={2} pattern="[A-Za-z]{2}" required />
+          <FieldLabel icon={Globe}>Country</FieldLabel>
+          <select name="country" defaultValue={country} required>
+            {countryOptions}
+          </select>
         </label>
         <label className="check">
           <input name="profileConfirmed" type="checkbox" defaultChecked={!!jobScoutStatus?.profileConfirmed} required />
@@ -436,9 +445,11 @@ if (wizard) {
             <input name="targetLocation" defaultValue={targetLocation} maxLength={200} placeholder="e.g. Harare" />
           </label>
           <label>
-            <FieldLabel icon={Globe}>Country code</FieldLabel>
-            <input name="country" defaultValue={country} minLength={2} maxLength={2} pattern="[A-Za-z]{2}" placeholder="zw" />
-            <span className="file-note">Two-letter country code, e.g. zw for Zimbabwe.</span>
+            <FieldLabel icon={Globe}>Country</FieldLabel>
+            <select name="country" defaultValue={country} required>
+              {countryOptions}
+            </select>
+            <span className="file-note">Select the country where you want Job Scout to search.</span>
           </label>
         </section>
 
