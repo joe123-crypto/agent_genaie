@@ -464,10 +464,6 @@ if (wizard) {
             <input name="safetyAcknowledged" type="checkbox" defaultChecked={!!jobScoutStatus?.safetyAcknowledged} required />
             <span>I will not pay upfront, I understand job scams exist, and Genaie is not accountable if I am scammed.</span>
           </label>
-          <label className="check">
-            <input name="autoApply" type="checkbox" defaultChecked={autoApply} />
-            <span>Automatically submit suitable applications for me. Leave this off if you only want suggestions.</span>
-          </label>
         </section>
 
         <p className="file-note wizard-hint" data-step-hint hidden />
