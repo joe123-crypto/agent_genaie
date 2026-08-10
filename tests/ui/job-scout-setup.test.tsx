@@ -36,30 +36,6 @@ import JobScoutSetupPage from "@/app/[publicUserId]/job-scout/page";
 
 const publicUserId = "usr_1234567890abcdef";
 
-async function renderPage(configured: boolean, autoApply: boolean) {
-  mocks.getJobScoutStatusForUser.mockResolvedValue({
-    configured,
-    preferences: {
-      autoApply,
-      country: "dz",
-      locations: [],
-      targetRoles: [],
-    },
-  });
-  const page = await JobScoutSetupPage({
-    params: Promise.resolve({ publicUserId }),
-    searchParams: Promise.resolve({ onboarding: "1" }),
-  });
-  render(page);
-  // In onboarding mode the automatic-applications checkbox lives on the review
-  // step, which starts with the `hidden` attribute until the wizard script
-  // advances to it, so include hidden elements when querying.
-  return screen.getByRole("checkbox", {
-    name: /automatically submit suitable applications/i,
-    hidden: true,
-  });
-}
-
 describe("Job Scout setup automatic applications", () => {
   beforeEach(() => {
     mocks.verifyFirebaseSessionCookie.mockResolvedValue({
@@ -76,12 +52,23 @@ describe("Job Scout setup automatic applications", () => {
 
   afterEach(cleanup);
 
-  it("defaults automatic applications off for a new profile", async () => {
-    expect(await renderPage(false, true)).not.toBeChecked();
-  });
+  it("does not offer the automatic applications checkbox in onboarding", async () => {
+    mocks.getJobScoutStatusForUser.mockResolvedValue({
+      configured: false,
+      preferences: { autoApply: true, country: "dz", locations: [], targetRoles: [] },
+    });
+    const page = await JobScoutSetupPage({
+      params: Promise.resolve({ publicUserId }),
+      searchParams: Promise.resolve({ onboarding: "1" }),
+    });
+    render(page);
 
-  it("preserves the saved choice for an existing profile", async () => {
-    expect(await renderPage(true, true)).toBeChecked();
+    expect(
+      screen.queryByRole("checkbox", {
+        name: /automatically submit suitable applications/i,
+        hidden: true,
+      }),
+    ).toBeNull();
   });
 
   it("consolidates role, location and country and drops the CV screen and heading", async () => {
