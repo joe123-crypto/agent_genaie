@@ -47,6 +47,10 @@ export async function POST(req: NextRequest) {
 
     await updateSignedInDisplayName(user.uid, displayName);
 
+    // A CV is optional for Job Scout setup: users can finish with just their
+    // role/location/country and add a CV later via the Create CV flow or the
+    // dashboard. An uploaded PDF (or an existing CV on file) is still used when
+    // present, but its absence no longer blocks saving the profile.
     let cvFileRef = await getJobScoutCvFileRef(user.uid);
     const file = form.get("cv");
     if (file instanceof File && file.size > 0) {
@@ -58,7 +62,6 @@ export async function POST(req: NextRequest) {
       });
       cvFileRef = result.key;
     }
-    if (!cvFileRef) throw httpError(400, "CV file is required.");
 
     await saveJobScoutProfile({
       userId: user.uid,

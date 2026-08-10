@@ -187,35 +187,47 @@ export async function saveJobScoutProfile(
   if (!profileConfirmedAt) throw httpError(400, "Profile confirmation is required.");
   if (!safetyAcknowledgedAt) throw httpError(400, "Scam-safety acknowledgement is required.");
 
-  const suppliedCvRef = normalizeCvFileRef(
-    body.cvHtmlRef ?? body.cvFileRef ?? existing.cvHtmlRef ?? existing.cvFileRef ?? existing.cvPendingRef,
-  );
-  const canonicalKey = cvHtmlObjectKey(safeUid);
-  const pendingKey = cvPendingObjectKey(safeUid);
-  const existingRefs = new Set(
-    [existing.cvHtmlRef, existing.cvFileRef, existing.cvPendingRef]
-      .map((value) => String(value ?? "").trim())
-      .filter(Boolean),
-  );
-  if (
-    !isUserCvObjectRef(suppliedCvRef, safeUid)
-    || (suppliedCvRef !== canonicalKey && suppliedCvRef !== pendingKey && !existingRefs.has(suppliedCvRef))
-  ) {
-    throw httpError(400, "CV reference does not belong to this user.");
-  }
-  if (!await dependencies.objectExists(suppliedCvRef)) {
-    throw httpError(400, "The staged CV is not available.");
+  // A CV is optional: the profile can be saved with just role/location/country.
+  // When a CV ref is supplied (or already on file) we still validate and store
+  // it; when none exists we leave the CV fields empty and treat setup as ready.
+  const rawCvRef = String(
+    body.cvHtmlRef ?? body.cvFileRef ?? existing.cvHtmlRef ?? existing.cvFileRef ?? existing.cvPendingRef ?? "",
+  ).trim();
+  let cvHtmlRef: string | null = null;
+  let cvPendingRef: string | null = null;
+  let cvConversionStatus = "missing";
+
+  if (rawCvRef) {
+    const suppliedCvRef = normalizeCvFileRef(rawCvRef);
+    const canonicalKey = cvHtmlObjectKey(safeUid);
+    const pendingKey = cvPendingObjectKey(safeUid);
+    const existingRefs = new Set(
+      [existing.cvHtmlRef, existing.cvFileRef, existing.cvPendingRef]
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean),
+    );
+    if (
+      !isUserCvObjectRef(suppliedCvRef, safeUid)
+      || (suppliedCvRef !== canonicalKey && suppliedCvRef !== pendingKey && !existingRefs.has(suppliedCvRef))
+    ) {
+      throw httpError(400, "CV reference does not belong to this user.");
+    }
+    if (!await dependencies.objectExists(suppliedCvRef)) {
+      throw httpError(400, "The staged CV is not available.");
+    }
+
+    const suppliedCanonical = suppliedCvRef === canonicalKey;
+    const existingCanonical = String(existing.cvHtmlRef ?? "").trim() === canonicalKey
+      || String(existing.cvFileRef ?? "").trim() === canonicalKey;
+    cvHtmlRef = suppliedCanonical || existingCanonical ? canonicalKey : null;
+    cvPendingRef = cvHtmlRef ? null : suppliedCvRef;
+    cvConversionStatus = cvHtmlRef ? "ready" : "pending";
   }
 
-  const suppliedCanonical = suppliedCvRef === canonicalKey;
-  const existingCanonical = String(existing.cvHtmlRef ?? "").trim() === canonicalKey
-    || String(existing.cvFileRef ?? "").trim() === canonicalKey;
-  const cvHtmlRef = suppliedCanonical || existingCanonical ? canonicalKey : null;
-  const cvPendingRef = cvHtmlRef
-    ? null
-    : suppliedCvRef;
-  const cvConversionStatus = cvHtmlRef ? "ready" : "pending";
-  const setupStatus = cvHtmlRef ? "ready" : "pending";
+  // All non-CV requirements are enforced above (Gmail, sender email, roles,
+  // location, country, confirmations), so setup is ready unless a supplied CV
+  // is still converting.
+  const setupStatus = cvConversionStatus === "pending" ? "pending" : "ready";
 
   const profilePayload = {
     userId: safeUid,
@@ -270,7 +282,10 @@ export async function saveJobScoutProfile(
   return {
     ok: true,
     setupStatus,
-    ready: Boolean(cvHtmlRef),
+    // CV is optional, so readiness no longer hinges on a stored CV — the profile
+    // is ready once its other requirements are met and any supplied CV is done
+    // converting.
+    ready: setupStatus === "ready",
     cvFileRef: cvHtmlRef,
     cvHtmlRef,
     cvPendingRef,
