@@ -98,7 +98,6 @@ export default async function JobScoutSetupPage({
   if (!accountStatus?.plan) redirect(pricingGatePath(setupPath));
 
   const onboardingPath = `/${publicUserId}/onboarding`;
-  const createCvPath = `/${publicUserId}/create-cv${onboardingMode ? "?onboarding=1" : ""}`;
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? verified.email ?? "signed-in user";
   const displayName =
     jobScoutStatus?.profile?.displayName
@@ -111,7 +110,6 @@ export default async function JobScoutSetupPage({
   const cvAvailable = !!jobScoutStatus?.cvAvailable;
   const cvUploaded = !!jobScoutStatus?.cvUploaded;
   const cvConversionStatus = String(jobScoutStatus?.cvConversionStatus || "missing");
-  const hasServerCv = cvAvailable || cvUploaded;
   const ready = !!jobScoutStatus?.ready;
   const autoApply = !!jobScoutStatus?.configured
     && jobScoutStatus?.preferences?.autoApply === true;
@@ -280,55 +278,24 @@ if (wizard) {
   const total = steps.length;
   const backBtn = wizard.querySelector("[data-back]");
   const nextBtn = wizard.querySelector("[data-next]");
-  const progressBar = wizard.querySelector("[data-wizard-progress]");
-  const stepLabel = wizard.querySelector("[data-wizard-step-label]");
   const hint = wizard.querySelector("[data-step-hint]");
-  const cvChoiceButtons = Array.prototype.slice.call(wizard.querySelectorAll("[data-cv-choice]"));
-  const cvYesPanel = wizard.querySelector("[data-cv-yes]");
-  const cvNoPanel = wizard.querySelector("[data-cv-no]");
   const roleInput = wizard.querySelector("[name='targetRole']");
   const locationInput = wizard.querySelector("[name='targetLocation']");
   const countryInput = wizard.querySelector("[name='country']");
   const reviewRole = wizard.querySelector("[data-review-role]");
   const reviewLocation = wizard.querySelector("[data-review-location]");
   const reviewCountry = wizard.querySelector("[data-review-country]");
-  const serverCvReady = ${JSON.stringify(hasServerCv)};
   let current = 1;
 
-  function hasCv() {
-    return serverCvReady || Boolean(cvInput && cvInput.files && cvInput.files.length > 0);
-  }
   function setHint(text) {
     if (!hint) return;
     hint.textContent = text || "";
     hint.hidden = !text;
   }
-  function selectCvChoice(choice) {
-    cvChoiceButtons.forEach(function(btn) {
-      btn.setAttribute("aria-pressed", String(btn.dataset.cvChoice === choice));
-    });
-    if (cvYesPanel) cvYesPanel.hidden = choice !== "yes";
-    if (cvNoPanel) cvNoPanel.hidden = choice !== "no";
-    setHint("");
-  }
-  cvChoiceButtons.forEach(function(btn) {
-    btn.addEventListener("click", function() { selectCvChoice(btn.dataset.cvChoice); });
-  });
-  window.__jobScoutWizardCvChanged = function() {
-    if (cvInput && cvInput.files && cvInput.files.length > 0) selectCvChoice("yes");
-    setHint("");
-  };
 
   function validateStep(n) {
     if (n === 1) {
-      if (!hasCv()) { setHint("Upload your CV or create one to continue."); return false; }
-      return true;
-    }
-    if (n === 2) {
       if (!roleInput || !roleInput.value.trim()) { setHint("Enter the role you want Job Scout to target."); return false; }
-      return true;
-    }
-    if (n === 3) {
       if (!locationInput || !locationInput.value.trim()) { setHint("Enter a target location."); return false; }
       if (!countryInput || !/^[A-Za-z]{2}$/.test(countryInput.value.trim())) { setHint("Enter a two-letter country code (e.g. zw)."); return false; }
       return true;
@@ -344,8 +311,6 @@ if (wizard) {
 
   function render() {
     steps.forEach(function(step) { step.hidden = Number(step.dataset.step) !== current; });
-    if (progressBar) progressBar.style.width = ((current / total) * 100) + "%";
-    if (stepLabel) stepLabel.textContent = "Step " + current + " of " + total;
     if (backBtn) backBtn.hidden = current === 1;
     if (nextBtn) nextBtn.hidden = current === total;
     if (saveButton) saveButton.hidden = current !== total;
@@ -361,7 +326,6 @@ if (wizard) {
     if (current > 1) { current -= 1; render(); }
   });
 
-  if (serverCvReady) selectCvChoice("yes");
   render();
 }
 `;
@@ -456,78 +420,17 @@ if (wizard) {
   );
 
   const onboardingPanel = (
-    <section className="panel dashboard-form-panel" aria-labelledby="job-scout-title">
-      <div className="panel-head">
-        <div className="panel-head-title">
-          <span className="panel-head-icon"><Radar aria-hidden="true" /></span>
-          <div>
-            <h1 id="job-scout-title">Job Scout Setup</h1>
-            <p>Complete the profile Job Scout uses for applications.</p>
-          </div>
-        </div>
-      </div>
+    <section className="panel dashboard-form-panel" aria-label="Job Scout setup">
       <form className="form-stack" data-job-scout-form data-wizard>
-        <div className="wizard-progress">
-          <span className="wizard-step-label" data-wizard-step-label>Step 1 of 4</span>
-          <div className="progress-track" role="progressbar" aria-valuemin={1} aria-valuemax={4} aria-valuenow={1}>
-            <span className="progress-value" data-wizard-progress style={{ width: "25%" }} />
-          </div>
-        </div>
-
         <section className="wizard-step" data-step="1">
           <div className="wizard-step-heading">
-            <h2>Do you have a CV?</h2>
-            <p>Job Scout applies with your CV. Upload the one you have, or build a fresh one.</p>
-          </div>
-          <div className="wizard-choice" role="group" aria-label="Do you have a CV?">
-            <button type="button" className="button secondary" data-cv-choice="yes" aria-pressed="false">
-              <FileText aria-hidden="true" />
-              Yes, I have one
-            </button>
-            <button type="button" className="button secondary" data-cv-choice="no" aria-pressed="false">
-              <FilePlus2 aria-hidden="true" />
-              No, not yet
-            </button>
-          </div>
-          <div data-cv-yes hidden>
-            <label>
-              <FieldLabel icon={FileText}>Upload your CV (PDF)</FieldLabel>
-              <input data-cv name="cv" type="file" accept="application/pdf,.pdf" />
-              <span className="file-note">
-                {hasServerCv
-                  ? "A CV is already on file. Choose a new PDF only if you want to replace it."
-                  : "Upload a PDF CV, max 4 MB. Job Scout prepares it automatically for applications."}
-              </span>
-              <span className="file-note" data-cv-name>
-                {hasServerCv ? "Using your saved CV." : "No new file selected"}
-              </span>
-            </label>
-          </div>
-          <div data-cv-no hidden>
-            <p className="file-note">No PDF yet? Build one in a few minutes and come back here automatically.</p>
-            <a className="button secondary" href={createCvPath}>
-              <FilePlus2 aria-hidden="true" />
-              Create one
-            </a>
-          </div>
-        </section>
-
-        <section className="wizard-step" data-step="2" hidden>
-          <div className="wizard-step-heading">
-            <h2>What role are you targeting?</h2>
-            <p>Job Scout looks for openings that match this role.</p>
+            <h2>What are you looking for?</h2>
+            <p>Job Scout searches for openings that match these details.</p>
           </div>
           <label>
             <FieldLabel icon={Briefcase}>Target role</FieldLabel>
             <input name="targetRole" defaultValue={targetRole} maxLength={200} placeholder="e.g. Software Engineer" />
           </label>
-        </section>
-
-        <section className="wizard-step" data-step="3" hidden>
-          <div className="wizard-step-heading">
-            <h2>Where should we look?</h2>
-            <p>Set the location and country Job Scout searches in.</p>
-          </div>
           <label>
             <FieldLabel icon={MapPin}>Target location</FieldLabel>
             <input name="targetLocation" defaultValue={targetLocation} maxLength={200} placeholder="e.g. Harare" />
@@ -539,7 +442,7 @@ if (wizard) {
           </label>
         </section>
 
-        <section className="wizard-step" data-step="4" hidden>
+        <section className="wizard-step" data-step="2" hidden>
           <div className="wizard-step-heading">
             <h2>Review &amp; confirm</h2>
             <p>Check your details and agree to the terms before Job Scout starts.</p>

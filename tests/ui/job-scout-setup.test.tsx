@@ -83,4 +83,25 @@ describe("Job Scout setup automatic applications", () => {
   it("preserves the saved choice for an existing profile", async () => {
     expect(await renderPage(true, true)).toBeChecked();
   });
+
+  it("consolidates role, location and country and drops the CV screen and heading", async () => {
+    mocks.getJobScoutStatusForUser.mockResolvedValue({
+      configured: false,
+      preferences: { autoApply: false, country: "dz", locations: [], targetRoles: [] },
+    });
+    const page = await JobScoutSetupPage({
+      params: Promise.resolve({ publicUserId }),
+      searchParams: Promise.resolve({ onboarding: "1" }),
+    });
+    const { container } = render(page);
+
+    // No CV upload and no "Job Scout Setup" heading in the onboarding wizard.
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(screen.queryByRole("heading", { name: /job scout setup/i })).toBeNull();
+
+    // Role, location and country all live on the first (visible) step.
+    expect(screen.getByRole("textbox", { name: /target role/i })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /target location/i })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /country code/i })).toBeInTheDocument();
+  });
 });

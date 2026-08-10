@@ -68,4 +68,15 @@ describe("Job Scout profile route", () => {
       preferences: expect.objectContaining({ autoApply: true }),
     }));
   });
+
+  it("saves the profile even when no CV is on file or uploaded", async () => {
+    mocks.getJobScoutCvFileRef.mockResolvedValue(null);
+
+    const response = await POST(requestWithAutoApply(false) as never);
+
+    expect(response.status).toBe(200);
+    expect(mocks.saveJobScoutProfile).toHaveBeenCalledWith(expect.objectContaining({
+      preferences: expect.objectContaining({ targetRoles: ["Software Engineer"] }),
+    }));
+  });
 });

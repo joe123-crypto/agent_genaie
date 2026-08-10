@@ -46,10 +46,13 @@ export function evaluateJobScoutReadiness(input: JobScoutReadinessInput): JobSco
     && cvHtmlRef
     && input.cvAvailable,
   );
+  // A CV is no longer required to complete Job Scout setup: users can finish
+  // onboarding with just role/location/country and add a CV later via the
+  // Create CV flow or the dashboard. `hasReadyCv` is still computed for the
+  // pending/processing status display below.
   const structurallyComplete = Boolean(
     input.gmailConnected
     && hasSenderEmail
-    && hasReadyCv
     && hasRoles
     && hasLocations
     && hasCountry
@@ -62,8 +65,10 @@ export function evaluateJobScoutReadiness(input: JobScoutReadinessInput): JobSco
   const missingRequirements: string[] = [];
   if (!input.gmailConnected) missingRequirements.push("gmail_connection");
   if (!hasSenderEmail) missingRequirements.push("sender_email");
-  if (!hasReadyCv) {
-    missingRequirements.push(conversionStatus === "pending" ? "cv_conversion" : "cv");
+  // A CV pending conversion is still surfaced so the UI can show processing
+  // state, but a missing CV no longer blocks readiness.
+  if (!hasReadyCv && conversionStatus === "pending") {
+    missingRequirements.push("cv_conversion");
   }
   if (!hasRoles) missingRequirements.push("target_roles");
   if (!hasLocations || !hasCountry) missingRequirements.push("locations");

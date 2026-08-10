@@ -56,10 +56,17 @@ test("rejects missing or revoked Gmail readiness", () => {
   assert.ok(result.missingRequirements.includes("gmail_connection"));
 });
 
-test("requires the CV object, not only its reference", () => {
-  const result = evaluateJobScoutReadiness({ ...complete, cvAvailable: false });
-  assert.equal(result.ready, false);
-  assert.ok(result.missingRequirements.includes("cv"));
+test("treats a missing CV as optional for readiness", () => {
+  const result = evaluateJobScoutReadiness({
+    ...complete,
+    cvFileRef: null,
+    cvHtmlRef: null,
+    cvConversionStatus: "missing",
+    cvAvailable: false,
+  });
+  assert.equal(result.ready, true);
+  assert.ok(!result.missingRequirements.includes("cv"));
+  assert.ok(!result.missingRequirements.includes("cv_conversion"));
 });
 
 test("pauses readiness while a PDF awaits HTML conversion", () => {
