@@ -5,13 +5,20 @@ import type { LucideIcon } from "lucide-react";
 import {
   BriefcaseBusiness,
   ClipboardList,
+  FileUser,
   Home,
   Menu,
   Settings,
   X,
 } from "lucide-react";
 
-export type DashboardSection = "overview" | "job-scout" | "applications" | "webetu" | "settings";
+export type DashboardSection =
+  | "overview"
+  | "job-scout"
+  | "create-cv"
+  | "applications"
+  | "webetu"
+  | "settings";
 
 type DashboardNavMenuProps = {
   active: DashboardSection;
@@ -27,6 +34,7 @@ const navItems: ReadonlyArray<{
 }> = [
   { key: "overview", label: "Overview", href: "", icon: Home },
   { key: "job-scout", label: "Job Scout", href: "/job-scout", icon: BriefcaseBusiness },
+  { key: "create-cv", label: "Create CV", href: "/create-cv/interview", icon: FileUser },
   { key: "applications", label: "Applications", href: "/applications", icon: ClipboardList },
   { key: "settings", label: "Settings", href: "/settings", icon: Settings },
 ];

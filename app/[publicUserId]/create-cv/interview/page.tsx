@@ -103,7 +103,7 @@ export default async function CreateCvInterviewPage({
   }
 
   return (
-    <DashboardShell active="job-scout" publicUserId={publicUserId} userLabel={userLabel}>
+    <DashboardShell active="create-cv" publicUserId={publicUserId} userLabel={userLabel}>
       {panel}
     </DashboardShell>
   );
