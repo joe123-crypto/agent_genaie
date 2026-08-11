@@ -299,7 +299,7 @@ if (wizard) {
 
   function validateStep(n) {
     if (n === 1) {
-      if (!roleInput || !roleInput.value.trim()) { setHint("Enter the role you want Job Scout to target."); return false; }
+      if (!roleInput || !roleInput.value.trim()) { setHint("Enter a target role."); return false; }
       if (!locationInput || !locationInput.value.trim()) { setHint("Enter a target location."); return false; }
       if (!countryInput || !/^[A-Za-z]{2}$/.test(countryInput.value.trim())) { setHint("Enter a two-letter country code (e.g. zw)."); return false; }
       return true;
@@ -434,7 +434,7 @@ if (wizard) {
         <section className="wizard-step" data-step="1">
           <div className="wizard-step-heading">
             <h2>What are you looking for?</h2>
-            <p>Job Scout searches for openings that match these details.</p>
+            <p>Tell us the role and place you want.</p>
           </div>
           <label>
             <FieldLabel icon={Briefcase}>Target role</FieldLabel>
@@ -449,7 +449,6 @@ if (wizard) {
             <select name="country" defaultValue={country} required>
               {countryOptions}
             </select>
-            <span className="file-note">Select the country where you want Job Scout to search.</span>
           </label>
         </section>
 
