@@ -319,10 +319,9 @@ export function CvInterview({ jobScoutPath, formPath, displayName = "", email = 
   return (
     <div className="cv-interview">
       <div className="chat-switch">
-        <span className="file-note">Prefer to type it all at once?</span>
         <a className="chat-switch-link" href={formPath}>
           <SquarePen aria-hidden="true" />
-          Fill in the form instead
+          Use the form instead
         </a>
       </div>
 

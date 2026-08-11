@@ -76,10 +76,7 @@ export default async function CreateCvInterviewPage({
       <div className="panel-head">
         <div className="panel-head-title">
           <span className="panel-head-icon"><MessagesSquare aria-hidden="true" /></span>
-          <div>
-            <h1 id="cv-interview-title">Build your CV by chatting</h1>
-            <p>Answer a few questions in your own words and Genaie fills in your CV as you go.</p>
-          </div>
+          <h1 id="cv-interview-title">Build your CV by chatting</h1>
         </div>
       </div>
       <CvInterview
