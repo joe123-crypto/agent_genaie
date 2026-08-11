@@ -81,6 +81,10 @@ export const config = {
   r2Endpoint:
     process.env.R2_ENDPOINT?.trim().replace(/\/+$/, "") ||
     (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : ""),
+  // OpenRouter backs the AI-driven CV interview (see app/job-scout/cv/interview).
+  // When the key is absent the interview silently falls back to its scripted flow.
+  openRouterApiKey: process.env.OPENROUTER_API_KEY ?? "",
+  openRouterModel: process.env.OPENROUTER_MODEL ?? "deepseek/deepseek-v4-pro",
 };
 
 export function assertPublicBaseUrl() {

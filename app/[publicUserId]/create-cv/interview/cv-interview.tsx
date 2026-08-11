@@ -64,6 +64,41 @@ type InterviewData = {
   referees: RefereeRow[];
 };
 
+function s(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+// The first still-empty stage. Used to resume the scripted flow from where the AI
+// left off if it ever drops mid-session, instead of restarting at "name".
+function stageFromData(data: InterviewData): Stage {
+  if (!s(data.fullName).trim()) return "name";
+  if (!s(data.email).trim() && !s(data.phone).trim() && !s(data.location).trim()) return "contact";
+  if (!Array.isArray(data.experience) || data.experience.length === 0) return "experience";
+  if (!Array.isArray(data.education) || data.education.length === 0) return "education";
+  if (!s(data.skills).trim()) return "skills";
+  if (!s(data.summary).trim()) return "summary";
+  return "referees";
+}
+
+// Merge an AI-returned CV over the current one without losing earlier answers:
+// keep a new scalar only when non-empty, and a new list only when non-empty.
+function mergeInterviewData(current: InterviewData, incoming: InterviewData): InterviewData {
+  const pick = (next: unknown, prev: string) => (s(next).trim() ? s(next) : prev);
+  const list = <T,>(next: unknown, prev: T[]) =>
+    Array.isArray(next) && next.length ? (next as T[]) : prev;
+  return {
+    fullName: pick(incoming.fullName, current.fullName),
+    email: pick(incoming.email, current.email),
+    phone: pick(incoming.phone, current.phone),
+    location: pick(incoming.location, current.location),
+    summary: pick(incoming.summary, current.summary),
+    skills: pick(incoming.skills, current.skills),
+    experience: list(incoming.experience, current.experience),
+    education: list(incoming.education, current.education),
+    referees: list(incoming.referees, current.referees),
+  };
+}
+
 const DONE_RE = /^(done|finished|complete|that'?s all|no more|nothing else|that is all)\b/i;
 const SKIP_RE = /^(skip|none|no|nope|n\/?a|pass|not now)\b/i;
 const AFFIRM_RE = /^(yes|yep|yeah|correct|right|keep|ok|okay|sure|confirmed|y)\b/i;
@@ -120,6 +155,13 @@ export function CvInterview({ jobScoutPath, formPath, displayName = "", email = 
   const [stage, setStage] = useState<Stage>("name");
   const [phase, setPhase] = useState<"chat" | "review">("chat");
   const [draft, setDraft] = useState("");
+  // The interview is AI-driven by default. If a turn can't be served by the
+  // server (no OpenRouter key, or an API/parse failure), we flip aiAvailable off
+  // and finish the session on the scripted flow — the user shouldn't notice.
+  const [aiAvailable, setAiAvailable] = useState(true);
+  // True while an AI turn is in flight; drives the "typing…" bubble and disables
+  // the composer so answers can't race ahead of the assistant.
+  const [busy, setBusy] = useState(false);
   const [data, setData] = useState<InterviewData>({
     fullName: displayName,
     email,
@@ -146,12 +188,15 @@ export function CvInterview({ jobScoutPath, formPath, displayName = "", email = 
   const stepLabel =
     phase === "review"
       ? "Review your CV"
-      : `${STAGE_LABEL[stage]} · ${stepIndex + 1} of ${STAGE_ORDER.length}`;
+      : aiAvailable
+        ? "AI interview"
+        : `${STAGE_LABEL[stage]} · ${stepIndex + 1} of ${STAGE_ORDER.length}`;
 
-  function submitAnswer(rawText: string) {
-    const text = rawText.trim();
-    if (!text) return;
-
+  // The scripted state machine — the fallback that runs when the AI is
+  // unavailable. The user's message has already been appended by submitAnswer,
+  // so this only computes the assistant's reply, the updated data, and the next
+  // stage. (Unchanged from the original rule-based flow, minus the user append.)
+  function scriptedTurn(text: string, fromStage: Stage = stage) {
     const next: InterviewData = {
       ...data,
       experience: [...data.experience],
@@ -159,9 +204,9 @@ export function CvInterview({ jobScoutPath, formPath, displayName = "", email = 
       referees: [...data.referees],
     };
     const replies: string[] = [];
-    let nextStage: Stage = stage;
+    let nextStage: Stage = fromStage;
 
-    switch (stage) {
+    switch (fromStage) {
       case "name": {
         next.fullName = displayName && isAffirm(text) ? displayName : text;
         const first = next.fullName.split(/\s+/)[0];
@@ -252,13 +297,58 @@ export function CvInterview({ jobScoutPath, formPath, displayName = "", email = 
     setStage(nextStage);
     setMessages((prev) => [
       ...prev,
-      { role: "user", text },
       ...replies.map((reply) => ({ role: "assistant" as const, text: reply })),
     ]);
   }
 
+  // The primary path: append the user's turn, then let the AI drive. On any
+  // server failure, downgrade to the scripted flow for this turn and the rest of
+  // the session so the conversation continues seamlessly.
+  async function submitAnswer(rawText: string) {
+    const text = rawText.trim();
+    if (!text || busy) return;
+
+    const history: Message[] = [...messages, { role: "user", text }];
+    setMessages(history);
+
+    if (!aiAvailable) {
+      scriptedTurn(text);
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const response = await fetch("/job-scout/cv/interview", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history, data }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok && payload.ok) {
+        // Merge (don't replace) so a turn that omits an earlier field can't wipe it.
+        setData((prev) => mergeInterviewData(prev, payload.data as InterviewData));
+        setMessages((prev) => [...prev, { role: "assistant", text: String(payload.reply) }]);
+        if (payload.complete) setPhase("review");
+        return;
+      }
+    } catch {
+      // network error — fall through to the scripted flow
+    } finally {
+      setBusy(false);
+    }
+
+    // AI unavailable or errored: finish on the scripted machine, resuming from
+    // where the AI got to (not restarting at "name") so the handoff stays coherent.
+    setAiAvailable(false);
+    const seeded = stageFromData(data);
+    setStage(seeded);
+    scriptedTurn(text, seeded);
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     submitAnswer(draft);
     setDraft("");
     inputRef.current?.focus();
@@ -269,6 +359,8 @@ export function CvInterview({ jobScoutPath, formPath, displayName = "", email = 
     setStage("name");
     setPhase("chat");
     setDraft("");
+    setAiAvailable(true);
+    setBusy(false);
     setData({
       fullName: displayName,
       email,
@@ -347,6 +439,17 @@ export function CvInterview({ jobScoutPath, formPath, displayName = "", email = 
             </div>
           </div>
         ))}
+        {busy ? (
+          <div className="chat-turn" data-role="assistant">
+            <span className="chat-avatar" aria-hidden="true">
+              <Sparkles />
+            </span>
+            <div className="chat-main">
+              <div className="chat-name">Genaie</div>
+              <div className="chat-body chat-typing">Typing…</div>
+            </div>
+          </div>
+        ) : null}
         <div ref={threadEndRef} />
       </div>
 
@@ -360,8 +463,9 @@ export function CvInterview({ jobScoutPath, formPath, displayName = "", email = 
           maxLength={4000}
           autoComplete="off"
           aria-label="Your answer"
+          disabled={busy}
         />
-        <button type="submit" className="chat-send" disabled={!draft.trim()} aria-label="Send">
+        <button type="submit" className="chat-send" disabled={busy || !draft.trim()} aria-label="Send">
           <ArrowUp aria-hidden="true" />
         </button>
       </form>

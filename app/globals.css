@@ -3958,6 +3958,12 @@ button.landing-pricing-button {
   overflow-wrap: anywhere;
 }
 
+/* "Typing…" placeholder shown while an AI interview turn is in flight. */
+.chat-typing {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
 .chat-actions {
   display: flex;
   gap: 8px;
