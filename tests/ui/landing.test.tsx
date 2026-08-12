@@ -36,6 +36,9 @@ describe("Genaie Scout landing page", () => {
         name: /robot assistant holding documents and a suitcase/i,
       }),
     ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /create your cv/i }),
+    ).toHaveAttribute("href", "/login?next=/create-cv/interview");
   });
 
   it("includes the expected navigation and animation-ready artwork", () => {
