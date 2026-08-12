@@ -4,11 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import {
-  GoogleAuthProvider,
   getRedirectResult,
   sendSignInLinkToEmail,
-  signInWithPopup,
-  signInWithRedirect,
   type Auth,
   type User,
 } from "firebase/auth";
@@ -17,10 +14,8 @@ import {
   AUTH_NEXT_STORAGE_KEY,
   AUTH_REDIRECT_PENDING_STORAGE_KEY,
   authErrorDetails,
-  canUseRedirectSignIn,
   createAndVerifyServerSession,
   destinationForSession,
-  isMobileBrowser,
   safeNext,
 } from "@/src/auth/login";
 import {
@@ -53,34 +48,12 @@ function readStoredRedirectAttempt() {
   }
 }
 
-function storeRedirectAttempt(nextPath: string) {
-  try {
-    window.sessionStorage.setItem(AUTH_REDIRECT_PENDING_STORAGE_KEY, "1");
-    window.sessionStorage.setItem(AUTH_NEXT_STORAGE_KEY, nextPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function clearStoredRedirectAttempt() {
   try {
     window.sessionStorage.removeItem(AUTH_REDIRECT_PENDING_STORAGE_KEY);
     window.sessionStorage.removeItem(AUTH_NEXT_STORAGE_KEY);
   } catch {
     // Browsers that disable storage must still be able to use popup sign-in.
-  }
-}
-
-function redirectIsReady(settings: FirebaseClientSettings) {
-  try {
-    return canUseRedirectSignIn(
-      settings.firebase.authDomain,
-      window.location.host,
-      window.sessionStorage,
-    );
-  } catch {
-    return false;
   }
 }
 
@@ -93,7 +66,6 @@ export function LoginContent() {
     message: "Preparing secure sign-in...",
   });
   const [email, setEmail] = useState("");
-  const [forceRedirect, setForceRedirect] = useState(false);
   const completionRef = useRef<Promise<void> | null>(null);
   const actionInProgressRef = useRef(false);
   const searchParams = useSearchParams();
@@ -160,7 +132,6 @@ export function LoginContent() {
         if (redirectError) {
           clearStoredRedirectAttempt();
           const details = authErrorDetails(redirectError);
-          setForceRedirect(details.retryWithRedirect && redirectIsReady(loadedSettings));
           setPhase("error");
           setNotice({ kind: "error", message: details.message });
           return;
@@ -191,36 +162,32 @@ export function LoginContent() {
     };
   }, [completeSession]);
 
-  async function handleGoogleSignIn() {
-    if (!auth || busy || actionInProgressRef.current) return;
+  async function handleCombinedGoogleSignIn() {
+    if (busy || actionInProgressRef.current) return;
     actionInProgressRef.current = true;
-    setPhase("google");
-    setNotice({ kind: "loading", message: "Opening Google sign-in..." });
-
-    const provider = new GoogleAuthProvider();
-    provider.addScope("email");
-    const redirectReady = settings ? redirectIsReady(settings) : false;
-    const useRedirect = redirectReady && (forceRedirect || isMobileBrowser(window.navigator));
+    setPhase("redirecting");
+    setNotice({ kind: "loading", message: "Continuing to Google..." });
 
     try {
-      if (useRedirect) {
-        if (!storeRedirectAttempt(nextParam)) {
-          throw new Error("This browser cannot preserve Google redirect state. Please use the Google pop-up or a magic link.");
-        }
-        setPhase("redirecting");
-        setNotice({ kind: "loading", message: "Continuing to Google..." });
-        await signInWithRedirect(auth, provider);
-        return;
+      const response = await fetch("/auth/google/signin", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ next: nextParam }),
+      });
+      // A non-JSON body (an error page, an empty 500) must not surface a raw
+      // SyntaxError to the user in place of a readable message.
+      const body = await response.json().catch(() => ({}) as { url?: string; error?: string });
+      if (!response.ok || !body?.url) {
+        throw new Error(body?.error || "Could not start Google sign-in.");
       }
-      const result = await signInWithPopup(auth, provider);
-      await completeSession(result.user);
+      window.location.href = body.url;
     } catch (error) {
-      if (useRedirect) clearStoredRedirectAttempt();
-      const details = authErrorDetails(error);
-      setForceRedirect(details.retryWithRedirect && redirectReady);
       setPhase("error");
-      setNotice({ kind: "error", message: details.message });
-    } finally {
+      setNotice({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Could not start Google sign-in.",
+      });
       actionInProgressRef.current = false;
     }
   }
@@ -265,19 +232,20 @@ export function LoginContent() {
             {notice.message}
           </StatusNotice>
           <button
-            className="secondary full-width"
+            className="full-width"
             type="button"
             disabled={busy}
-            onClick={() => void handleGoogleSignIn()}
+            onClick={() => void handleCombinedGoogleSignIn()}
           >
             {phase === "success"
               ? "Signed in"
-              : phase === "google" || phase === "redirecting" || phase === "session"
-              ? "Signing in..."
-              : forceRedirect
-                ? "Continue with Google"
-                : "Sign in with Google"}
+              : phase === "redirecting"
+              ? "Continuing to Google..."
+              : "Continue with Google"}
           </button>
+          <p className="auth-footer">
+            Also lets Genaie send job applications from your Gmail. You can disconnect anytime.
+          </p>
           <div className="divider"><span>or</span></div>
           <form
             className="auth-form"

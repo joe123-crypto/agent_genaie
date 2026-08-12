@@ -2,7 +2,13 @@ import crypto from "node:crypto";
 import type { NextRequest } from "next/server";
 import { getFirebaseAdminAuth } from "@/src/firebase/admin";
 import { httpError } from "@/src/lib/utils";
-import { config, SESSION_COOKIE_NAME, SESSION_COOKIE_MAX_AGE_SECONDS } from "@/src/config";
+import {
+  config,
+  SESSION_COOKIE_NAME,
+  SESSION_COOKIE_MAX_AGE_SECONDS,
+  GOOGLE_SIGNIN_NONCE_COOKIE,
+  GOOGLE_SIGNIN_NONCE_MAX_AGE_SECONDS,
+} from "@/src/config";
 
 export function parseCookies(header: string | null | undefined) {
   const map: Record<string, string> = {};
@@ -18,7 +24,9 @@ export function parseCookies(header: string | null | undefined) {
 
 export function serializeCookie(name: string, value: string, options: any = {}) {
   const parts = [`${name}=${encodeURIComponent(value)}`];
-  if (options.maxAge) parts.push(`Max-Age=${options.maxAge}`);
+  // Max-Age=0 is the explicit "delete this cookie" instruction, so it must survive
+  // the falsy check that a plain truthiness test would swallow.
+  if (typeof options.maxAge === "number") parts.push(`Max-Age=${options.maxAge}`);
   if (options.path) parts.push(`Path=${options.path}`);
   if (options.httpOnly) parts.push("HttpOnly");
   if (options.secure) parts.push("Secure");
@@ -38,6 +46,29 @@ export function sessionCookieHeader(value: string) {
 
 export function clearSessionCookieHeader() {
   return serializeCookie(SESSION_COOKIE_NAME, "", {
+    maxAge: 0,
+    path: "/",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "Lax",
+  });
+}
+
+// SameSite=Lax is deliberate: the browser returns from Google via a top-level
+// navigation (so the cookie is sent), while cross-site POSTs to the finish/claim
+// endpoints never carry it.
+export function googleSigninNonceCookieHeader(value: string) {
+  return serializeCookie(GOOGLE_SIGNIN_NONCE_COOKIE, value, {
+    maxAge: GOOGLE_SIGNIN_NONCE_MAX_AGE_SECONDS,
+    path: "/",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "Lax",
+  });
+}
+
+export function clearGoogleSigninNonceCookieHeader() {
+  return serializeCookie(GOOGLE_SIGNIN_NONCE_COOKIE, "", {
     maxAge: 0,
     path: "/",
     httpOnly: true,

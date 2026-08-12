@@ -39,3 +39,10 @@ test("Google OAuth requests only Gmail send access", async () => {
   assert.equal(GOOGLE_OAUTH_SCOPES, GMAIL_SEND_SCOPE);
   assert.equal(GOOGLE_OAUTH_SCOPES.includes(CALENDAR_SCOPE), false);
 });
+
+test("the combined sign-in scope adds only non-sensitive identity scopes to Gmail send, never calendar", async () => {
+  const { CALENDAR_SCOPE, GMAIL_SEND_SCOPE, GOOGLE_SIGNIN_SCOPES } = await import("@/src/config");
+  const scopes = GOOGLE_SIGNIN_SCOPES.split(" ");
+  assert.deepEqual(new Set(scopes), new Set(["openid", "email", "profile", GMAIL_SEND_SCOPE]));
+  assert.equal(scopes.includes(CALENDAR_SCOPE), false);
+});

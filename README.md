@@ -12,8 +12,10 @@ Public routes:
 
 - `/` is the public Genaie Scout landing page and links visitors to sign in at `/login`.
 - `/about` explains why Genaie Scout exists and the developer's motivation for building it.
-- `/login` supports Firebase Google Sign-In and passwordless email-link sign-in.
+- `/login` supports Google sign-in (one consent that also grants Gmail send access) and passwordless email-link sign-in.
 - `/auth/firebase/finish` completes Firebase email-link sign-in and creates the server session cookie.
+- `POST /auth/google/signin` starts the combined sign-in + Gmail consent. Unauthenticated: no Firebase user exists yet.
+- `/auth/google/finish` trades Google's identity token for a Firebase session, then claims the Gmail tokens parked during the callback.
 - `/auth/session` creates or checks the Firebase-backed server session. `POST` also returns `publicUserId`, `isNewUser`, and `onboardingRequired`.
 - `/auth/session/logout` clears the server session cookie.
 - `/config/firebase` exposes the non-secret Firebase browser config.
@@ -31,7 +33,8 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `/{publicUserId}/onboarding` one-time signup onboarding controller; auto-selects Job Scout and forwards to the next required step. Job Scout signup requires connecting Gmail and then setting up the Job Scout profile (CV, target role, target location); WhatsApp linking is not part of onboarding and is offered later from the dashboard.
 - `/{publicUserId}/whatsapp` is the canonical WhatsApp linking page. Invite mode shows the originating masked number and confirmation; direct-web mode accepts a number and starts bot verification.
 - `/connect-gmail` and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
-- `POST /auth/google/start` starts Gmail OAuth for the signed-in Firebase user.
+- `POST /auth/google/start` starts Gmail-only OAuth for an already signed-in Firebase user (the Connect Gmail page).
+- `POST /auth/google/claim` persists the Gmail tokens parked by the combined sign-in flow, once the caller has a session.
 - `GET /auth/google/status` checks Gmail connection for the signed-in Firebase user.
 - `POST /auth/google/revoke` revokes and removes stored Gmail tokens for the signed-in Firebase user.
 - `GET /account/status` returns the signed-in user's WhatsApp link and service status.
@@ -173,7 +176,13 @@ Set **all** secrets to distinct random values. If any are omitted they fall back
 
 `OWNER_FIREBASE_UID` must be the Firebase UID of the fallback owner account whose Gmail is connected at `/{publicUserId}/connect-gmail`.
 
-After login the app sets an HttpOnly `agent_genaie_session` cookie that protects app pages server-side. Google Sign-In is only for app login; Gmail sending requires the separate `/{publicUserId}/connect-gmail` authorization.
+After login the app sets an HttpOnly `agent_genaie_session` cookie that protects app pages server-side.
+
+Signing in with Google grants Gmail send access in the same consent, using the same OAuth client (`GOOGLE_CLIENT_ID`) that is verified for `gmail.send`. Only the non-sensitive `openid email profile` scopes are added on top, so this needs no additional Google verification. Declining just the Gmail permission still signs the user in; Gmail can be connected later at `/{publicUserId}/connect-gmail`, which remains the path for email-link users and for reconnecting.
+
+Because that OAuth client mints the identity token, Firebase must trust it. If `GOOGLE_CLIENT_ID` belongs to a different GCP project than `FIREBASE_PROJECT_ID`, add it under Firebase Console → Authentication → Sign-in method → Google → "Whitelist client IDs from external projects"; otherwise sign-in fails with `auth/invalid-credential`. Existing users keep their Firebase UID either way, since Firebase keys a Google account by its stable `sub` rather than by the client that issued the token.
+
+The combined flow parks its Gmail tokens in the `pendingGmailTokens` collection between the OAuth callback and the authenticated claim. Records are encrypted, one-shot, and expire after 10 minutes, deleting themselves when read — enable a Firestore TTL policy on their `expiresAt` field to also reap grants that are abandoned before the claim.
 
 ## Run
 

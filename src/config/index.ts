@@ -6,6 +6,9 @@ const rootDir = process.cwd();
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 export const GOOGLE_OAUTH_SCOPES = GMAIL_SEND_SCOPE;
+// Non-sensitive scopes for sign-in; unlike gmail.send these never require OAuth verification.
+export const GOOGLE_IDENTITY_SCOPES = "openid email profile";
+export const GOOGLE_SIGNIN_SCOPES = `${GOOGLE_IDENTITY_SCOPES} ${GOOGLE_OAUTH_SCOPES}`;
 export const TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
@@ -15,6 +18,11 @@ export const DEFAULT_PUBLIC_BASE_URL = "http://localhost:3010";
 export const DEFAULT_PENDING_LINKS_CACHE_PATH = "/tmp/pending-links.json";
 export const SESSION_COOKIE_NAME = "agent_genaie_session";
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
+// Carries the pending-Gmail-token nonce across the combined sign-in + Gmail OAuth
+// return hop. It lives in a cookie rather than the URL so neither the nonce nor
+// anything keyed by it lands in browser history, Referer headers, or access logs.
+export const GOOGLE_SIGNIN_NONCE_COOKIE = "agent_genaie_google_signin";
+export const GOOGLE_SIGNIN_NONCE_MAX_AGE_SECONDS = 10 * 60;
 export const ACCOUNT_LINK_SETUP_TTL_SECONDS = 24 * 60 * 60;
 
 export function loadDotEnv() {
