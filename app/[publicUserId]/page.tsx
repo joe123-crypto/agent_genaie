@@ -40,7 +40,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ publ
   if (!routeUser) notFound();
 
   if (uid !== routeUser.id) {
-    await syncUserToCentralData(uid);
+    await syncUserToCentralData(uid).catch(() => null);
     const myStatus = await getSignedInAccountStatus(uid).catch(() => null);
     if (myStatus?.publicUserId) redirect(`/${myStatus.publicUserId}`);
     redirect("/login");
