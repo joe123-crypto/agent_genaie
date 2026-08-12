@@ -33,6 +33,19 @@ test("destinationForSession routes onboarding and user-scoped pages", () => {
   );
 });
 
+test("a WhatsApp-initiated sign-in returns to the user-scoped invite page", () => {
+  // After sign-in, a /whatsapp?token=... next-path must resolve to the
+  // publicUserId-scoped invite page (not stay generic), so the page can auto-link
+  // the number and redirect the user back into the WhatsApp chat. This holds even
+  // when onboarding is still required, so a first-time signup is not diverted to
+  // the onboarding hub before the invite is bound.
+  const session = { ok: true as const, publicUserId: "usr_abc", onboardingRequired: true, plan: "free" as const, planRequired: false };
+  assert.equal(
+    destinationForSession(session, "/whatsapp?token=invite-123"),
+    "/usr_abc/whatsapp?token=invite-123",
+  );
+});
+
 test("destinationForSession sends users without a plan to pricing first", () => {
   const session = {
     ok: true as const,
