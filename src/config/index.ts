@@ -18,6 +18,11 @@ export const DEFAULT_PUBLIC_BASE_URL = "http://localhost:3010";
 export const DEFAULT_PENDING_LINKS_CACHE_PATH = "/tmp/pending-links.json";
 export const SESSION_COOKIE_NAME = "agent_genaie_session";
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
+// Carries the pending-Gmail-token nonce across the combined sign-in + Gmail OAuth
+// return hop. It lives in a cookie rather than the URL so neither the nonce nor
+// anything keyed by it lands in browser history, Referer headers, or access logs.
+export const GOOGLE_SIGNIN_NONCE_COOKIE = "agent_genaie_google_signin";
+export const GOOGLE_SIGNIN_NONCE_MAX_AGE_SECONDS = 10 * 60;
 export const ACCOUNT_LINK_SETUP_TTL_SECONDS = 24 * 60 * 60;
 
 export function loadDotEnv() {
