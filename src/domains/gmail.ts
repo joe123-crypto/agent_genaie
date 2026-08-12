@@ -34,6 +34,7 @@ export async function exchangeCodeForTokens(code: string) {
     refresh_token: data.refresh_token,
     scope: data.scope,
     expiry_date: Date.now() + (data.expires_in ?? 3600) * 1000,
+    id_token: data.id_token,
   };
 }
 

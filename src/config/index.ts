@@ -6,6 +6,9 @@ const rootDir = process.cwd();
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 export const GOOGLE_OAUTH_SCOPES = GMAIL_SEND_SCOPE;
+// Non-sensitive scopes for sign-in; unlike gmail.send these never require OAuth verification.
+export const GOOGLE_IDENTITY_SCOPES = "openid email profile";
+export const GOOGLE_SIGNIN_SCOPES = `${GOOGLE_IDENTITY_SCOPES} ${GOOGLE_OAUTH_SCOPES}`;
 export const TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
