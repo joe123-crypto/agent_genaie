@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { redirect, notFound } from "next/navigation";
+import { redirect, notFound, unstable_rethrow } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Genaie | WhatsApp",
@@ -103,12 +103,32 @@ export default async function WhatsAppLinkingPage({
 
   const [accountStatus, invite, onboardingStatus] = await Promise.all([
     getSignedInAccountStatus(uid).catch(() => null),
-    tokenMode ? getAccountLinkInvite(token) : Promise.resolve(null),
+    // A token that no longer resolves to a usable invite (expired, already used,
+    // superseded, or consumed by an earlier request) throws inside
+    // getAccountLinkInvite. Swallow it here so a stale link never crashes the page;
+    // the recovery below turns a null invite into a friendly re-link screen.
+    tokenMode ? getAccountLinkInvite(token).catch(() => null) : Promise.resolve(null),
     onboardingMode ? getOnboardingStatus(uid).catch(() => null) : Promise.resolve(null),
   ]);
-  if (!tokenMode && !accountStatus?.plan) redirect(pricingGatePath(pagePath));
   const homePath = `/${publicUserId}`;
   const onboardingPath = `/${publicUserId}/onboarding`;
+
+  // Recover from an unusable token instead of showing a server-side exception. If
+  // the user is in fact already linked the invite simply completed, so send them
+  // on; otherwise fall back to the normal linking screen with an "expired" notice.
+  let inviteExpiredNotice: string | null = null;
+  if (tokenMode && !invite) {
+    const existingLink = await getWhatsAppLinkForUser(uid).catch(() => null);
+    if (existingLink?.whatsappLinked) {
+      redirect(onboardingMode ? onboardingPath : homePath);
+    }
+    inviteExpiredNotice = "This WhatsApp link has expired or was already used. Enter your number below to get a fresh link.";
+  }
+
+  // An unusable token behaves like the normal (non-token) linking screen: the
+  // confirm/bind flow and the token-mode rendering are gated on a usable invite.
+  const activeTokenMode = tokenMode && Boolean(invite);
+  if (!activeTokenMode && !accountStatus?.plan) redirect(pricingGatePath(pagePath));
 
   // Auto-link WhatsApp on first signup. When an invite token is present and the
   // signed-in user has no active phone link yet (or is re-confirming the same
@@ -118,7 +138,7 @@ export default async function WhatsAppLinkingPage({
   // the different-phone guard in bindAccountLinkInviteToUser rejects the auto-bind
   // and the "Confirm and link" (confirm-to-replace) form is rendered instead.
   let confirmReplacePrompt: string | null = null;
-  if (tokenMode && invite) {
+  if (invite) {
     const existingLink = await getWhatsAppLinkForUser(uid).catch(() => null);
     // getWhatsAppLinkForUser truncates the hash to 12 chars, so compare against
     // the invite's hash truncated the same way.
@@ -135,10 +155,28 @@ export default async function WhatsAppLinkingPage({
       // elsewhere), so this never silently binds a phone to the wrong account.
       // Sync first, mirroring the manual link-request route, so the central user
       // doc the bind transaction needs is guaranteed present.
-      await syncUserToCentralData(uid);
-      const bindResult = await bindAccountLinkInviteToUser(token, { uid });
-      const autoDestination = await resolveAutoLinkDestination(uid, bindResult);
-      redirect(autoDestination);
+      let autoDestination: string | null = null;
+      try {
+        await syncUserToCentralData(uid);
+        const bindResult = await bindAccountLinkInviteToUser(token, { uid });
+        autoDestination = await resolveAutoLinkDestination(uid, bindResult);
+      } catch (err) {
+        // Let Next's redirect()/notFound() control-flow errors propagate untouched.
+        unstable_rethrow(err);
+        // The invite was consumed/expired between the read above and the bind
+        // transaction, or the phone is already linked elsewhere. Recover instead of
+        // 500-ing: if the user ended up linked anyway, continue; otherwise surface
+        // the bind guidance and re-link screen.
+        const existing = await getWhatsAppLinkForUser(uid).catch(() => null);
+        if (existing?.whatsappLinked) {
+          autoDestination = onboardingMode ? onboardingPath : homePath;
+        } else {
+          confirmReplacePrompt = (err as Error)?.message
+            || "Could not link this WhatsApp number. Request a fresh link and try again.";
+        }
+      }
+      // Keep the redirect outside the try so a successful bind still navigates.
+      if (autoDestination) redirect(autoDestination);
     }
   }
 
@@ -166,25 +204,25 @@ export default async function WhatsAppLinkingPage({
   // A WhatsApp-initiated onboarding is satisfied once linking is done, so send the
   // user straight back to the WhatsApp chat instead of showing a manual "Continue"
   // button. whatsappBotLink only ever returns the trusted wa.me bot URL, so this
-  // cannot become an open redirect. Guarded by !tokenMode: the token/confirm flow
+  // cannot become an open redirect. Guarded by !activeTokenMode: the token/confirm flow
   // above owns its own navigation, so this never loops back into a bind.
-  if (chatHandoffUrl && !tokenMode) {
+  if (chatHandoffUrl && !activeTokenMode) {
     redirect(chatHandoffUrl);
   }
 
   // Once WhatsApp is linked the onboarding step is satisfied, so continue automatically
   // instead of offering a redundant manual button. The invite/token confirm flow and the
   // chat handoff have their own navigation and are excluded.
-  if (onboardingMode && !tokenMode && !chatHandoff && whatsappLinked) {
+  if (onboardingMode && !activeTokenMode && !chatHandoff && whatsappLinked) {
     redirect(onboardingPath);
   }
 
   // In token mode the auto-link above has already redirected first-time / same-number
   // users, so reaching render means the user has an active link on a different number
   // and must confirm replacing it.
-  const statusLabel = tokenMode ? "Confirm change" : whatsappLinked ? "Linked" : "Not linked";
-  const statusKind = tokenMode ? "pending" : whatsappLinked ? "complete" : "unlinked";
-  const statusCopy = tokenMode
+  const statusLabel = activeTokenMode ? "Confirm change" : whatsappLinked ? "Linked" : "Not linked";
+  const statusKind = activeTokenMode ? "pending" : whatsappLinked ? "complete" : "unlinked";
+  const statusCopy = activeTokenMode
     ? `This account is already linked to ${accountStatus?.maskedPhone || "another WhatsApp number"}. Revoke that link before linking this new number.`
     : whatsappLinked
       ? `This account is linked to ${accountStatus?.maskedPhone || "your WhatsApp number"}. Revoke it before linking a different number.`
@@ -363,11 +401,14 @@ if (switchButton) switchButton.addEventListener("click", async function() {
     <section className="panel panel-narrow dashboard-form-panel" aria-labelledby="whatsapp-title">
       <div className="panel-head">
         <div>
-          <h1 id="whatsapp-title">{tokenMode ? "Change WhatsApp number" : "WhatsApp Linking"}</h1>
-          <p>{tokenMode ? "Confirm replacing the WhatsApp number linked to this account." : "Link your WhatsApp number to this account."}</p>
+          <h1 id="whatsapp-title">{activeTokenMode ? "Change WhatsApp number" : "WhatsApp Linking"}</h1>
+          <p>{activeTokenMode ? "Confirm replacing the WhatsApp number linked to this account." : "Link your WhatsApp number to this account."}</p>
         </div>
         <StatusPill data-whatsapp-status kind={statusKind}>{statusLabel}</StatusPill>
       </div>
+      {inviteExpiredNotice ? (
+        <StatusNotice kind="warning" variant="block">{inviteExpiredNotice}</StatusNotice>
+      ) : null}
       <div className="meta">
         <span>Signed in as <strong>{email}</strong></span>
         <span data-whatsapp-copy>{statusCopy}</span>
@@ -375,7 +416,7 @@ if (switchButton) switchButton.addEventListener("click", async function() {
         {invite ? <span><strong>Purpose:</strong> {setupPurposeLabel(invite.purpose)}</span> : null}
       </div>
 
-      {tokenMode ? (
+      {activeTokenMode ? (
         <>
           {confirmReplacePrompt ? <p className="notice">{confirmReplacePrompt}</p> : null}
           <form className="actions actions-spaced" data-whatsapp-invite-form>
@@ -412,7 +453,7 @@ if (switchButton) switchButton.addEventListener("click", async function() {
 
   return (
     <>
-      {onboardingMode || tokenMode ? (
+      {onboardingMode || activeTokenMode ? (
         <main className="app-main app-main-center">
           <div className="shell shell-narrow">
             {onboardingMode
