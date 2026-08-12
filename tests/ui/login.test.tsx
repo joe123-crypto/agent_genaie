@@ -2,11 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 
+// The login page's Google button starts the combined sign-in + Gmail-connect
+// consent (POST /auth/google/signin -> navigate to the returned Google URL).
+// The Firebase popup/redirect SDK path is no longer offered as a button, but
+// the redirect-result recovery on mount is still exercised here: users who were
+// mid-flight on a previous redirect sign-in must still land correctly.
+
 const mocks = vi.hoisted(() => ({
   authStateReady: vi.fn<() => Promise<void>>(),
   getRedirectResult: vi.fn(),
-  signInWithPopup: vi.fn(),
-  signInWithRedirect: vi.fn(),
   sendSignInLinkToEmail: vi.fn(),
   loadFirebaseClientSettings: vi.fn(),
   initializeFirebaseClient: vi.fn(),
@@ -17,12 +21,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("firebase/auth", () => ({
-  GoogleAuthProvider: class {
-    addScope() {}
-  },
   getRedirectResult: mocks.getRedirectResult,
-  signInWithPopup: mocks.signInWithPopup,
-  signInWithRedirect: mocks.signInWithRedirect,
   sendSignInLinkToEmail: mocks.sendSignInLinkToEmail,
 }));
 
@@ -44,6 +43,8 @@ const settings = {
   emailLinkUrl: "https://app.example/auth/firebase/finish",
 };
 
+const CONSENT_URL = "https://accounts.google.com/o/oauth2/v2/auth?mock=1";
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;
@@ -54,21 +55,21 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function settingsForCurrentHost() {
-  return {
-    ...settings,
-    firebase: { ...settings.firebase, authDomain: window.location.host },
-  };
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 describe("Google login readiness and recovery", () => {
+  const originalLocation = window.location;
+  const INITIAL_HREF = originalLocation.href;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     vi.resetAllMocks();
     window.sessionStorage.clear();
-    Object.defineProperty(window.navigator, "userAgentData", {
-      configurable: true,
-      value: { mobile: false },
-    });
     mocks.loadFirebaseClientSettings.mockResolvedValue(settings);
     mocks.getRedirectResult.mockResolvedValue(null);
     mocks.authStateReady.mockResolvedValue(undefined);
@@ -76,11 +77,43 @@ describe("Google login readiness and recovery", () => {
       authStateReady: mocks.authStateReady,
       currentUser: null,
     });
+
+    // jsdom refuses real navigation, so the component's `window.location.href =`
+    // is captured on a stand-in instead. It has to stay a complete location-like
+    // object because next/image resolves the logo URL against it.
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      writable: true,
+      value: {
+        href: INITIAL_HREF,
+        origin: originalLocation.origin,
+        protocol: originalLocation.protocol,
+        host: originalLocation.host,
+        hostname: originalLocation.hostname,
+        port: originalLocation.port,
+        pathname: originalLocation.pathname,
+        search: "",
+        hash: "",
+        assign: vi.fn(),
+        replace: vi.fn(),
+        reload: vi.fn(),
+        toString: () => INITIAL_HREF,
+      },
+    });
+
+    fetchMock = vi.fn().mockResolvedValue(jsonResponse({ url: CONSENT_URL }));
+    vi.stubGlobal("fetch", fetchMock);
   });
 
   afterEach(() => {
     cleanup();
     window.sessionStorage.clear();
+    vi.unstubAllGlobals();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      writable: true,
+      value: originalLocation,
+    });
   });
 
   it("keeps the Google button disabled until Firebase is fully ready", async () => {
@@ -88,7 +121,7 @@ describe("Google login readiness and recovery", () => {
     mocks.authStateReady.mockReturnValue(ready.promise);
     render(createElement(LoginContent));
 
-    const button = screen.getByRole("button", { name: /sign in with google/i });
+    const button = screen.getByRole("button", { name: /continue with google/i });
     expect(button).toBeDisabled();
     await waitFor(() => expect(mocks.authStateReady).toHaveBeenCalledOnce());
     expect(button).toBeDisabled();
@@ -97,74 +130,63 @@ describe("Google login readiness and recovery", () => {
     await waitFor(() => expect(button).toBeEnabled());
   });
 
-  it("starts only one popup when the enabled button is clicked repeatedly", async () => {
-    const popup = deferred<never>();
-    mocks.signInWithPopup.mockReturnValue(popup.promise);
+  it("states that continuing also grants Gmail send access", async () => {
     render(createElement(LoginContent));
-    const button = await screen.findByRole("button", { name: /sign in with google/i });
-    await waitFor(() => expect(button).toBeEnabled());
-
-    fireEvent.click(button);
-    fireEvent.click(button);
-    expect(mocks.signInWithPopup).toHaveBeenCalledOnce();
+    await screen.findByRole("button", { name: /continue with google/i });
+    expect(screen.getByText(/send job applications from your gmail/i)).toBeVisible();
   });
 
-  it("keeps an unsafe popup retry on the popup flow", async () => {
-    mocks.signInWithPopup.mockRejectedValue({ code: "auth/popup-closed-by-user" });
+  it("sends the user to the Google consent URL returned by the server", async () => {
     render(createElement(LoginContent));
-    const button = await screen.findByRole("button", { name: /sign in with google/i });
+    const button = await screen.findByRole("button", { name: /continue with google/i });
     await waitFor(() => expect(button).toBeEnabled());
+
     fireEvent.click(button);
 
-    expect(await screen.findByText(/closed before it finished/i)).toBeVisible();
-    expect(screen.getByRole("button", { name: /sign in with google/i })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: /continue with google/i })).not.toBeInTheDocument();
-    expect(mocks.signInWithRedirect).not.toHaveBeenCalled();
+    await waitFor(() => expect(window.location.href).toBe(CONSENT_URL));
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/auth/google/signin");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual({ next: "/" });
   });
 
-  it("uses popup on mobile when the Firebase auth domain is cross-origin", async () => {
-    Object.defineProperty(window.navigator, "userAgentData", {
-      configurable: true,
-      value: { mobile: true },
-    });
-    mocks.signInWithPopup.mockReturnValue(new Promise(() => {}));
+  it("starts only one sign-in request when the button is clicked repeatedly", async () => {
+    fetchMock.mockReturnValue(new Promise(() => {}));
     render(createElement(LoginContent));
-    const button = await screen.findByRole("button", { name: /sign in with google/i });
+    const button = await screen.findByRole("button", { name: /continue with google/i });
     await waitFor(() => expect(button).toBeEnabled());
-    fireEvent.click(button);
 
-    await waitFor(() => expect(mocks.signInWithPopup).toHaveBeenCalledOnce());
-    expect(mocks.signInWithRedirect).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  it("uses redirect on mobile only when the auth domain matches the app host", async () => {
-    Object.defineProperty(window.navigator, "userAgentData", {
-      configurable: true,
-      value: { mobile: true },
-    });
-    mocks.loadFirebaseClientSettings.mockResolvedValue(settingsForCurrentHost());
-    mocks.signInWithRedirect.mockReturnValue(new Promise(() => {}));
+  it("surfaces the server's error when the sign-in start fails", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ error: "Missing required environment: GOOGLE_CLIENT_ID" }, 500));
     render(createElement(LoginContent));
-    const button = await screen.findByRole("button", { name: /sign in with google/i });
+    const button = await screen.findByRole("button", { name: /continue with google/i });
     await waitFor(() => expect(button).toBeEnabled());
+
     fireEvent.click(button);
 
-    await waitFor(() => expect(mocks.signInWithRedirect).toHaveBeenCalledOnce());
-    expect(mocks.signInWithPopup).not.toHaveBeenCalled();
-    expect(window.sessionStorage.getItem(AUTH_REDIRECT_PENDING_STORAGE_KEY)).toBe("1");
-    expect(window.sessionStorage.getItem(AUTH_NEXT_STORAGE_KEY)).toBe("/");
+    expect(await screen.findByText(/missing required environment/i)).toBeVisible();
+    expect(window.location.href).toBe(INITIAL_HREF);
   });
 
-  it("offers a same-tab retry after popup cancellation only when redirect is safe", async () => {
-    mocks.loadFirebaseClientSettings.mockResolvedValue(settingsForCurrentHost());
-    mocks.signInWithPopup.mockRejectedValue({ code: "auth/popup-closed-by-user" });
+  it("stays readable when the sign-in start returns a non-JSON body", async () => {
+    fetchMock.mockResolvedValue(
+      new Response("<html>502 Bad Gateway</html>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      }),
+    );
     render(createElement(LoginContent));
-    const button = await screen.findByRole("button", { name: /sign in with google/i });
+    const button = await screen.findByRole("button", { name: /continue with google/i });
     await waitFor(() => expect(button).toBeEnabled());
+
     fireEvent.click(button);
 
-    expect(await screen.findByText(/closed before it finished/i)).toBeVisible();
-    expect(screen.getByRole("button", { name: /continue with google/i })).toBeEnabled();
+    expect(await screen.findByText(/could not start google sign-in/i)).toBeVisible();
   });
 
   it("shows an error instead of silently resetting after an empty redirect return", async () => {
@@ -175,8 +197,6 @@ describe("Google login readiness and recovery", () => {
     expect(await screen.findByText(/google returned to the app, but sign-in could not be completed/i)).toBeVisible();
     expect(window.sessionStorage.getItem(AUTH_REDIRECT_PENDING_STORAGE_KEY)).toBeNull();
     expect(window.sessionStorage.getItem(AUTH_NEXT_STORAGE_KEY)).toBeNull();
-    expect(mocks.signInWithPopup).not.toHaveBeenCalled();
-    expect(mocks.signInWithRedirect).not.toHaveBeenCalled();
   });
 
   it("resumes server-session creation for a user returned by Firebase", async () => {
@@ -187,6 +207,6 @@ describe("Google login readiness and recovery", () => {
 
     expect(await screen.findByText(/finishing sign-in/i)).toBeVisible();
     expect(getIdToken).toHaveBeenCalledWith(true);
-    expect(screen.getByRole("button", { name: /signing in/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /continue with google/i })).toBeDisabled();
   });
 });
