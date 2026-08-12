@@ -11,15 +11,56 @@ import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 import {
   getAccountLinkInvite,
+  bindAccountLinkInviteToUser,
+  getWhatsAppLinkForUser,
   whatsappBotLink,
 } from "@/src/domains/account-link";
-import { getOnboardingStatus } from "@/src/domains/onboarding";
-import { maskPhone, setupPurposeLabel } from "@/src/lib/utils";
+import {
+  getOnboardingStatus,
+  completeOnboarding,
+  scopedPathForOnboardingStep,
+} from "@/src/domains/onboarding";
+import { scopedPathForAccountLink, whatsappPhoneHash, maskPhone, setupPurposeLabel } from "@/src/lib/utils";
+import { decideWhatsAppAutoLink } from "@/src/domains/whatsapp-autolink";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 
 export const runtime = "nodejs";
+
+// Resolves where an auto-linked user goes next, mirroring the manual link-request
+// route: onboarding-initiated invites advance to their next onboarding step, and a
+// chat-channel Job Scout onboarding lands on the wa.me handoff so the user is sent
+// straight back to the WhatsApp chat rather than shown a manual "Continue" button.
+async function resolveAutoLinkDestination(
+  uid: string,
+  bindResult: {
+    nextPath?: string;
+    publicUserId: string | null;
+    onboardingService: string | null;
+    onboardingChannel: string | null;
+  },
+): Promise<string> {
+  const publicUserId = bindResult.publicUserId;
+  if (!publicUserId) return "/";
+  if (bindResult.onboardingService && bindResult.onboardingChannel) {
+    let onboarding = await getOnboardingStatus(uid);
+    if (onboarding.nextStep === "dashboard" && onboarding.onboardingRequired) {
+      onboarding = await completeOnboarding(uid);
+    }
+    if (onboarding.nextStep === "whatsapp_chat") {
+      // Only redirect to the trusted wa.me bot link; if it is unavailable fall
+      // back to the same-origin onboarding step path.
+      try {
+        return whatsappBotLink("Continue my Job Scout setup in this chat.");
+      } catch {
+        // fall through to the scoped onboarding path below
+      }
+    }
+    return scopedPathForOnboardingStep(publicUserId, onboarding.nextStep);
+  }
+  return scopedPathForAccountLink(bindResult.nextPath || "/", publicUserId);
+}
 
 export default async function WhatsAppLinkingPage({
   params,
@@ -68,6 +109,39 @@ export default async function WhatsAppLinkingPage({
   if (!tokenMode && !accountStatus?.plan) redirect(pricingGatePath(pagePath));
   const homePath = `/${publicUserId}`;
   const onboardingPath = `/${publicUserId}/onboarding`;
+
+  // Auto-link WhatsApp on first signup. When an invite token is present and the
+  // signed-in user has no active phone link yet (or is re-confirming the same
+  // number), the number they messaged from is unambiguously theirs, so bind it
+  // server-side and continue instead of forcing a manual "Confirm and link"
+  // click. A returning user changing their number keeps an explicit confirm step:
+  // the different-phone guard in bindAccountLinkInviteToUser rejects the auto-bind
+  // and the "Confirm and link" (confirm-to-replace) form is rendered instead.
+  let confirmReplacePrompt: string | null = null;
+  if (tokenMode && invite) {
+    const existingLink = await getWhatsAppLinkForUser(uid).catch(() => null);
+    // getWhatsAppLinkForUser truncates the hash to 12 chars, so compare against
+    // the invite's hash truncated the same way.
+    const inviteHash = String(whatsappPhoneHash(invite.phone)).slice(0, 12);
+    const decision = decideWhatsAppAutoLink(existingLink, inviteHash);
+    if (decision.kind === "confirm-replace") {
+      // Surface the existing bind guard as a confirm-to-replace prompt rather than
+      // auto-binding a phone over the user's current link.
+      confirmReplacePrompt = "Revoke the current WhatsApp link before linking a new number.";
+    } else {
+      // No active link (first-time) or the same number is already linked: bind
+      // automatically. bindAccountLinkInviteToUser keeps every transaction guard
+      // (single-use invite, phone scoped to the invite, reject phone linked
+      // elsewhere), so this never silently binds a phone to the wrong account.
+      // Sync first, mirroring the manual link-request route, so the central user
+      // doc the bind transaction needs is guaranteed present.
+      await syncUserToCentralData(uid);
+      const bindResult = await bindAccountLinkInviteToUser(token, { uid });
+      const autoDestination = await resolveAutoLinkDestination(uid, bindResult);
+      redirect(autoDestination);
+    }
+  }
+
   // Job Scout onboarding is Connect Gmail then the Job Scout profile (the chat
   // handoff stands in for that second step); WhatsApp linking is no longer a step.
   const onboardingTotal = onboardingStatus?.selectedService === "webetu" ? 3 : 2;
@@ -89,6 +163,15 @@ export default async function WhatsAppLinkingPage({
     }
   }
 
+  // A WhatsApp-initiated onboarding is satisfied once linking is done, so send the
+  // user straight back to the WhatsApp chat instead of showing a manual "Continue"
+  // button. whatsappBotLink only ever returns the trusted wa.me bot URL, so this
+  // cannot become an open redirect. Guarded by !tokenMode: the token/confirm flow
+  // above owns its own navigation, so this never loops back into a bind.
+  if (chatHandoffUrl && !tokenMode) {
+    redirect(chatHandoffUrl);
+  }
+
   // Once WhatsApp is linked the onboarding step is satisfied, so continue automatically
   // instead of offering a redundant manual button. The invite/token confirm flow and the
   // chat handoff have their own navigation and are excluded.
@@ -96,10 +179,13 @@ export default async function WhatsAppLinkingPage({
     redirect(onboardingPath);
   }
 
-  const statusLabel = tokenMode ? "Ready to link" : whatsappLinked ? "Linked" : "Not linked";
+  // In token mode the auto-link above has already redirected first-time / same-number
+  // users, so reaching render means the user has an active link on a different number
+  // and must confirm replacing it.
+  const statusLabel = tokenMode ? "Confirm change" : whatsappLinked ? "Linked" : "Not linked";
   const statusKind = tokenMode ? "pending" : whatsappLinked ? "complete" : "unlinked";
   const statusCopy = tokenMode
-    ? "Confirm this link to use the WhatsApp chat shown below with your signed-in account."
+    ? `This account is already linked to ${accountStatus?.maskedPhone || "another WhatsApp number"}. Revoke that link before linking this new number.`
     : whatsappLinked
       ? `This account is linked to ${accountStatus?.maskedPhone || "your WhatsApp number"}. Revoke it before linking a different number.`
       : onboardingMode
@@ -277,8 +363,8 @@ if (switchButton) switchButton.addEventListener("click", async function() {
     <section className="panel panel-narrow dashboard-form-panel" aria-labelledby="whatsapp-title">
       <div className="panel-head">
         <div>
-          <h1 id="whatsapp-title">{tokenMode ? "Confirm WhatsApp link" : "WhatsApp Linking"}</h1>
-          <p>{tokenMode ? "Link the originating WhatsApp chat to this account." : "Link your WhatsApp number to this account."}</p>
+          <h1 id="whatsapp-title">{tokenMode ? "Change WhatsApp number" : "WhatsApp Linking"}</h1>
+          <p>{tokenMode ? "Confirm replacing the WhatsApp number linked to this account." : "Link your WhatsApp number to this account."}</p>
         </div>
         <StatusPill data-whatsapp-status kind={statusKind}>{statusLabel}</StatusPill>
       </div>
@@ -290,11 +376,14 @@ if (switchButton) switchButton.addEventListener("click", async function() {
       </div>
 
       {tokenMode ? (
-        <form className="actions actions-spaced" data-whatsapp-invite-form>
-          <button data-whatsapp-confirm type="submit">Confirm and link</button>
-          <button className="secondary" data-switch-account type="button">Use a different Google account</button>
-          <a className="button secondary" href={homePath}>Cancel</a>
-        </form>
+        <>
+          {confirmReplacePrompt ? <p className="notice">{confirmReplacePrompt}</p> : null}
+          <form className="actions actions-spaced" data-whatsapp-invite-form>
+            <button data-whatsapp-confirm type="submit">Confirm and change number</button>
+            <button className="secondary" data-switch-account type="button">Use a different Google account</button>
+            <a className="button secondary" href={homePath}>Cancel</a>
+          </form>
+        </>
       ) : (
         <>
           <form className="form-stack" data-whatsapp-form hidden={whatsappLinked}>
@@ -309,7 +398,6 @@ if (switchButton) switchButton.addEventListener("click", async function() {
           </form>
           <div className="actions">
             <button className="danger" data-whatsapp-revoke type="button" hidden={!whatsappLinked}>Revoke WhatsApp link</button>
-            {chatHandoffUrl ? <a className="button" href={chatHandoffUrl}>Continue in WhatsApp</a> : null}
             {onboardingMode && !chatHandoff ? (
               <button className="secondary" data-whatsapp-skip type="button">Skip for now</button>
             ) : null}
