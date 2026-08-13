@@ -182,6 +182,10 @@ export async function startOrResumeOnboardingForPhone(
       nextPath: "/onboarding",
       onboardingService: service,
       onboardingChannel: channel,
+      // Reuse an equivalent still-pending invite so repeat "start" calls return the
+      // same sign-in link the user already has; only supersede on a genuine change
+      // (e.g. a different service/channel).
+      reusePending: true,
       supersedePending: true,
     });
     return {

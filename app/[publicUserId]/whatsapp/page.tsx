@@ -11,6 +11,7 @@ import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 import {
   getAccountLinkInvite,
+  getSupersededInviteForRecovery,
   bindAccountLinkInviteToUser,
   getWhatsAppLinkForUser,
   whatsappBotLink,
@@ -121,6 +122,24 @@ export default async function WhatsAppLinkingPage({
     const existingLink = await getWhatsAppLinkForUser(uid).catch(() => null);
     if (existingLink?.whatsappLinked) {
       redirect(onboardingMode ? onboardingPath : homePath);
+    }
+    // Recover the common bot-churn case: the token points at a *superseded* invite
+    // (a newer invite for the same phone replaced it before the user finished
+    // signing in). The phone is unambiguously theirs, so bind it and continue
+    // rather than making them re-enter their number. bindAccountLinkInviteToUser
+    // keeps the "phone linked to another account" guard.
+    const superseded = await getSupersededInviteForRecovery(token).catch(() => null);
+    if (superseded) {
+      let recoveredDestination: string | null = null;
+      try {
+        await syncUserToCentralData(uid);
+        const bindResult = await bindAccountLinkInviteToUser(token, { uid }, { allowSuperseded: true });
+        recoveredDestination = await resolveAutoLinkDestination(uid, bindResult);
+      } catch (err) {
+        unstable_rethrow(err);
+        // Fall through to the recovery notice below.
+      }
+      if (recoveredDestination) redirect(recoveredDestination);
     }
     inviteExpiredNotice = "This WhatsApp link has expired or was already used. Enter your number below to get a fresh link.";
   }
