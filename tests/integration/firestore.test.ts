@@ -10,8 +10,10 @@ import {
   createAccountLinkInvite,
   createSignedInWhatsAppLinkRequest,
   getAccountLinkInvite,
+  getSupersededInviteForRecovery,
   revokeSignedInWhatsAppLink,
 } from "@/src/domains/account-link";
+import { FieldValue } from "firebase-admin/firestore";
 import {
   saveJobScoutProfile,
   getJobScoutStatusForUser,
@@ -20,7 +22,7 @@ import {
   listJobApplicationsByStatus,
   resetJobScoutProfileForPhone,
 } from "@/src/domains/job-scout";
-import { completeOnboarding } from "@/src/domains/onboarding";
+import { completeOnboarding, startOrResumeOnboardingForPhone } from "@/src/domains/onboarding";
 import { listDashboardTasksForUser, upsertDashboardTaskStatus } from "@/src/domains/dashboard";
 import { selectSignedInPlan, syncUserToCentralData } from "@/src/domains/users";
 
@@ -333,6 +335,80 @@ test("a newer onboarding channel supersedes the older pending invite", opts, asy
     (err: any) => err.status === 410,
   );
   assert.equal((await getAccountLinkInvite(second.token)).onboardingChannel, "web");
+});
+
+test("reusePending returns the same invite instead of minting a new token", opts, async () => {
+  const db = getFirestoreDb();
+  const phone = "+213600000121";
+  const body = {
+    phone,
+    purpose: "jobs",
+    nextPath: "/onboarding",
+    onboardingService: "jobs",
+    onboardingChannel: "chat",
+    reusePending: true,
+  };
+  const first = await createAccountLinkInvite(body);
+  const second = await createAccountLinkInvite(body);
+
+  assert.equal(second.token, first.token);
+  assert.equal(second.setupUrl, first.setupUrl);
+  const pending = (await db.collection("accountLinkInvites").where("phoneHash", "==", whatsappPhoneHash(phone)).get())
+    .docs.filter((d) => d.data().status === "pending");
+  assert.equal(pending.length, 1);
+  assert.equal((await getAccountLinkInvite(first.token)).id, first.token);
+});
+
+test("startOrResumeOnboardingForPhone reuses the same sign-in link across repeat calls", opts, async () => {
+  const phone = "+213600000122";
+  const a = await startOrResumeOnboardingForPhone(phone, "jobs", "chat");
+  const b = await startOrResumeOnboardingForPhone(phone, "jobs", "chat");
+  assert.equal(a.linked, false);
+  assert.equal(b.linked, false);
+  assert.equal((b as any).token, (a as any).token);
+  assert.equal((b as any).setupUrl, (a as any).setupUrl);
+});
+
+test("a superseded invite can be recovered by its own phone owner", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-superseded-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await db.collection("users").doc(uid).set({
+    profile: { email: `${uid}@example.com`, displayName: "Superseded" },
+    publicUserId: "usr_abcdefghijklmnop",
+  });
+
+  const phone = "+213600000123";
+  const invite = {
+    phone,
+    purpose: "jobs",
+    nextPath: "/onboarding",
+    onboardingService: "jobs",
+    onboardingChannel: "chat",
+  };
+  const first = await createAccountLinkInvite(invite);
+  await createAccountLinkInvite({ ...invite, supersedePending: true }); // first -> superseded
+
+  await assert.rejects(() => getAccountLinkInvite(first.token), (e: any) => e.status === 410);
+  assert.ok(await getSupersededInviteForRecovery(first.token));
+
+  const result = await bindAccountLinkInviteToUser(first.token, { uid }, { allowSuperseded: true });
+  assert.ok(result.publicUserId);
+  assert.equal((await db.collection("phoneLinksByUser").doc(uid).get()).data()?.status, "active");
+  // Once bound the invite is completed and no longer recoverable.
+  assert.equal(await getSupersededInviteForRecovery(first.token), null);
+});
+
+test("revoke clears a legacy phoneLinksByPhone record missing userId", opts, async () => {
+  const db = getFirestoreDb();
+  const uid = `it-legacy-revoke-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  const phone = "+213600000124";
+  const hash = whatsappPhoneHash(phone);
+  await db.collection("phoneLinksByUser").doc(uid).set({ userId: uid, phone, phoneHash: hash, status: "active", verifiedAt: FieldValue.serverTimestamp() });
+  await db.collection("phoneLinksByPhone").doc(hash).set({ phone, phoneHash: hash, status: "active" }); // legacy: no userId
+
+  await revokeSignedInWhatsAppLink(uid);
+  assert.equal((await db.collection("phoneLinksByPhone").doc(hash).get()).data()?.status, "revoked");
 });
 
 test("createSignedInWhatsAppLinkRequest creates a pending account invite and bot handoff", opts, async () => {

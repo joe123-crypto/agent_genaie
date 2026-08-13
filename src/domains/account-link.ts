@@ -54,6 +54,7 @@ export async function createAccountLinkInvite(body: any) {
     ? Math.max(60, Math.min(body.ttlSeconds, ACCOUNT_LINK_SETUP_TTL_SECONDS))
     : ACCOUNT_LINK_SETUP_TTL_SECONDS;
   const db = getFirestoreDb();
+  const phoneHash = whatsappPhoneHash(phone);
   const docRef = db.collection("accountLinkInvites").doc();
   const token = docRef.id;
   const hashedToken = accountLinkTokenHash(token);
@@ -64,9 +65,41 @@ export async function createAccountLinkInvite(body: any) {
   const onboardingChannel = body.onboardingChannel === "web" || body.onboardingChannel === "chat"
     ? body.onboardingChannel
     : null;
+
+  // Idempotent reuse: when an equivalent invite for this phone is still pending
+  // and unexpired, hand back the same token/link instead of minting a new one and
+  // superseding the old. This keeps the sign-in link the user already holds valid
+  // across repeated "start" calls (see startOrResumeOnboardingForPhone), which
+  // otherwise churns tokens and leaves the outstanding link "superseded".
+  if (body.reusePending === true) {
+    const existing = await db.collection("accountLinkInvites").where("phoneHash", "==", phoneHash).get();
+    const now = Date.now();
+    const reusable = existing.docs
+      .map((doc) => ({ id: doc.id, data: (doc.data() || {}) as Record<string, any> }))
+      .filter(({ data }) =>
+        data.status === "pending"
+        && data.purpose === purpose
+        && (data.onboardingService ?? null) === onboardingService
+        && (data.onboardingChannel ?? null) === onboardingChannel
+        && !(data.expiresAt?.toDate && data.expiresAt.toDate().getTime() < now))
+      .sort((a, b) => {
+        const at = a.data.createdAt?.toDate ? a.data.createdAt.toDate().getTime() : 0;
+        const bt = b.data.createdAt?.toDate ? b.data.createdAt.toDate().getTime() : 0;
+        return bt - at;
+      })[0];
+    if (reusable) {
+      const reusedExpiresAt = reusable.data.expiresAt?.toDate ? reusable.data.expiresAt.toDate() : expiresAt;
+      return {
+        token: reusable.id,
+        setupUrl: `${config.publicBaseUrl}/whatsapp?token=${reusable.id}`,
+        expiresAt: reusedExpiresAt.toISOString(),
+      };
+    }
+  }
+
   const record = {
     phone,
-    phoneHash: whatsappPhoneHash(phone),
+    phoneHash,
     tokenHash: hashedToken,
     purpose,
     nextPath,
@@ -101,7 +134,7 @@ export async function createAccountLinkInvite(body: any) {
   const setupUrl = `${config.publicBaseUrl}/whatsapp?token=${token}`;
   const cacheEntry = {
     phone,
-    phoneHash: whatsappPhoneHash(phone),
+    phoneHash,
     service: "account-link",
     purpose,
     nextPath,
@@ -114,25 +147,53 @@ export async function createAccountLinkInvite(body: any) {
   return { token, setupUrl, expiresAt: expiresAt.toISOString() };
 }
 
-export async function getAccountLinkInvite(token: string) {
+// Loads and validates an invite for binding. `allowSuperseded` additionally
+// accepts a "superseded" invite — used only by the linking page's recovery path,
+// where the bot churned tokens and the link the user holds points at a superseded
+// (but not expired/consumed) invite for their own phone.
+async function loadBindableInvite(token: string, allowSuperseded: boolean) {
   if (!token || typeof token !== "string") throw httpError(400, "Token is required.");
   const hashedToken = accountLinkTokenHash(token);
   const db = getFirestoreDb();
-  const docRef = db.collection("accountLinkInvites").doc(token);
-  const doc = await docRef.get();
+  const doc = await db.collection("accountLinkInvites").doc(token).get();
   if (!doc.exists) throw httpError(404, "Invalid or expired invite.");
   const data = doc.data()!;
   if (data.tokenHash !== hashedToken) throw httpError(404, "Invalid or expired invite.");
-  if (data.status !== "pending") throw httpError(410, "This invite has already been used.");
+  const okStatus = data.status === "pending" || (allowSuperseded && data.status === "superseded");
+  if (!okStatus) throw httpError(410, "This invite has already been used.");
   if (data.expiresAt?.toDate && data.expiresAt.toDate() < new Date()) {
     throw httpError(410, "This invite has expired.");
   }
   return { id: doc.id, ...data } as { id: string; [key: string]: any };
 }
 
-export async function bindAccountLinkInviteToUser(token: string, firebaseUser: any) {
+export async function getAccountLinkInvite(token: string) {
+  return loadBindableInvite(token, false);
+}
+
+// Returns the invite doc only when it is specifically "superseded" (and unexpired,
+// token valid) — the safe-to-recover case. Returns null for pending/completed/
+// expired/missing so callers never honor a genuinely consumed or stale token.
+export async function getSupersededInviteForRecovery(token: string) {
+  if (!token || typeof token !== "string") return null;
+  const hashedToken = accountLinkTokenHash(token);
+  const db = getFirestoreDb();
+  const doc = await db.collection("accountLinkInvites").doc(token).get();
+  if (!doc.exists) return null;
+  const data = doc.data()!;
+  if (data.tokenHash !== hashedToken || data.status !== "superseded") return null;
+  if (data.expiresAt?.toDate && data.expiresAt.toDate() < new Date()) return null;
+  return { id: doc.id, ...data } as { id: string; [key: string]: any };
+}
+
+export async function bindAccountLinkInviteToUser(
+  token: string,
+  firebaseUser: any,
+  options: { allowSuperseded?: boolean } = {},
+) {
+  const allowSuperseded = options.allowSuperseded === true;
   const safeUid = validateFirebaseUid(firebaseUser.uid);
-  const invite = await getAccountLinkInvite(token);
+  const invite = await loadBindableInvite(token, allowSuperseded);
   const db = getFirestoreDb();
   const centralRef = db.collection("users").doc(safeUid);
   const inviteRef = db.collection("accountLinkInvites").doc(invite.id);
@@ -143,7 +204,9 @@ export async function bindAccountLinkInviteToUser(token: string, firebaseUser: a
   let publicUserId: string | null = null;
   await db.runTransaction(async (t) => {
     const inviteCheck = await t.get(inviteRef);
-    if (!inviteCheck.exists || inviteCheck.data()?.status !== "pending") {
+    const status = inviteCheck.data()?.status;
+    const bindable = status === "pending" || (allowSuperseded && status === "superseded");
+    if (!inviteCheck.exists || !bindable) {
       throw httpError(410, "This invite has already been used.");
     }
     const userDoc = await t.get(centralRef);
@@ -399,9 +462,15 @@ export async function revokeSignedInWhatsAppLink(uid: string) {
     };
     t.set(byUserRef, update, { merge: true });
     if (!phoneHash) return;
-    if (byPhoneRef && byPhoneDoc?.exists && byPhoneDoc.data()?.userId === safeUid) t.set(byPhoneRef, update, { merge: true });
-    if (webetuRef && webetuDoc?.exists && webetuDoc.data()?.userId === safeUid) t.set(webetuRef, update, { merge: true });
-    if (jobScoutRef && jobScoutDoc?.exists && jobScoutDoc.data()?.userId === safeUid) t.set(jobScoutRef, update, { merge: true });
+    // We reached here from this user's own active byUser link for this phoneHash, so
+    // a phone-keyed record that is ours OR a legacy record with no owner recorded is
+    // safe to revoke. Only a record explicitly owned by a *different* user is left
+    // untouched — otherwise a legacy (ownerless) doc stays "active" and makes the
+    // phone look linked, blocking a clean re-link.
+    const ownedByUser = (docData: any) => !docData?.userId || docData.userId === safeUid;
+    if (byPhoneRef && byPhoneDoc?.exists && ownedByUser(byPhoneDoc.data())) t.set(byPhoneRef, update, { merge: true });
+    if (webetuRef && webetuDoc?.exists && ownedByUser(webetuDoc.data())) t.set(webetuRef, update, { merge: true });
+    if (jobScoutRef && jobScoutDoc?.exists && ownedByUser(jobScoutDoc.data())) t.set(jobScoutRef, update, { merge: true });
   });
   if (phoneHash) {
     try {
