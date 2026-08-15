@@ -31,6 +31,11 @@ test("destinationForSession routes onboarding and user-scoped pages", () => {
     destinationForSession({ ...session, onboardingRequired: true }, "/vault"),
     "/usr_123/onboarding",
   );
+  assert.equal(
+    destinationForSession(session, "/create-cv/interview"),
+    "/usr_123/create-cv/interview",
+  );
+  assert.equal(destinationForSession(session, "/create-cv"), "/usr_123/create-cv");
 });
 
 test("a WhatsApp-initiated sign-in returns to the user-scoped invite page", () => {
@@ -66,6 +71,10 @@ test("destinationForSession sends users without a plan to pricing first", () => 
   assert.equal(
     destinationForSession(session, "/whatsapp?token=abc"),
     "/usr_123/whatsapp?token=abc",
+  );
+  assert.equal(
+    destinationForSession({ ...session, onboardingRequired: false }, "/create-cv/interview"),
+    "/pricing?next=%2Fusr_123%2Fcreate-cv%2Finterview",
   );
 });
 

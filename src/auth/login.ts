@@ -64,6 +64,18 @@ export function safeNext(value: string | null | undefined) {
   return value && value.startsWith("/") && !value.startsWith("//") ? value : "/";
 }
 
+function scopedDestination(safePath: string, publicUserId: string): string | null {
+  const singleSegment = safePath.match(/^\/(connect-gmail|vault|whatsapp)\/?(\?.*)?$/);
+  if (singleSegment) {
+    return `/${publicUserId}/${singleSegment[1]}${singleSegment[2] || ""}`;
+  }
+  const createCvMatch = safePath.match(/^\/create-cv(\/interview)?\/?(\?.*)?$/);
+  if (createCvMatch) {
+    return `/${publicUserId}/create-cv${createCvMatch[1] || ""}${createCvMatch[2] || ""}`;
+  }
+  return null;
+}
+
 export function destinationForSession(session: SessionResult, nextPath: string) {
   const safePath = safeNext(nextPath);
   const publicUserId = session.publicUserId;
@@ -73,12 +85,10 @@ export function destinationForSession(session: SessionResult, nextPath: string) 
     return `/${publicUserId}/whatsapp${whatsappInviteMatch[1]}`;
   }
   if (session.planRequired && publicUserId) {
-    const genericScopedMatch = safePath.match(/^\/(connect-gmail|vault|whatsapp)\/?(\?.*)?$/);
+    const scoped = scopedDestination(safePath, publicUserId);
     const gatedNext = session.onboardingRequired || safePath === "/"
       ? `/${publicUserId}/onboarding`
-      : genericScopedMatch
-        ? `/${publicUserId}/${genericScopedMatch[1]}${genericScopedMatch[2] || ""}`
-        : safePath;
+      : scoped ?? safePath;
     return `/pricing?next=${encodeURIComponent(gatedNext)}`;
   }
   if (session.onboardingRequired && publicUserId) {
@@ -87,11 +97,7 @@ export function destinationForSession(session: SessionResult, nextPath: string) 
   if (!publicUserId) return safePath;
   if (safePath === "/") return `/${publicUserId}`;
 
-  const genericScopedMatch = safePath.match(/^\/(connect-gmail|vault|whatsapp)\/?(\?.*)?$/);
-  if (genericScopedMatch) {
-    return `/${publicUserId}/${genericScopedMatch[1]}${genericScopedMatch[2] || ""}`;
-  }
-  return safePath;
+  return scopedDestination(safePath, publicUserId) ?? safePath;
 }
 
 type NavigatorLike = {
