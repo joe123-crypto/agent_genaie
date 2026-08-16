@@ -72,9 +72,15 @@ test("destinationForSession sends users without a plan to pricing first", () => 
     destinationForSession(session, "/whatsapp?token=abc"),
     "/usr_123/whatsapp?token=abc",
   );
+  // The Create-CV flow collects the CV first and routes to pricing only at the
+  // end, so a planless user heading there is let straight in — not gated here.
   assert.equal(
     destinationForSession({ ...session, onboardingRequired: false }, "/create-cv/interview"),
-    "/pricing?next=%2Fusr_123%2Fcreate-cv%2Finterview",
+    "/usr_123/create-cv/interview",
+  );
+  assert.equal(
+    destinationForSession({ ...session, onboardingRequired: false }, "/create-cv"),
+    "/usr_123/create-cv",
   );
 });
 

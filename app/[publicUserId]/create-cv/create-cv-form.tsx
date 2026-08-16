@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlignLeft,
   Briefcase,
@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { FieldLabel } from "@/app/_components/field-label";
 import { StatusNotice, type StatusKind } from "@/app/_components/status-ui";
+import { clearCvDraft, loadCvDraft } from "./cv-draft";
 
 export type ExperienceRow = {
   title: string;
@@ -61,6 +62,14 @@ function emptyReferee(): RefereeRow {
 
 type CreateCvFormProps = {
   jobScoutPath: string;
+  // Where to go after the CV is saved. Points to pricing for a planless user
+  // (plan selection is the final step of the flow) or straight to Job Scout
+  // setup for someone who already has a plan. Defaults to jobScoutPath so the
+  // plain form path is unaffected.
+  successPath?: string;
+  // When true (the chat interview handoff), hydrate the form from the CV draft
+  // stashed in sessionStorage on mount, then clear it.
+  hydrateDraft?: boolean;
   defaultFullName?: string;
   defaultEmail?: string;
   // Optional pre-filled values. The AI interview (see cv-interview.tsx) uses
@@ -84,6 +93,8 @@ function withFallback<T>(rows: T[] | undefined, empty: () => T): T[] {
 
 export function CreateCvForm({
   jobScoutPath,
+  successPath = jobScoutPath,
+  hydrateDraft = false,
   defaultFullName = "",
   defaultEmail = "",
   initialPhone = "",
@@ -111,6 +122,27 @@ export function CreateCvForm({
   const [skills, setSkills] = useState(initialSkills);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ kind: StatusKind; message: string } | null>(null);
+
+  // Chat-interview handoff: the draft lives in sessionStorage (too large for the
+  // URL), so it can only be read on the client after mount. Read it once, fill
+  // every field, then clear it so a later direct visit starts from an empty form.
+  useEffect(() => {
+    if (!hydrateDraft) return;
+    const draft = loadCvDraft();
+    if (!draft) return;
+    if (draft.fullName) setFullName(draft.fullName);
+    if (draft.email) setEmail(draft.email);
+    setPhone(draft.phone);
+    setLocation(draft.location);
+    setSummary(draft.summary);
+    setSkills(draft.skills);
+    if (draft.experience.length) setExperience(draft.experience);
+    if (draft.education.length) setEducation(draft.education);
+    if (draft.referees.length) setReferees(draft.referees);
+    clearCvDraft();
+    // Run once on mount; the draft is a one-shot handoff.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function updateExperience(index: number, patch: Partial<ExperienceRow>) {
     setExperience((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -154,8 +186,8 @@ export function CreateCvForm({
       if (!response.ok) {
         throw new Error(payload.error || `Request failed with ${response.status}`);
       }
-      setNotice({ kind: "complete", message: "CV created. Returning to Job Scout setup..." });
-      window.location.assign(jobScoutPath);
+      setNotice({ kind: "complete", message: "CV created. Continuing..." });
+      window.location.assign(successPath);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not create your CV.";
       setNotice({ kind: "error", message });

@@ -22,11 +22,14 @@ export default async function CreateCvPage({
   searchParams,
 }: {
   params: Promise<{ publicUserId: string }>;
-  searchParams: Promise<{ onboarding?: string }>;
+  searchParams: Promise<{ onboarding?: string; from?: string }>;
 }) {
   const { publicUserId } = await params;
   const query = await searchParams;
   const onboardingMode = query.onboarding === "1" || query.onboarding === "true";
+  // Set by the chat interview handoff: only then does the form hydrate the
+  // draft it stashed in sessionStorage, so a direct visit shows an empty form.
+  const fromInterview = query.from === "interview";
 
   if (!/^usr_[A-Za-z0-9_-]{16}$/.test(publicUserId)) notFound();
 
@@ -58,8 +61,6 @@ export default async function CreateCvPage({
     getSignedInAccountStatus(uid).catch(() => null),
     getJobScoutStatusForUser(uid).catch(() => null),
   ]);
-  if (!accountStatus?.plan) redirect(pricingGatePath(pagePath));
-
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? verified.email ?? "";
   const displayName =
     jobScoutStatus?.profile?.displayName
@@ -70,6 +71,10 @@ export default async function CreateCvPage({
   const suffix = onboardingMode ? "?onboarding=1" : "";
   const jobScoutPath = `/${publicUserId}/job-scout${suffix}`;
   const interviewPath = `/${publicUserId}/create-cv/interview${suffix}`;
+  // Building the CV no longer requires a plan. Instead, the plan gate moves to
+  // the end of the flow: a planless user is sent to pricing after the CV is
+  // created, while someone who already has a plan continues to Job Scout setup.
+  const successPath = accountStatus?.plan ? jobScoutPath : pricingGatePath(jobScoutPath);
 
   const panel = (
     <section className="panel dashboard-form-panel" aria-labelledby="create-cv-title">
@@ -91,6 +96,8 @@ export default async function CreateCvPage({
       </div>
       <CreateCvForm
         jobScoutPath={jobScoutPath}
+        successPath={successPath}
+        hydrateDraft={fromInterview}
         defaultFullName={displayName}
         defaultEmail={email}
       />
