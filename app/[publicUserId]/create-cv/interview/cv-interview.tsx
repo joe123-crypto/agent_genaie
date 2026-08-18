@@ -10,6 +10,7 @@ import type {
 import { saveCvDraft, type CvDraft } from "../cv-draft";
 import {
   extractContact,
+  extractDateRange,
   extractEducation,
   extractExperience,
   extractReferee,
@@ -19,38 +20,67 @@ import {
 type Role = "assistant" | "user";
 type Message = { role: Role; text: string };
 
-// Ordered interview stages. The looping stages (experience/education/referees)
-// stay on the same stage until the user says "done"/"skip".
+// Ordered interview stages. Each section is split into short sub-stages so the
+// scripted fallback never asks for more than two fields in one turn (mirroring the
+// AI prompt). The looping stages stay on the same section until the user says
+// "done"/"skip"; sub-stages (…_dates, referee_*) collect the rest of one record.
 type Stage =
   | "name"
   | "contact"
+  | "city"
   | "experience"
+  | "experience_dates"
   | "education"
+  | "education_dates"
   | "skills"
   | "summary"
   | "referees"
+  | "referee_company"
+  | "referee_contact"
   | "review";
 
 const STAGE_ORDER: Stage[] = [
   "name",
   "contact",
+  "city",
   "experience",
+  "experience_dates",
   "education",
+  "education_dates",
   "skills",
   "summary",
   "referees",
+  "referee_company",
+  "referee_contact",
 ];
 
+// Sub-stages share their section's label so the progress chip reads by section.
 const STAGE_LABEL: Record<Stage, string> = {
   name: "Your details",
   contact: "Your details",
+  city: "Your details",
   experience: "Work experience",
+  experience_dates: "Work experience",
   education: "Education",
+  education_dates: "Education",
   skills: "Skills",
   summary: "Summary",
   referees: "Referees",
+  referee_company: "Referees",
+  referee_contact: "Referees",
   review: "Review",
 };
+
+// Section-entry prompts pushed from more than one place, kept as constants so the
+// wording stays in one spot.
+const EXPERIENCE_PROMPT =
+  'Now your work experience. What was your most recent job title, and which company? For example "Software Engineer at ABC". Type "skip" to add these later.';
+const EDUCATION_PROMPT =
+  'Now education or certifications. What\'s the qualification, and where did you get it? For example "BSc Computer Science at Trinity College". Type "skip" if you have none.';
+const SKILLS_PROMPT =
+  'What are your key skills? List a few separated by commas — for example "JavaScript, React, project management". Type "skip" to let Job Scout pick skills per job.';
+const REVIEW_PROMPT =
+  'Perfect — I\'ve filled in your CV from our chat. Review and tweak anything below, then hit "Create CV".';
 
 // The interview collects exactly the shape the /create-cv form consumes; it is
 // handed over verbatim through sessionStorage (see ../cv-draft).
@@ -213,7 +243,7 @@ export function CvInterview({ formPath, displayName = "", email = "" }: CvInterv
         next.fullName = displayName && isAffirm(text) ? displayName : text;
         const first = next.fullName.split(/\s+/)[0];
         replies.push(
-          `Thanks${first ? `, ${first}` : ""}! What are your contact details? Share your email, phone number, and city in one message — or type "skip".`,
+          `Thanks${first ? `, ${first}` : ""}! What's your email address and phone number?`,
         );
         nextStage = "contact";
         break;
@@ -225,36 +255,76 @@ export function CvInterview({ formPath, displayName = "", email = "" }: CvInterv
           if (c.phone) next.phone = c.phone;
           if (c.location) next.location = c.location;
         }
-        replies.push(
-          `Now your work experience. Tell me about a recent role in your own words — where you worked, your job title, and roughly when. For example: "I worked at ABC for 2 years as a frontend developer." Type "skip" if you'd rather add these later.`,
-        );
+        // Skipped, or the user already volunteered a city — move on; otherwise
+        // ask for the city on its own (one field per turn).
+        if (isSkip(text) || next.location.trim()) {
+          replies.push(EXPERIENCE_PROMPT);
+          nextStage = "experience";
+        } else {
+          replies.push(`And which city are you based in?`);
+          nextStage = "city";
+        }
+        break;
+      }
+      case "city": {
+        if (!isSkip(text)) {
+          // Bare city answers ("Bindura") don't match the contact location
+          // pattern, so fall back to the raw answer.
+          const c = extractContact(text);
+          next.location = c.location || text.trim();
+        }
+        replies.push(EXPERIENCE_PROMPT);
         nextStage = "experience";
         break;
       }
       case "experience": {
         if (isDone(text) || isSkip(text)) {
-          replies.push(
-            `Great. Now education or certifications. Tell me about one — for example "BSc Computer Science at Trinity College, 2015-2018". Type "skip" if you have none.`,
-          );
+          replies.push(EDUCATION_PROMPT);
           nextStage = "education";
         } else {
+          // Collect title & company now; dates come next. Drop the free-form
+          // description so the raw "title at company" line isn't dumped into it.
           const row = extractExperience(text);
-          next.experience.push(row);
-          replies.push(`Got it — ${experienceEcho(row)}. Tell me about another role, or type "done" to move on.`);
+          next.experience.push({ title: row.title, company: row.company, start: "", end: "", description: "" });
+          replies.push(
+            `Got it — ${experienceEcho(next.experience[next.experience.length - 1])}. When did you start and finish there? For example "Jan 2020 to 2022".`,
+          );
+          nextStage = "experience_dates";
         }
+        break;
+      }
+      case "experience_dates": {
+        const rows = next.experience;
+        if (rows.length) {
+          const { start, end } = extractDateRange(text);
+          rows[rows.length - 1] = { ...rows[rows.length - 1], start, end };
+        }
+        replies.push(`Any other roles? Give the job title and company, or type "done".`);
+        nextStage = "experience";
         break;
       }
       case "education": {
         if (isDone(text) || isSkip(text)) {
-          replies.push(
-            `What are your key skills? List a few separated by commas — for example "JavaScript, React, project management". Type "skip" to let Job Scout pick skills per job.`,
-          );
+          replies.push(SKILLS_PROMPT);
           nextStage = "skills";
         } else {
           const row = extractEducation(text);
-          next.education.push(row);
-          replies.push(`Added — ${educationEcho(row)}. Add another qualification, or type "done".`);
+          next.education.push({ degree: row.degree, institution: row.institution, start: "", end: "", description: "" });
+          replies.push(
+            `Added — ${educationEcho(next.education[next.education.length - 1])}. What were the dates? For example "2015 to 2018".`,
+          );
+          nextStage = "education_dates";
         }
+        break;
+      }
+      case "education_dates": {
+        const rows = next.education;
+        if (rows.length) {
+          const { start, end } = extractDateRange(text);
+          rows[rows.length - 1] = { ...rows[rows.length - 1], start, end };
+        }
+        replies.push(`Any other qualifications? Give the qualification and institution, or type "done".`);
+        nextStage = "education";
         break;
       }
       case "skills": {
@@ -272,23 +342,43 @@ export function CvInterview({ formPath, displayName = "", email = "" }: CvInterv
           next.summary = text;
         }
         replies.push(
-          `Almost done. Any referees? Share one per message — name, their role, company, email, and phone — or type "skip".`,
+          `Almost done. Any referees? What's the first referee's name and their job title? Or type "skip".`,
         );
         nextStage = "referees";
         break;
       }
       case "referees": {
         if (isDone(text) || isSkip(text)) {
-          replies.push(
-            `Perfect — I've filled in your CV from our chat. Review and tweak anything below, then hit "Create CV".`,
-          );
+          replies.push(REVIEW_PROMPT);
           nextStage = "review";
           setPhase("review");
         } else {
           const row = extractReferee(text);
-          next.referees.push(row);
-          replies.push(`Noted — ${row.name || "that referee"}. Add another referee, or type "done".`);
+          next.referees.push({ name: row.name || text.trim(), position: row.position, company: "", email: "", phone: "" });
+          replies.push(
+            `Noted — ${next.referees[next.referees.length - 1].name || "that referee"}. Which company or organisation are they at?`,
+          );
+          nextStage = "referee_company";
         }
+        break;
+      }
+      case "referee_company": {
+        const rows = next.referees;
+        if (rows.length && !isSkip(text)) {
+          rows[rows.length - 1] = { ...rows[rows.length - 1], company: text.trim() };
+        }
+        replies.push(`And their email and phone number?`);
+        nextStage = "referee_contact";
+        break;
+      }
+      case "referee_contact": {
+        const rows = next.referees;
+        if (rows.length && !isSkip(text)) {
+          const c = extractContact(text);
+          rows[rows.length - 1] = { ...rows[rows.length - 1], email: c.email, phone: c.phone };
+        }
+        replies.push(`Any other referees? Give their name and job title, or type "done".`);
+        nextStage = "referees";
         break;
       }
       default:
