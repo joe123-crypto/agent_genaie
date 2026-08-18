@@ -22,17 +22,26 @@ export default async function CreateCvPage({
   searchParams,
 }: {
   params: Promise<{ publicUserId: string }>;
-  searchParams: Promise<{ onboarding?: string; from?: string; save?: string }>;
+  // A repeated query key (e.g. ?from=interview&from=interview) arrives as an
+  // array, so accept string | string[] and read the first value below.
+  searchParams: Promise<{
+    onboarding?: string | string[];
+    from?: string | string[];
+    save?: string | string[];
+  }>;
 }) {
   const { publicUserId } = await params;
   const query = await searchParams;
-  const onboardingMode = query.onboarding === "1" || query.onboarding === "true";
+  const firstParam = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value;
+  const onboarding = firstParam(query.onboarding);
+  const onboardingMode = onboarding === "1" || onboarding === "true";
   // Set by the chat interview handoff: only then does the form hydrate the
   // draft it stashed in sessionStorage, so a direct visit shows an empty form.
-  const fromInterview = query.from === "interview";
+  const fromInterview = firstParam(query.from) === "interview";
   // Set when arriving here post-login from the public deferred-save flow: the
   // hydrated draft is submitted automatically so the user needn't click again.
-  const autoSave = query.save === "1";
+  const autoSave = firstParam(query.save) === "1";
 
   if (!/^usr_[A-Za-z0-9_-]{16}$/.test(publicUserId)) notFound();
 
