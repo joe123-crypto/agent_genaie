@@ -20,10 +20,14 @@ export const runtime = "nodejs";
 export default async function PublicCreateCvPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; save?: string }>;
+  // A repeated query key (e.g. ?from=interview&from=interview) arrives as an
+  // array, so accept string | string[] and read the first value below.
+  searchParams: Promise<{ from?: string | string[]; save?: string | string[] }>;
 }) {
   const query = await searchParams;
-  const fromInterview = query.from === "interview";
+  const firstParam = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value;
+  const fromInterview = firstParam(query.from) === "interview";
 
   const sessionCookie = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (sessionCookie) {
@@ -34,7 +38,7 @@ export default async function PublicCreateCvPage({
       if (status?.publicUserId) {
         const params = new URLSearchParams();
         if (fromInterview) params.set("from", "interview");
-        if (query.save === "1") params.set("save", "1");
+        if (firstParam(query.save) === "1") params.set("save", "1");
         const suffix = params.toString() ? `?${params.toString()}` : "";
         redirect(`/${status.publicUserId}/create-cv${suffix}`);
       }

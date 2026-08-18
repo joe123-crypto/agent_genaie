@@ -39,7 +39,12 @@ export default async function PublicCreateCvInterviewPage() {
               <h1 id="cv-interview-title">Build your CV by chatting</h1>
             </div>
           </div>
-          <CvInterview formPath="/create-cv?from=interview" />
+          {/* formPath carries NO from=interview: the interview's completion
+              effect appends it exactly once. Baking it in here produced a
+              duplicated ?from=interview&from=interview, which the App Router
+              parses as an array, defeating the `=== "interview"` hydration
+              gate and leaving the form empty. */}
+          <CvInterview formPath="/create-cv" />
         </section>
       </div>
     </main>
