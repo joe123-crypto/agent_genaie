@@ -86,6 +86,11 @@ export function destinationForSession(session: SessionResult, nextPath: string) 
   }
   if (session.planRequired && publicUserId) {
     const scoped = scopedDestination(safePath, publicUserId);
+    // The Create-CV flow collects the CV first and only routes to pricing after
+    // it is built, so a planless user heading there is sent straight in, not
+    // gated at login.
+    const isCreateCv = /^\/create-cv(\/interview)?\/?(\?.*)?$/.test(safePath);
+    if (isCreateCv && scoped) return scoped;
     const gatedNext = session.onboardingRequired || safePath === "/"
       ? `/${publicUserId}/onboarding`
       : scoped ?? safePath;

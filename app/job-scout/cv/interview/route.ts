@@ -7,9 +7,17 @@ import {
   type InterviewMessage,
 } from "@/src/domains/cv-interview-ai";
 import { openRouterConfigured } from "@/src/lib/openrouter";
+import { checkRateLimit, clientIpFromRequest, rateLimitKey } from "@/src/lib/rate-limit";
 import { httpError } from "@/src/lib/utils";
 
 export const runtime = "nodejs";
+
+// The interview is also offered to signed-out visitors building a CV before they
+// create an account, so this endpoint serves anonymous requests. To keep that
+// from becoming an open door to the (paid) OpenRouter model, anonymous turns are
+// rate limited per client IP; signed-in turns are gated by auth and skip it.
+const ANON_INTERVIEW_TURNS_PER_HOUR = 40;
+const ONE_HOUR_MS = 60 * 60 * 1000;
 
 // Drives one turn of the AI CV interview. The browser posts the transcript so far
 // plus the CV collected so far; we return the assistant's next message and the
@@ -22,8 +30,21 @@ export const runtime = "nodejs";
 // user mid-conversation.
 export async function POST(req: NextRequest) {
   try {
-    const user = await verifyFirebaseRequest(req);
-    await syncUserToCentralData(user.uid);
+    // Signed-out visitors may build a CV here. Authenticate when possible, but
+    // fall back to an anonymous turn (rate limited below) rather than rejecting.
+    const user = await verifyFirebaseRequest(req).catch(() => null);
+    if (user) {
+      await syncUserToCentralData(user.uid);
+    } else {
+      const key = rateLimitKey("cv-interview-anon", clientIpFromRequest(req));
+      const limit = await checkRateLimit(key, ANON_INTERVIEW_TURNS_PER_HOUR, ONE_HOUR_MS);
+      if (!limit.allowed) {
+        return NextResponse.json(
+          { ok: false, error: "Too many requests. Please try again shortly." },
+          { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+        );
+      }
+    }
 
     if (!openRouterConfigured()) {
       return NextResponse.json({ ok: false, aiUnavailable: true }, { status: 503 });

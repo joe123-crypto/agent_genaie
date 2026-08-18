@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 import { MessagesSquare } from "lucide-react";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
-import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
+import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
 import { getJobScoutStatusForUser } from "@/src/domains/job-scout";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
@@ -54,11 +54,9 @@ export default async function CreateCvInterviewPage({
   }
 
   await syncUserToCentralData(uid);
-  const [accountStatus, jobScoutStatus] = await Promise.all([
-    getSignedInAccountStatus(uid).catch(() => null),
-    getJobScoutStatusForUser(uid).catch(() => null),
-  ]);
-  if (!accountStatus?.plan) redirect(pricingGatePath(pagePath));
+  // The plan gate has moved to the end of the CV flow (after the CV is built),
+  // so the interview no longer requires a plan to be selected first.
+  const jobScoutStatus = await getJobScoutStatusForUser(uid).catch(() => null);
 
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? verified.email ?? "";
   const displayName =
@@ -80,7 +78,6 @@ export default async function CreateCvInterviewPage({
         </div>
       </div>
       <CvInterview
-        jobScoutPath={jobScoutPath}
         formPath={formPath}
         displayName={displayName}
         email={email}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlignLeft,
   Briefcase,
@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { FieldLabel } from "@/app/_components/field-label";
 import { StatusNotice, type StatusKind } from "@/app/_components/status-ui";
+import { clearCvDraft, loadCvDraft, saveCvDraft, type CvDraft } from "./cv-draft";
 
 export type ExperienceRow = {
   title: string;
@@ -61,6 +62,24 @@ function emptyReferee(): RefereeRow {
 
 type CreateCvFormProps = {
   jobScoutPath: string;
+  // Where to go after the CV is saved. Points to pricing for a planless user
+  // (plan selection is the final step of the flow) or straight to Job Scout
+  // setup for someone who already has a plan. Defaults to jobScoutPath so the
+  // plain form path is unaffected.
+  successPath?: string;
+  // When true (the chat interview handoff), hydrate the form from the CV draft
+  // stashed in sessionStorage on mount. The draft is NOT cleared on hydrate so it
+  // survives the anonymous-form → login → scoped-form chain; it is cleared only
+  // after a successful immediate save.
+  hydrateDraft?: boolean;
+  // "immediate" (default): POST the CV to the account and continue to successPath.
+  // "deferred": the visitor isn't signed in yet — save the current CV to the draft
+  // and send them to login (loginNext), where the scoped form finishes the save.
+  saveMode?: "immediate" | "deferred";
+  loginNext?: string;
+  // Post-login: when the scoped form loads with a hydrated draft, submit it once
+  // automatically so the user doesn't have to click "Create CV" a second time.
+  autoSave?: boolean;
   defaultFullName?: string;
   defaultEmail?: string;
   // Optional pre-filled values. The AI interview (see cv-interview.tsx) uses
@@ -84,6 +103,11 @@ function withFallback<T>(rows: T[] | undefined, empty: () => T): T[] {
 
 export function CreateCvForm({
   jobScoutPath,
+  successPath = jobScoutPath,
+  hydrateDraft = false,
+  saveMode = "immediate",
+  loginNext = "",
+  autoSave = false,
   defaultFullName = "",
   defaultEmail = "",
   initialPhone = "",
@@ -111,6 +135,52 @@ export function CreateCvForm({
   const [skills, setSkills] = useState(initialSkills);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ kind: StatusKind; message: string } | null>(null);
+  // Whether a usable draft (one with a name) was hydrated on mount. Drives the
+  // post-login auto-save: without a name there is nothing to submit, so we show
+  // the empty form instead (e.g. the draft was lost by signing in on another
+  // device via a magic link).
+  const [hydratedName, setHydratedName] = useState(false);
+  const autoSaveFiredRef = useRef(false);
+
+  // Chat-interview handoff: the draft lives in sessionStorage (too large for the
+  // URL), so it can only be read on the client after mount. Read it once and fill
+  // every field. The draft is deliberately NOT cleared here — it must survive the
+  // anonymous-form → login → scoped-form chain; a successful immediate save clears
+  // it. A stale draft on a later direct visit is prevented by the caller only
+  // setting hydrateDraft when ?from=interview is present.
+  useEffect(() => {
+    if (!hydrateDraft) return;
+    const draft = loadCvDraft();
+    if (!draft) return;
+    if (draft.fullName) setFullName(draft.fullName);
+    if (draft.email) setEmail(draft.email);
+    setPhone(draft.phone);
+    setLocation(draft.location);
+    setSummary(draft.summary);
+    setSkills(draft.skills);
+    if (draft.experience.length) setExperience(draft.experience);
+    if (draft.education.length) setEducation(draft.education);
+    if (draft.referees.length) setReferees(draft.referees);
+    setHydratedName(Boolean(draft.fullName?.trim()));
+    // Run once on mount; the draft is a one-shot handoff.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Post-login auto-save: fire the immediate save exactly once, after the draft
+  // has hydrated a name into the form. Runs only in immediate mode.
+  useEffect(() => {
+    if (!autoSave || saveMode !== "immediate") return;
+    if (autoSaveFiredRef.current || busy) return;
+    if (!hydratedName || !fullName.trim()) return;
+    autoSaveFiredRef.current = true;
+    void submitCv();
+    // submitCv is stable enough for this one-shot; deps kept minimal on purpose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSave, saveMode, hydratedName, fullName, busy]);
+
+  function currentDraft(): CvDraft {
+    return { fullName, email, phone, location, summary, skills, experience, education, referees };
+  }
 
   function updateExperience(index: number, patch: Partial<ExperienceRow>) {
     setExperience((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -124,13 +194,23 @@ export function CreateCvForm({
     setReferees((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitCv() {
     if (busy) return;
     if (!fullName.trim()) {
       setNotice({ kind: "error", message: "Please enter your full name." });
       return;
     }
+
+    // Not signed in yet: stash the CV (with any edits made on this form) and send
+    // the visitor to login. The scoped form finishes the save after sign-in.
+    if (saveMode === "deferred") {
+      setBusy(true);
+      setNotice({ kind: "loading", message: "Saving your CV and taking you to sign in..." });
+      saveCvDraft(currentDraft());
+      window.location.assign(`/login?next=${encodeURIComponent(loginNext)}`);
+      return;
+    }
+
     setBusy(true);
     setNotice({ kind: "loading", message: "Building your CV..." });
     try {
@@ -154,13 +234,20 @@ export function CreateCvForm({
       if (!response.ok) {
         throw new Error(payload.error || `Request failed with ${response.status}`);
       }
-      setNotice({ kind: "complete", message: "CV created. Returning to Job Scout setup..." });
-      window.location.assign(jobScoutPath);
+      // Saved to the account — drop the handoff draft so a later visit is clean.
+      clearCvDraft();
+      setNotice({ kind: "complete", message: "CV created. Continuing..." });
+      window.location.assign(successPath);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not create your CV.";
       setNotice({ kind: "error", message });
       setBusy(false);
     }
+  }
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void submitCv();
   }
 
   return (

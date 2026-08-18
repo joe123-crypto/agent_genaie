@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, RotateCcw, Sparkles, SquarePen } from "lucide-react";
-import {
-  CreateCvForm,
-  type EducationRow,
-  type ExperienceRow,
-  type RefereeRow,
+import type {
+  EducationRow,
+  ExperienceRow,
+  RefereeRow,
 } from "../create-cv-form";
+import { saveCvDraft, type CvDraft } from "../cv-draft";
 import {
   extractContact,
   extractEducation,
@@ -52,17 +52,9 @@ const STAGE_LABEL: Record<Stage, string> = {
   review: "Review",
 };
 
-type InterviewData = {
-  fullName: string;
-  email: string;
-  phone: string;
-  location: string;
-  summary: string;
-  skills: string;
-  experience: ExperienceRow[];
-  education: EducationRow[];
-  referees: RefereeRow[];
-};
+// The interview collects exactly the shape the /create-cv form consumes; it is
+// handed over verbatim through sessionStorage (see ../cv-draft).
+type InterviewData = CvDraft;
 
 function s(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -140,13 +132,12 @@ function initialsFrom(name: string, email: string) {
 }
 
 type CvInterviewProps = {
-  jobScoutPath: string;
   formPath: string;
   displayName?: string;
   email?: string;
 };
 
-export function CvInterview({ jobScoutPath, formPath, displayName = "", email = "" }: CvInterviewProps) {
+export function CvInterview({ formPath, displayName = "", email = "" }: CvInterviewProps) {
   const firstPrompt = displayName
     ? `Hi! I'll help you build your CV just by chatting — no long forms. I've got your name as ${displayName}. Reply "yes" to keep it, or type your correct full name.`
     : `Hi! I'll help you build your CV just by chatting — no long forms. First up: what's your full name?`;
@@ -183,6 +174,17 @@ export function CvInterview({ jobScoutPath, formPath, displayName = "", email = 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
+
+  // When the interview completes, hand the collected CV to the /create-cv form
+  // page for review: stash it in sessionStorage (too large for the URL) and
+  // navigate there with ?from=interview so the form hydrates it. The form is now
+  // the review-and-edit step, and pricing follows it.
+  useEffect(() => {
+    if (phase !== "review") return;
+    saveCvDraft(data);
+    const separator = formPath.includes("?") ? "&" : "?";
+    window.location.assign(`${formPath}${separator}from=interview`);
+  }, [phase, formPath, data]);
 
   const stepIndex = Math.min(STAGE_ORDER.indexOf(stage), STAGE_ORDER.length - 1);
   const stepLabel =
@@ -375,30 +377,14 @@ export function CvInterview({ jobScoutPath, formPath, displayName = "", email = 
   }
 
   if (phase === "review") {
+    // The chat is done; the handoff effect above is navigating to the /create-cv
+    // form where the user reviews and edits before creating the CV.
     return (
       <div className="cv-interview">
         <div className="chat-review-lead">
           <Sparkles aria-hidden="true" />
-          <p>Here's your CV, built from our chat. Check each field, edit anything that needs fixing, then create it.</p>
+          <p>Preparing your CV — taking you to review and edit it…</p>
         </div>
-        <div className="chat-review-actions">
-          <button type="button" className="button secondary" onClick={handleRestart}>
-            <RotateCcw aria-hidden="true" />
-            Start the interview over
-          </button>
-        </div>
-        <CreateCvForm
-          jobScoutPath={jobScoutPath}
-          defaultFullName={data.fullName || displayName}
-          defaultEmail={data.email || email}
-          initialPhone={data.phone}
-          initialLocation={data.location}
-          initialSummary={data.summary}
-          initialSkills={data.skills}
-          initialExperience={data.experience}
-          initialEducation={data.education}
-          initialReferees={data.referees}
-        />
       </div>
     );
   }
