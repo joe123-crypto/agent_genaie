@@ -22,7 +22,7 @@ export default async function CreateCvPage({
   searchParams,
 }: {
   params: Promise<{ publicUserId: string }>;
-  searchParams: Promise<{ onboarding?: string; from?: string }>;
+  searchParams: Promise<{ onboarding?: string; from?: string; save?: string }>;
 }) {
   const { publicUserId } = await params;
   const query = await searchParams;
@@ -30,6 +30,9 @@ export default async function CreateCvPage({
   // Set by the chat interview handoff: only then does the form hydrate the
   // draft it stashed in sessionStorage, so a direct visit shows an empty form.
   const fromInterview = query.from === "interview";
+  // Set when arriving here post-login from the public deferred-save flow: the
+  // hydrated draft is submitted automatically so the user needn't click again.
+  const autoSave = query.save === "1";
 
   if (!/^usr_[A-Za-z0-9_-]{16}$/.test(publicUserId)) notFound();
 
@@ -98,6 +101,7 @@ export default async function CreateCvPage({
         jobScoutPath={jobScoutPath}
         successPath={successPath}
         hydrateDraft={fromInterview}
+        autoSave={autoSave}
         defaultFullName={displayName}
         defaultEmail={email}
       />

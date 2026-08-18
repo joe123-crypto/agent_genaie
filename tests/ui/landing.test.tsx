@@ -38,7 +38,7 @@ describe("Genaie Scout landing page", () => {
     ).toBeVisible();
     expect(
       screen.getByRole("link", { name: /create your cv/i }),
-    ).toHaveAttribute("href", "/login?next=/create-cv/interview");
+    ).toHaveAttribute("href", "/create-cv/interview");
   });
 
   it("includes the expected navigation and animation-ready artwork", () => {
