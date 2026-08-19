@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 import { FileUser, MessagesSquare } from "lucide-react";
 import { SESSION_COOKIE_NAME } from "@/src/config";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
-import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus } from "@/src/domains/users";
+import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
 import { getJobScoutStatusForUser } from "@/src/domains/job-scout";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
@@ -69,7 +69,10 @@ export default async function CreateCvPage({
   }
 
   await syncUserToCentralData(uid);
-  const jobScoutStatus = await getJobScoutStatusForUser(uid).catch(() => null);
+  const [accountStatus, jobScoutStatus] = await Promise.all([
+    getSignedInAccountStatus(uid).catch(() => null),
+    getJobScoutStatusForUser(uid).catch(() => null),
+  ]);
   const email = (routeUser as { profile?: { email?: string } }).profile?.email ?? verified.email ?? "";
   const displayName =
     jobScoutStatus?.profile?.displayName
@@ -80,8 +83,11 @@ export default async function CreateCvPage({
   const suffix = onboardingMode ? "?onboarding=1" : "";
   const jobScoutPath = `/${publicUserId}/job-scout${suffix}`;
   const interviewPath = `/${publicUserId}/create-cv/interview${suffix}`;
-  // After confirming CV details the flow ends at the manual-payment page.
-  const successPath = "/payment";
+  // The not-signed-in (public deferred-save) flow arrives here post-login with
+  // ?save=1 (autoSave) and ends at the manual-payment page. The already-signed-in
+  // flow keeps the existing plan gate: planless -> pricing, has-plan -> Job Scout.
+  const gatedPath = accountStatus?.plan ? jobScoutPath : pricingGatePath(jobScoutPath);
+  const successPath = autoSave ? "/payment" : gatedPath;
 
   const panel = (
     <section className="panel dashboard-form-panel" aria-labelledby="create-cv-title">
