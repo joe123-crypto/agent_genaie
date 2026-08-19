@@ -69,7 +69,6 @@ export default async function PublicCreateCvPage({
           <CreateCvForm
             jobScoutPath="/"
             saveMode="deferred"
-            loginNext="/create-cv?from=interview&save=1"
             hydrateDraft={fromInterview}
           />
         </section>

@@ -83,11 +83,10 @@ export default async function CreateCvPage({
   const suffix = onboardingMode ? "?onboarding=1" : "";
   const jobScoutPath = `/${publicUserId}/job-scout${suffix}`;
   const interviewPath = `/${publicUserId}/create-cv/interview${suffix}`;
-  // The not-signed-in (public deferred-save) flow arrives here post-login with
-  // ?save=1 (autoSave) and ends at the manual-payment page. The already-signed-in
-  // flow keeps the existing plan gate: planless -> pricing, has-plan -> Job Scout.
-  const gatedPath = accountStatus?.plan ? jobScoutPath : pricingGatePath(jobScoutPath);
-  const successPath = autoSave ? "/payment" : gatedPath;
+  // Building the CV no longer requires a plan. Instead, the plan gate moves to
+  // the end of the flow: a planless user is sent to pricing after the CV is
+  // created, while someone who already has a plan continues to Job Scout setup.
+  const successPath = accountStatus?.plan ? jobScoutPath : pricingGatePath(jobScoutPath);
 
   const panel = (
     <section className="panel dashboard-form-panel" aria-labelledby="create-cv-title">

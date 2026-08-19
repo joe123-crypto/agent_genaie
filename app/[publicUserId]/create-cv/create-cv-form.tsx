@@ -73,10 +73,9 @@ type CreateCvFormProps = {
   // after a successful immediate save.
   hydrateDraft?: boolean;
   // "immediate" (default): POST the CV to the account and continue to successPath.
-  // "deferred": the visitor isn't signed in yet — save the current CV to the draft
-  // and send them to login (loginNext), where the scoped form finishes the save.
+  // "deferred": the visitor isn't signed in yet — stash the CV to the session draft
+  // and send them straight to payment (no account save happens on this path).
   saveMode?: "immediate" | "deferred";
-  loginNext?: string;
   // Post-login: when the scoped form loads with a hydrated draft, submit it once
   // automatically so the user doesn't have to click "Create CV" a second time.
   autoSave?: boolean;
@@ -106,7 +105,6 @@ export function CreateCvForm({
   successPath = jobScoutPath,
   hydrateDraft = false,
   saveMode = "immediate",
-  loginNext = "",
   autoSave = false,
   defaultFullName = "",
   defaultEmail = "",
@@ -201,13 +199,14 @@ export function CreateCvForm({
       return;
     }
 
-    // Not signed in yet: stash the CV (with any edits made on this form) and send
-    // the visitor to login. The scoped form finishes the save after sign-in.
+    // Not signed in: stash the CV (with any edits made on this form) so it
+    // survives the session, then send the visitor straight to payment. No
+    // account save happens on this path — the CV stays in the browser session.
     if (saveMode === "deferred") {
       setBusy(true);
-      setNotice({ kind: "loading", message: "Saving your CV and taking you to sign in..." });
+      setNotice({ kind: "loading", message: "Taking you to payment..." });
       saveCvDraft(currentDraft());
-      window.location.assign(`/login?next=${encodeURIComponent(loginNext)}`);
+      window.location.assign("/payment");
       return;
     }
 
