@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlignLeft,
   Briefcase,
   Building2,
   CalendarDays,
-  FileCheck2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   GraduationCap,
+  LayoutTemplate,
   Mail,
   MapPin,
   Phone,
@@ -22,6 +25,7 @@ import {
 } from "lucide-react";
 import { FieldLabel } from "@/app/_components/field-label";
 import { StatusNotice, type StatusKind } from "@/app/_components/status-ui";
+import { CV_TEMPLATES, DEFAULT_TEMPLATE_ID, renderCvHtml } from "@/src/domains/cv-templates";
 import { clearCvDraft, loadCvDraft, saveCvDraft, type CvDraft } from "./cv-draft";
 
 export type ExperienceRow = {
@@ -131,6 +135,14 @@ export function CreateCvForm({
     withFallback(initialReferees, emptyReferee),
   );
   const [skills, setSkills] = useState(initialSkills);
+  // Selected CV template. Drives both the live preview and, on submit, the
+  // styling of the saved CV. Defaults to the first registered template.
+  const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE_ID);
+  // Preview-first layout: the detail fields live in a collapsible panel. Start
+  // expanded so a fresh, empty CV shows the fields to fill in; the interview
+  // handoff collapses it below once a full draft hydrates, leading with the
+  // preview instead.
+  const [detailsOpen, setDetailsOpen] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ kind: StatusKind; message: string } | null>(null);
   // Whether a usable draft (one with a name) was hydrated on mount. Drives the
@@ -159,7 +171,12 @@ export function CreateCvForm({
     if (draft.experience.length) setExperience(draft.experience);
     if (draft.education.length) setEducation(draft.education);
     if (draft.referees.length) setReferees(draft.referees);
-    setHydratedName(Boolean(draft.fullName?.trim()));
+    if (draft.template) setTemplateId(draft.template);
+    const hydratedFullName = Boolean(draft.fullName?.trim());
+    setHydratedName(hydratedFullName);
+    // A full draft came from the chat interview — lead with the preview and
+    // tuck the (already-filled) fields away until the user wants to tweak them.
+    if (hydratedFullName) setDetailsOpen(false);
     // Run once on mount; the draft is a one-shot handoff.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -177,7 +194,30 @@ export function CreateCvForm({
   }, [autoSave, saveMode, hydratedName, fullName, busy]);
 
   function currentDraft(): CvDraft {
-    return { fullName, email, phone, location, summary, skills, experience, education, referees };
+    return { fullName, email, phone, location, summary, skills, experience, education, referees, template: templateId };
+  }
+
+  // Live CV preview: rendered from the same code path that saves the CV, so the
+  // preview is exactly what "Use template" produces. Preview mode tolerates an
+  // empty name (shows a placeholder) so it renders while the form is still blank.
+  const previewHtml = useMemo(
+    () => renderCvHtml(currentDraft(), templateId, { preview: true }),
+    // currentDraft is derived purely from these values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fullName, email, phone, location, summary, skills, experience, education, referees, templateId],
+  );
+
+  const templateIndex = Math.max(
+    0,
+    CV_TEMPLATES.findIndex((template) => template.id === templateId),
+  );
+  const activeTemplate = CV_TEMPLATES[templateIndex] ?? CV_TEMPLATES[0];
+  const hasMultipleTemplates = CV_TEMPLATES.length > 1;
+
+  function stepTemplate(delta: number) {
+    const count = CV_TEMPLATES.length;
+    const next = (templateIndex + delta + count) % count;
+    setTemplateId(CV_TEMPLATES[next].id);
   }
 
   function updateExperience(index: number, patch: Partial<ExperienceRow>) {
@@ -195,6 +235,8 @@ export function CreateCvForm({
   async function submitCv() {
     if (busy) return;
     if (!fullName.trim()) {
+      // Reveal the fields so the user can see the empty name to fix it.
+      setDetailsOpen(true);
       setNotice({ kind: "error", message: "Please enter your full name." });
       return;
     }
@@ -230,6 +272,7 @@ export function CreateCvForm({
           education,
           skills,
           referees,
+          template: templateId,
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -254,6 +297,67 @@ export function CreateCvForm({
 
   return (
     <form className="form-stack" onSubmit={handleSubmit}>
+      <div className="cv-preview">
+        <div className="cv-template-switcher">
+          {hasMultipleTemplates ? (
+            <button
+              type="button"
+              className="button secondary icon-only"
+              onClick={() => stepTemplate(-1)}
+              aria-label="Previous template"
+            >
+              <ChevronLeft aria-hidden="true" />
+            </button>
+          ) : null}
+          <span className="cv-template-name">
+            <LayoutTemplate aria-hidden="true" />
+            {activeTemplate.name}
+            {hasMultipleTemplates ? (
+              <span className="cv-template-count">
+                {templateIndex + 1} / {CV_TEMPLATES.length}
+              </span>
+            ) : null}
+          </span>
+          {hasMultipleTemplates ? (
+            <button
+              type="button"
+              className="button secondary icon-only"
+              onClick={() => stepTemplate(1)}
+              aria-label="Next template"
+            >
+              <ChevronRight aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+        <div className="cv-preview-frame-wrap">
+          <iframe
+            className="cv-preview-frame"
+            title="CV preview"
+            sandbox=""
+            srcDoc={previewHtml}
+          />
+        </div>
+        <p className="file-note cv-preview-note">
+          This is how your details will look. {hasMultipleTemplates ? "Use the arrows to try another template. " : ""}
+          Edit your details below, then choose &ldquo;Use template&rdquo;.
+        </p>
+      </div>
+
+      <div className="cv-details">
+        <button
+          type="button"
+          className="cv-details-toggle"
+          onClick={() => setDetailsOpen((open) => !open)}
+          aria-expanded={detailsOpen}
+        >
+          <SquarePen aria-hidden="true" />
+          <span>Edit details</span>
+          <ChevronDown aria-hidden="true" className={detailsOpen ? "cv-details-chevron open" : "cv-details-chevron"} />
+        </button>
+      </div>
+
+      {detailsOpen ? (
+        <div className="cv-details-body form-stack">
       <div className="grid">
         <label>
           <FieldLabel icon={UserRound}>Full name</FieldLabel>
@@ -567,10 +671,13 @@ export function CreateCvForm({
         ))}
       </div>
 
+        </div>
+      ) : null}
+
       <div className="actions">
         <button type="submit" disabled={busy}>
-          <FileCheck2 aria-hidden="true" />
-          {busy ? "Creating CV..." : "Create CV"}
+          <LayoutTemplate aria-hidden="true" />
+          {busy ? "Saving..." : "Use template"}
         </button>
         <a className="button secondary" href={jobScoutPath}>
           <X aria-hidden="true" />

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildCvHtml, normalizeCvInput } from "@/src/domains/cv-html";
+import { buildCvHtml, normalizeCvInput, DEFAULT_TEMPLATE_ID } from "@/src/domains/cv-html";
+import { renderCvHtml } from "@/src/domains/cv-templates";
 import { validateCanonicalCvHtml } from "@/src/domains/job-scout";
 
 const sample = {
@@ -96,6 +97,22 @@ test("referees section renders and drops empty rows", () => {
   const html = buildCvHtml(sample);
   assert.match(html, /<h2>Referees<\/h2>/);
   assert.match(html, /Charles Babbage/);
+  assert.doesNotThrow(() => validateCanonicalCvHtml(Buffer.from(html, "utf8")));
+});
+
+test("buildCvHtml honors a known template id and falls back on unknown/absent ids", () => {
+  // The default template output equals the explicit default id and an unknown id.
+  const base = buildCvHtml(sample);
+  assert.equal(buildCvHtml(sample, DEFAULT_TEMPLATE_ID), base);
+  assert.equal(buildCvHtml(sample, "no-such-template"), base);
+  assert.equal(buildCvHtml(sample, undefined), base);
+});
+
+test("renderCvHtml preview mode renders an empty name as a placeholder without throwing", () => {
+  // Save path still requires a name; preview mode must not throw on a blank one.
+  assert.throws(() => renderCvHtml({}, DEFAULT_TEMPLATE_ID), /Full name is required/);
+  const html = renderCvHtml({}, DEFAULT_TEMPLATE_ID, { preview: true });
+  assert.match(html, /Your name/);
   assert.doesNotThrow(() => validateCanonicalCvHtml(Buffer.from(html, "utf8")));
 });
 

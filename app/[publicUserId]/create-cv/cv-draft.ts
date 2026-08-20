@@ -13,6 +13,9 @@ export type CvDraft = {
   experience: ExperienceRow[];
   education: EducationRow[];
   referees: RefereeRow[];
+  // Selected CV template id. Optional so drafts written before this field
+  // existed still load; the form falls back to the default template.
+  template?: string;
 };
 
 const CV_DRAFT_STORAGE_KEY = "genaie:cv-draft";
@@ -44,6 +47,7 @@ export function loadCvDraft(): CvDraft | null {
       experience: Array.isArray(parsed.experience) ? parsed.experience : [],
       education: Array.isArray(parsed.education) ? parsed.education : [],
       referees: Array.isArray(parsed.referees) ? parsed.referees : [],
+      template: typeof parsed.template === "string" ? parsed.template : undefined,
     };
   } catch {
     return null;
