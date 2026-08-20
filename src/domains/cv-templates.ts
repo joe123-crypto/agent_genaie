@@ -252,8 +252,10 @@ export type CvTemplate = { id: string; name: string; style: string };
 const CLASSIC_STYLE = `
 :root { color-scheme: light; }
 * { box-sizing: border-box; }
+@page { size: A4; margin: 18mm; }
 body { margin: 0; padding: 40px; font-family: Arial, Helvetica, sans-serif; color: #111; line-height: 1.5; font-size: 14px; }
-.cv { max-width: 720px; margin: 0 auto; }
+.cv { width: 100%; max-width: 210mm; margin: 0 auto; }
+@media print { body { padding: 0; } .cv { max-width: none; margin: 0; } }
 header { border-bottom: 2px solid #111; padding-bottom: 12px; margin-bottom: 20px; }
 h1 { margin: 0 0 6px; font-size: 26px; }
 .contact { color: #444; font-size: 13px; }

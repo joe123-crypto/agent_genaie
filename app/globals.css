@@ -4065,7 +4065,7 @@ button.landing-pricing-button {
 
 .cv-preview-frame-wrap {
   width: 100%;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 210 / 297;
   max-height: 620px;
   border: 1px solid var(--border);
   border-radius: var(--radius);

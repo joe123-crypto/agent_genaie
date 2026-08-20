@@ -39,6 +39,15 @@ test("buildCvHtml produces canonical CV HTML that passes validation", () => {
   assert.match(html, /<body/i);
 });
 
+test("buildCvHtml sizes the CV to A4 and stays self-contained", () => {
+  const html = buildCvHtml(sample);
+  // A4 page box for print/PDF and an A4-width cap for the on-screen page.
+  assert.match(html, /@page\s*\{[^}]*size:\s*A4/i);
+  assert.match(html, /max-width:\s*210mm/);
+  // The A4 CSS must not introduce anything that fails canonical-CV validation.
+  assert.doesNotThrow(() => validateCanonicalCvHtml(Buffer.from(html, "utf8")));
+});
+
 test("buildCvHtml escapes user input and neutralizes dangerous sequences", () => {
   const html = buildCvHtml(sample);
   // Raw angle brackets from user input must be escaped, not rendered as tags.
