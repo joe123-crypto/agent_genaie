@@ -84,6 +84,14 @@ export function destinationForSession(session: SessionResult, nextPath: string) 
   if (publicUserId && whatsappInviteMatch) {
     return `/${publicUserId}/whatsapp${whatsappInviteMatch[1]}`;
   }
+  // The deferred Create-CV handoff sends a signed-out visitor to sign in with
+  // ?next=/payment so they land back on /payment to upload payment proof. This
+  // must win over the plan/onboarding gates below, or a planless or
+  // onboarding-required user would be diverted to /pricing or onboarding
+  // instead of finishing the payment they were already sent to make.
+  if (safePath === "/payment") {
+    return "/payment";
+  }
   if (session.planRequired && publicUserId) {
     const scoped = scopedDestination(safePath, publicUserId);
     // The Create-CV flow collects the CV first and only routes to pricing after

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Mailbox, ShieldCheck, Smartphone, type LucideIcon } from "lucide-react";
 import { pageMetadata } from "@/src/lib/site-metadata";
+import { PaymentProofUpload } from "./payment-proof-upload";
 
 export const metadata: Metadata = pageMetadata({
   title: "Genaie | Payment",
@@ -77,6 +78,8 @@ export default function PaymentPage() {
                 </div>
               ))}
             </dl>
+
+            <PaymentProofUpload method={method.name} />
           </article>
         ))}
       </section>

@@ -84,6 +84,39 @@ test("destinationForSession sends users without a plan to pricing first", () => 
   );
 });
 
+test("destinationForSession sends a signed-in user straight to /payment, bypassing plan and onboarding gates", () => {
+  // The deferred Create-CV handoff sends signed-out visitors to
+  // /login?next=/payment so they land on /payment already signed in to upload
+  // payment proof. This must not be diverted to /pricing or onboarding even
+  // for a brand-new, planless, onboarding-required account.
+  const planlessOnboardingSession = {
+    ok: true as const,
+    publicUserId: "usr_123",
+    onboardingRequired: true,
+    plan: null,
+    planRequired: true,
+  };
+  assert.equal(destinationForSession(planlessOnboardingSession, "/payment"), "/payment");
+
+  const onboardingOnlySession = {
+    ok: true as const,
+    publicUserId: "usr_123",
+    onboardingRequired: true,
+    plan: "free" as const,
+    planRequired: false,
+  };
+  assert.equal(destinationForSession(onboardingOnlySession, "/payment"), "/payment");
+
+  const readySession = {
+    ok: true as const,
+    publicUserId: "usr_123",
+    onboardingRequired: false,
+    plan: "free" as const,
+    planRequired: false,
+  };
+  assert.equal(destinationForSession(readySession, "/payment"), "/payment");
+});
+
 test("mobile detection supports userAgentData, common mobile agents, and iPad desktop mode", () => {
   assert.equal(isMobileBrowser({ userAgentData: { mobile: true } }), true);
   assert.equal(isMobileBrowser({ userAgent: "Mozilla/5.0 (Linux; Android 15)" }), true);

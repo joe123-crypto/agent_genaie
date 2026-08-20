@@ -200,13 +200,16 @@ export function CreateCvForm({
     }
 
     // Not signed in: stash the CV (with any edits made on this form) so it
-    // survives the session, then send the visitor straight to payment. No
-    // account save happens on this path — the CV stays in the browser session.
+    // survives the session, then send the visitor to sign in first — /payment
+    // needs a signed-in user to upload payment proof, so login comes before it
+    // in the flow. destinationForSession sends a fresh/planless user straight
+    // to /payment once they're signed in (see src/auth/login.ts). No account
+    // save happens on this path — the CV stays in the browser session.
     if (saveMode === "deferred") {
       setBusy(true);
-      setNotice({ kind: "loading", message: "Taking you to payment..." });
+      setNotice({ kind: "loading", message: "Taking you to sign in..." });
       saveCvDraft(currentDraft());
-      window.location.assign("/payment");
+      window.location.assign("/login?next=%2Fpayment");
       return;
     }
 

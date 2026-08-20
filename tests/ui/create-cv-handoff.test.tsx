@@ -1,4 +1,4 @@
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 
@@ -51,6 +51,10 @@ vi.mock("@/app/[publicUserId]/create-cv/create-cv-form", () => ({
 
 import PublicCreateCvInterviewPage from "@/app/create-cv/interview/page";
 import PublicCreateCvPage from "@/app/create-cv/page";
+// The create-cv-form module is mocked (via vi.mock) above for the page-wiring
+// tests in this file, so the deferred-submit test below reaches past that mock
+// with vi.importActual to render the real component.
+import type { CreateCvForm as CreateCvFormType } from "@/app/[publicUserId]/create-cv/create-cv-form";
 
 describe("interview -> create-cv handoff (anonymous path)", () => {
   beforeEach(() => {
@@ -97,5 +101,57 @@ describe("interview -> create-cv handoff (anonymous path)", () => {
     render(page);
 
     expect(mocks.createCvFormProps.current?.hydrateDraft).toBe(false);
+  });
+});
+
+describe("deferred Create-CV submit (signed-out visitor)", () => {
+  // The flow was reordered: a signed-out visitor who fills in the CV must sign
+  // in before landing on /payment (so they're authenticated when uploading
+  // payment proof there). Previously this went straight to /payment.
+  const originalLocation = window.location;
+
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      writable: true,
+      value: {
+        ...originalLocation,
+        assign: vi.fn(),
+      },
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    window.sessionStorage.clear();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      writable: true,
+      value: originalLocation,
+    });
+  });
+
+  it("stashes the draft and sends the visitor to sign in with next=/payment", async () => {
+    const actual = await vi.importActual<{ CreateCvForm: typeof CreateCvFormType }>(
+      "@/app/[publicUserId]/create-cv/create-cv-form",
+    );
+    render(
+      createElement(actual.CreateCvForm, {
+        jobScoutPath: "/job-scout",
+        saveMode: "deferred",
+        defaultFullName: "Jordan Lee",
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /create cv/i }));
+
+    await waitFor(() =>
+      expect(window.location.assign).toHaveBeenCalledWith("/login?next=%2Fpayment"),
+    );
+
+    // No account save happens on the deferred path — the draft only goes to
+    // sessionStorage, never to /job-scout/cv/create.
+    expect(window.sessionStorage.getItem("genaie:cv-draft")).toContain("Jordan Lee");
   });
 });
