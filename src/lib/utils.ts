@@ -325,8 +325,8 @@ export function normalizeAccountLinkPurpose(value: unknown) {
 export function normalizeAccountLinkNextPath(value: unknown) {
   const text = String(value ?? "/").trim();
   if (!text || !text.startsWith("/") || text.startsWith("//")) return "/";
-  if (text === "/" || text === "/connect-gmail" || text === "/vault" || text === "/whatsapp" || text === "/onboarding") return text;
-  const match = text.match(/^\/(connect-gmail|vault|whatsapp|onboarding)\/?(\?.*)?$/);
+  if (text === "/" || text === "/connect-gmail" || text === "/vault" || text === "/whatsapp" || text === "/onboarding" || text === "/payment") return text;
+  const match = text.match(/^\/(connect-gmail|vault|whatsapp|onboarding|payment)\/?(\?.*)?$/);
   if (match) return `/${match[1]}${match[2] ?? ""}`;
   return "/";
 }
@@ -339,6 +339,8 @@ export function scopedPathForAccountLink(nextPath: string, publicUserId: string)
   if (normalized === "/vault") return `/${id}/vault`;
   if (normalized === "/whatsapp") return `/${id}/whatsapp`;
   if (normalized === "/onboarding") return `/${id}/onboarding`;
+  // /payment is a top-level, non-user-scoped page, so it is returned unscoped.
+  if (normalized === "/payment") return "/payment";
   return `/${id}`;
 }
 
