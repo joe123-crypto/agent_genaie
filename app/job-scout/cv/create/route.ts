@@ -49,7 +49,11 @@ export async function POST(req: NextRequest) {
     // The professional summary is optional here — if the user leaves it blank the
     // canonical CV simply has no summary section; the background job-scout agent
     // writes a tailored summary when it personalizes the CV per application.
-    const html = buildCvHtml(payload);
+    // The selected template id only picks a known inline style (buildCvHtml
+    // falls back to the default on unknown/absent ids) — never user HTML.
+    const templateValue = (payload as { template?: unknown }).template;
+    const templateId = typeof templateValue === "string" ? templateValue : undefined;
+    const html = buildCvHtml(payload, templateId);
     try {
       await finalizeJobScoutCvHtml({
         userId: user.uid,

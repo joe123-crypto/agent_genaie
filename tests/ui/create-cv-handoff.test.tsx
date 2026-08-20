@@ -144,7 +144,7 @@ describe("deferred Create-CV submit (signed-out visitor)", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /create cv/i }));
+    fireEvent.click(screen.getByRole("button", { name: /use template/i }));
 
     await waitFor(() =>
       expect(window.location.assign).toHaveBeenCalledWith("/login?next=%2Fpayment"),

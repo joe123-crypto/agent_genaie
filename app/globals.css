@@ -4018,6 +4018,109 @@ button.landing-pricing-button {
   }
 }
 
+/* --- CV template preview + switcher ------------------------------------- */
+/* Preview-first create-cv layout: a live iframe of the CV in the chosen
+   template, arrows to switch templates, and the detail fields tucked into a
+   collapsible panel below. Reuses the app tokens — no new palette. */
+
+.cv-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.cv-template-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.cv-template-switcher .button.icon-only {
+  padding: 0;
+  width: 42px;
+  flex: 0 0 42px;
+}
+
+.cv-template-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: var(--font-weight-action);
+  color: var(--text-primary);
+}
+
+.cv-template-name svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: var(--accent);
+  stroke-width: 2;
+}
+
+.cv-template-count {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-utility);
+  font-size: 0.85rem;
+}
+
+.cv-preview-frame-wrap {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: 620px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+}
+
+.cv-preview-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+  background: #fff;
+}
+
+.cv-preview-note {
+  text-align: center;
+  margin: 0;
+}
+
+.cv-details-toggle {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 10px;
+  background: var(--background);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.cv-details-toggle:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--text-secondary);
+}
+
+.cv-details-toggle svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  stroke-width: 2;
+}
+
+.cv-details-toggle .cv-details-chevron {
+  margin-left: auto;
+  transition: transform 150ms ease;
+}
+
+.cv-details-toggle .cv-details-chevron.open {
+  transform: rotate(180deg);
+}
+
+.cv-details-body {
+  margin-top: 4px;
+}
+
 /* --- CV interview (chat) ------------------------------------------------- */
 /* Minimalist avatar-thread + pill composer. Reuses the app tokens (Ubuntu,
    --accent, --surface, --border, 999px pills) — no new palette, no gradients. */
