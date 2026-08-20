@@ -83,6 +83,11 @@ type CreateCvFormProps = {
   // Post-login: when the scoped form loads with a hydrated draft, submit it once
   // automatically so the user doesn't have to click "Create CV" a second time.
   autoSave?: boolean;
+  // When true, continuously mirror the form into the sessionStorage draft on
+  // every edit and restore it on mount, so a reload or a trip to another page
+  // and back resumes where the user left off. Reuses the same draft store as the
+  // interview/deferred handoffs (cleared on a successful save).
+  persistDraft?: boolean;
   defaultFullName?: string;
   defaultEmail?: string;
   // Optional pre-filled values. The AI interview (see cv-interview.tsx) uses
@@ -110,6 +115,7 @@ export function CreateCvForm({
   hydrateDraft = false,
   saveMode = "immediate",
   autoSave = false,
+  persistDraft = false,
   defaultFullName = "",
   defaultEmail = "",
   initialPhone = "",
@@ -151,15 +157,19 @@ export function CreateCvForm({
   // device via a magic link).
   const [hydratedName, setHydratedName] = useState(false);
   const autoSaveFiredRef = useRef(false);
+  // Skip the first autosave pass so mounting an empty form never wipes a stored
+  // draft, and a just-restored draft isn't written back before it lands.
+  const skipFirstSaveRef = useRef(true);
 
-  // Chat-interview handoff: the draft lives in sessionStorage (too large for the
-  // URL), so it can only be read on the client after mount. Read it once and fill
-  // every field. The draft is deliberately NOT cleared here — it must survive the
+  // Restore on mount from the sessionStorage draft (too large for the URL, so it
+  // can only be read on the client after mount). Read it once and fill every
+  // field. Runs for the chat-interview handoff (hydrateDraft) and for plain
+  // session persistence (persistDraft) alike — both restore from the same store.
+  // The draft is deliberately NOT cleared here — it must survive the
   // anonymous-form → login → scoped-form chain; a successful immediate save clears
-  // it. A stale draft on a later direct visit is prevented by the caller only
-  // setting hydrateDraft when ?from=interview is present.
+  // it.
   useEffect(() => {
-    if (!hydrateDraft) return;
+    if (!hydrateDraft && !persistDraft) return;
     const draft = loadCvDraft();
     if (!draft) return;
     if (draft.fullName) setFullName(draft.fullName);
@@ -192,6 +202,23 @@ export function CreateCvForm({
     // submitCv is stable enough for this one-shot; deps kept minimal on purpose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSave, saveMode, hydratedName, fullName, busy]);
+
+  // Session persistence: mirror the live form into the sessionStorage draft on
+  // every change so a reload — or a trip to the home page and back — restores the
+  // work. The first pass is skipped so mounting an empty form doesn't wipe a
+  // stored draft, and a just-restored draft isn't written back before it lands.
+  // clearCvDraft() on a successful save still wins: no state changes between the
+  // clear and navigating away, so this effect never re-runs to re-save it.
+  useEffect(() => {
+    if (!persistDraft) return;
+    if (skipFirstSaveRef.current) {
+      skipFirstSaveRef.current = false;
+      return;
+    }
+    saveCvDraft(currentDraft());
+    // currentDraft is derived purely from these values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistDraft, fullName, email, phone, location, summary, skills, experience, education, referees, templateId]);
 
   function currentDraft(): CvDraft {
     return { fullName, email, phone, location, summary, skills, experience, education, referees, template: templateId };

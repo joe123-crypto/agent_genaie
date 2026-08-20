@@ -111,6 +111,7 @@ export default async function CreateCvPage({
         successPath={successPath}
         hydrateDraft={fromInterview}
         autoSave={autoSave}
+        persistDraft
         defaultFullName={displayName}
         defaultEmail={email}
       />

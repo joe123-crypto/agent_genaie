@@ -70,6 +70,7 @@ export default async function PublicCreateCvPage({
             jobScoutPath="/"
             saveMode="deferred"
             hydrateDraft={fromInterview}
+            persistDraft
           />
         </section>
       </div>
