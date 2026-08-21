@@ -245,7 +245,15 @@ export function CreateCvForm({
     const A4_WIDTH_PX = 794; // 210mm at 96dpi
     const A4_HEIGHT_PX = 1123; // 297mm at 96dpi
     const fit = () => {
-      const scale = Math.min(wrap.clientWidth / A4_WIDTH_PX, wrap.clientHeight / A4_HEIGHT_PX);
+      // Measure the content box (exclude padding) so the grey gutter around the
+      // page card is preserved rather than covered by the scaled sheet.
+      const cs = getComputedStyle(wrap);
+      const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+      const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      const scale = Math.min(
+        (wrap.clientWidth - padX) / A4_WIDTH_PX,
+        (wrap.clientHeight - padY) / A4_HEIGHT_PX,
+      );
       wrap.style.setProperty("--cv-preview-scale", String(scale));
     };
     fit();
@@ -377,12 +385,14 @@ export function CreateCvForm({
           ) : null}
         </div>
         <div className="cv-preview-frame-wrap" ref={previewWrapRef}>
-          <iframe
-            className="cv-preview-frame"
-            title="CV preview"
-            sandbox=""
-            srcDoc={previewHtml}
-          />
+          <div className="cv-preview-sheet">
+            <iframe
+              className="cv-preview-frame"
+              title="CV preview"
+              sandbox=""
+              srcDoc={previewHtml}
+            />
+          </div>
         </div>
         <p className="file-note cv-preview-note">
           This is how your details will look. {hasMultipleTemplates ? "Use the arrows to try another template. " : ""}
