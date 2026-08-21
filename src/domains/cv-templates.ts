@@ -273,7 +273,42 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; border-
 p { margin: 0 0 8px; }
 `.trim();
 
-export const CV_TEMPLATES: CvTemplate[] = [{ id: "classic", name: "Classic", style: CLASSIC_STYLE }];
+// A refined, minimalist single-column resume in the style of a classic
+// typeset CV: a centered name in a wide-tracked serif, a contact line framed
+// by hairline rules, uppercase section headings, and a multi-column skills
+// list. Styles the same shared markup as every other template — only the CSS
+// differs — so preview == saved output and it passes validateCanonicalCvHtml
+// by construction (inline CSS only, no scripts, no external references).
+const ELEGANT_STYLE = `
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+@page { size: A4; margin: 18mm; }
+body { margin: 0; padding: 52px 56px; font-family: "Helvetica Neue", Arial, sans-serif; color: #2c2c2c; line-height: 1.55; font-size: 13.5px; background: #fbfaf6; }
+.cv { width: 100%; max-width: 210mm; margin: 0 auto; }
+@media print { body { padding: 0; background: #fff; } .cv { max-width: none; margin: 0; } }
+header { text-align: center; margin-bottom: 26px; }
+h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: 34px; letter-spacing: 0.24em; text-transform: uppercase; color: #1f1f1f; padding-left: 0.24em; }
+header .contact { border-top: 1px solid #bbb5a8; border-bottom: 1px solid #bbb5a8; padding: 8px 0; margin-top: 16px; justify-content: center; }
+.contact { color: #555; font-size: 12px; letter-spacing: 0.02em; }
+.contact span + span::before { content: " — "; color: #9c968b; }
+section { margin-bottom: 22px; }
+h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #2b2b2b; border-bottom: 1px solid #cfc9bd; padding-bottom: 5px; margin: 0 0 12px; }
+.entry { margin-bottom: 15px; }
+.entry-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.entry-head > div:first-child { display: flex; flex-direction: column; }
+.entry-sub { order: 0; font-weight: 700; color: #1f1f1f; font-size: 13px; }
+.entry-title { order: 1; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 12px; color: #444; margin-top: 1px; }
+.entry-dates { color: #555; font-size: 12px; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.04em; }
+.entry p { margin: 6px 0 0; }
+.skills { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 24px; }
+.skills li { background: none; border-radius: 0; padding: 0; font-size: 13px; color: #333; }
+p { margin: 0 0 8px; }
+`.trim();
+
+export const CV_TEMPLATES: CvTemplate[] = [
+  { id: "classic", name: "Classic", style: CLASSIC_STYLE },
+  { id: "elegant", name: "Elegant", style: ELEGANT_STYLE },
+];
 
 export const DEFAULT_TEMPLATE_ID = CV_TEMPLATES[0].id;
 
