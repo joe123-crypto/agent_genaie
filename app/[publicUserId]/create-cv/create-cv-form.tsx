@@ -234,6 +234,34 @@ export function CreateCvForm({
     [fullName, email, phone, location, summary, skills, experience, education, referees, templateId],
   );
 
+  // The preview iframe renders the resume at a fixed A4 pixel size (see
+  // .cv-preview-frame in globals.css); scale it as a whole so the entire sheet
+  // fits the box. Fitting both dimensions keeps the full page visible even when
+  // max-height caps the box, so it never clips the sheet edges.
+  const previewWrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const wrap = previewWrapRef.current;
+    if (!wrap || typeof ResizeObserver === "undefined") return;
+    const A4_WIDTH_PX = 794; // 210mm at 96dpi
+    const A4_HEIGHT_PX = 1123; // 297mm at 96dpi
+    const fit = () => {
+      // Measure the content box (exclude padding) so the grey gutter around the
+      // page card is preserved rather than covered by the scaled sheet.
+      const cs = getComputedStyle(wrap);
+      const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+      const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      const scale = Math.min(
+        (wrap.clientWidth - padX) / A4_WIDTH_PX,
+        (wrap.clientHeight - padY) / A4_HEIGHT_PX,
+      );
+      wrap.style.setProperty("--cv-preview-scale", String(scale));
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(wrap);
+    return () => observer.disconnect();
+  }, []);
+
   const templateIndex = Math.max(
     0,
     CV_TEMPLATES.findIndex((template) => template.id === templateId),
@@ -356,13 +384,15 @@ export function CreateCvForm({
             </button>
           ) : null}
         </div>
-        <div className="cv-preview-frame-wrap">
-          <iframe
-            className="cv-preview-frame"
-            title="CV preview"
-            sandbox=""
-            srcDoc={previewHtml}
-          />
+        <div className="cv-preview-frame-wrap" ref={previewWrapRef}>
+          <div className="cv-preview-sheet">
+            <iframe
+              className="cv-preview-frame"
+              title="CV preview"
+              sandbox=""
+              srcDoc={previewHtml}
+            />
+          </div>
         </div>
         <p className="file-note cv-preview-note">
           This is how your details will look. {hasMultipleTemplates ? "Use the arrows to try another template. " : ""}
