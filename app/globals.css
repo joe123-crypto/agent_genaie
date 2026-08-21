@@ -4072,14 +4072,25 @@ button.landing-pricing-button {
   overflow: hidden;
   background: #fff;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
+/* The iframe renders the resume at a fixed A4 pixel size (210mm x 297mm at
+   96dpi) and is scaled down as a whole so the entire sheet fits the box. The
+   scale factor is measured from the box by a ResizeObserver in
+   create-cv-form.tsx (--cv-preview-scale). */
 .cv-preview-frame {
-  width: 100%;
-  height: 100%;
+  width: 794px;
+  height: 1123px;
+  flex: 0 0 auto;
   border: none;
   display: block;
   background: #fff;
+  transform: scale(var(--cv-preview-scale, 0.5));
+  transform-origin: center center;
 }
 
 .cv-preview-note {

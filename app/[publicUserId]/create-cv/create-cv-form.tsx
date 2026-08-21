@@ -234,6 +234,26 @@ export function CreateCvForm({
     [fullName, email, phone, location, summary, skills, experience, education, referees, templateId],
   );
 
+  // The preview iframe renders the resume at a fixed A4 pixel size (see
+  // .cv-preview-frame in globals.css); scale it as a whole so the entire sheet
+  // fits the box. Fitting both dimensions keeps the full page visible even when
+  // max-height caps the box, so it never clips the sheet edges.
+  const previewWrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const wrap = previewWrapRef.current;
+    if (!wrap || typeof ResizeObserver === "undefined") return;
+    const A4_WIDTH_PX = 794; // 210mm at 96dpi
+    const A4_HEIGHT_PX = 1123; // 297mm at 96dpi
+    const fit = () => {
+      const scale = Math.min(wrap.clientWidth / A4_WIDTH_PX, wrap.clientHeight / A4_HEIGHT_PX);
+      wrap.style.setProperty("--cv-preview-scale", String(scale));
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(wrap);
+    return () => observer.disconnect();
+  }, []);
+
   const templateIndex = Math.max(
     0,
     CV_TEMPLATES.findIndex((template) => template.id === templateId),
@@ -356,7 +376,7 @@ export function CreateCvForm({
             </button>
           ) : null}
         </div>
-        <div className="cv-preview-frame-wrap">
+        <div className="cv-preview-frame-wrap" ref={previewWrapRef}>
           <iframe
             className="cv-preview-frame"
             title="CV preview"
