@@ -1,9 +1,7 @@
 import crypto from "node:crypto";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { FieldValue } from "firebase-admin/firestore";
-import { config } from "@/src/config";
 import { getFirestoreDb } from "@/src/firebase/admin";
-import { getR2Client, putObject } from "@/src/domains/r2-storage";
+import { getObjectBytes, putObject } from "@/src/domains/r2-storage";
 import { buildCvHtml, type CvInput } from "@/src/domains/cv-html";
 import { finalizeJobScoutCvHtml } from "@/src/domains/job-scout";
 import { signState, verifyState } from "@/src/security/crypto";
@@ -73,20 +71,6 @@ function screenshotObjectKey(uid: string, proofId: string, contentType: ProofIma
 
 function cvObjectKey(uid: string, proofId: string): string {
   return `${uid}/payment-proof/${proofId}-cv.html`;
-}
-
-// Fetch an R2 object's raw bytes. r2-storage.ts is intentionally left untouched,
-// so this reuses its exported client with a GetObjectCommand.
-async function getObjectBytes(key: string): Promise<Buffer> {
-  const result = await getR2Client().send(
-    new GetObjectCommand({ Bucket: config.r2Bucket, Key: key }),
-  );
-  const body = result.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
-  if (!body || typeof body.transformToByteArray !== "function") {
-    throw httpError(500, "Stored CV could not be read.");
-  }
-  const bytes = await body.transformToByteArray();
-  return Buffer.from(bytes);
 }
 
 export type PaymentProofPayer = {
@@ -201,4 +185,40 @@ export function verifyPaymentProofToken(token: string): string {
 
 export function proofScreenshotFilename(contentType: ProofImageType): string {
   return `payment-proof.${proofExtension(contentType)}`;
+}
+
+// True once the user has at least one approved payment proof. This is the gate
+// for the CV download page — approval is what finalizes the canonical CV HTML,
+// and these users may have no `plan`, so approval (not a plan) is the right check.
+export async function hasApprovedPaymentProof(uidInput: string): Promise<boolean> {
+  const uid = validateFirebaseUid(uidInput);
+  const snapshot = await getFirestoreDb()
+    .collection("paymentProofs")
+    .where("uid", "==", uid)
+    .where("status", "==", "approved")
+    .limit(1)
+    .get();
+  return !snapshot.empty;
+}
+
+// Records that the user has downloaded their CV PDF at least once. The timestamp
+// is what turns the one-time post-login redirect off (see isCvDownloadPending).
+export async function markCvPdfDownloaded(uidInput: string): Promise<void> {
+  const uid = validateFirebaseUid(uidInput);
+  await getFirestoreDb()
+    .collection("jobScoutProfiles")
+    .doc(uid)
+    .set({ cvPdfDownloadedAt: FieldValue.serverTimestamp() }, { merge: true });
+}
+
+// Drives the one-time post-login nudge to the download page: the user is approved,
+// their CV HTML is ready, and they have not yet downloaded the PDF. Once they do,
+// markCvPdfDownloaded() sets cvPdfDownloadedAt and this returns false thereafter.
+export async function isCvDownloadPending(uidInput: string): Promise<boolean> {
+  const uid = validateFirebaseUid(uidInput);
+  if (!(await hasApprovedPaymentProof(uid))) return false;
+  const doc = await getFirestoreDb().collection("jobScoutProfiles").doc(uid).get();
+  const profile = doc.exists ? doc.data() || {} : {};
+  if (String(profile.cvConversionStatus || "") !== "ready") return false;
+  return !profile.cvPdfDownloadedAt;
 }

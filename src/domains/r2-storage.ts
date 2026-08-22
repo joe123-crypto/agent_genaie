@@ -7,6 +7,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { config, requireConfig } from "@/src/config";
+import { httpError } from "@/src/lib/utils";
 
 let cachedClient: S3Client | null = null;
 
@@ -38,6 +39,17 @@ export async function putObject(key: string, body: Buffer | Uint8Array, contentT
       ContentType: contentType,
     }),
   );
+}
+
+export async function getObjectBytes(key: string): Promise<Buffer> {
+  const result = await getR2Client().send(
+    new GetObjectCommand({ Bucket: config.r2Bucket, Key: key }),
+  );
+  const body = result.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
+  if (!body || typeof body.transformToByteArray !== "function") {
+    throw httpError(500, "Stored object could not be read.");
+  }
+  return Buffer.from(await body.transformToByteArray());
 }
 
 export async function getPresignedGetUrl(key: string, expiresInSeconds = 300) {

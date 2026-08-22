@@ -38,6 +38,28 @@ test("destinationForSession routes onboarding and user-scoped pages", () => {
   assert.equal(destinationForSession(session, "/create-cv"), "/usr_123/create-cv");
 });
 
+test("an approved user with a pending CV download lands on the download page", () => {
+  // cvDownloadReady must win over the plan/onboarding gates: manual-payment users
+  // approved via proof may have no plan, so gating on a plan would trap them at
+  // /pricing and they could never reach their finished CV.
+  const session = {
+    ok: true as const,
+    publicUserId: "usr_dl1",
+    onboardingRequired: true,
+    plan: null,
+    planRequired: true,
+    cvDownloadReady: true,
+  };
+  assert.equal(destinationForSession(session, "/"), "/usr_dl1/download-cv");
+  // An in-progress payment handoff still wins, so a user mid-upload is not diverted.
+  assert.equal(destinationForSession(session, "/payment"), "/payment");
+  // Once downloaded (flag off), routing falls back to the normal gates.
+  assert.equal(
+    destinationForSession({ ...session, cvDownloadReady: false }, "/"),
+    "/pricing?next=%2Fusr_dl1%2Fonboarding",
+  );
+});
+
 test("a WhatsApp-initiated sign-in returns to the user-scoped invite page", () => {
   // After sign-in, a /whatsapp?token=... next-path must resolve to the
   // publicUserId-scoped invite page (not stay generic), so the page can auto-link
