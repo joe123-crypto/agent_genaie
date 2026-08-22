@@ -97,8 +97,11 @@ export function destinationForSession(session: SessionResult, nextPath: string) 
   }
   // A freshly approved user's next login lands on the CV download page. This must
   // win over the plan/onboarding gates below, since manual-payment users may have
-  // no plan. isCvDownloadPending flips off once they download, so this fires once.
-  if (session.cvDownloadReady && publicUserId) {
+  // no plan and would otherwise be parked at /pricing, unable to reach the CV they
+  // already paid for. It is deliberately limited to a bare "/" sign-in: a user who
+  // followed a real link asked to go somewhere, and a nudge must not eat that.
+  // isCvDownloadPending flips off once the page has been shown, so this fires once.
+  if (session.cvDownloadReady && publicUserId && safePath === "/") {
     return `/${publicUserId}/download-cv`;
   }
   if (session.planRequired && publicUserId) {
