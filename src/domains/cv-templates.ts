@@ -247,7 +247,16 @@ function dateRange(start: string, end: string) {
 // form's switcher arrows appear automatically once CV_TEMPLATES has more than
 // one entry.
 
-export type CvTemplate = { id: string; name: string; style: string };
+// `layout` selects the document structure a template renders with:
+//   "single"  – one column: header (name + inline contact) then the sections
+//               stacked in a fixed order. The default; classic and elegant use it.
+//   "sidebar" – a full-width name banner over a two-column grid: a left sidebar
+//               (contact, education, skills) beside a wider main column
+//               (profile, experience, referees). Real independent columns, so
+//               the two panes need to live in separate DOM containers — which is
+//               why layout is a property of the template, not just its CSS.
+export type CvLayout = "single" | "sidebar";
+export type CvTemplate = { id: string; name: string; style: string; layout?: CvLayout };
 
 const CLASSIC_STYLE = `
 :root { color-scheme: light; }
@@ -273,7 +282,82 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; border-
 p { margin: 0 0 8px; }
 `.trim();
 
-export const CV_TEMPLATES: CvTemplate[] = [{ id: "classic", name: "Classic", style: CLASSIC_STYLE }];
+// A refined, minimalist single-column resume in the style of a classic
+// typeset CV: a centered name in a wide-tracked serif, a contact line framed
+// by hairline rules, uppercase section headings, and a multi-column skills
+// list. Styles the same shared markup as every other template — only the CSS
+// differs — so preview == saved output and it passes validateCanonicalCvHtml
+// by construction (inline CSS only, no scripts, no external references).
+const ELEGANT_STYLE = `
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+@page { size: A4; margin: 18mm; }
+body { margin: 0; padding: 52px 56px; font-family: "Helvetica Neue", Arial, sans-serif; color: #2c2c2c; line-height: 1.55; font-size: 13.5px; background: #fbfaf6; }
+.cv { width: 100%; max-width: 210mm; margin: 0 auto; }
+@media print { body { padding: 0; background: #fff; } .cv { max-width: none; margin: 0; } }
+header { text-align: center; margin-bottom: 26px; }
+h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: 34px; letter-spacing: 0.24em; text-transform: uppercase; color: #1f1f1f; padding-left: 0.24em; }
+header .contact { border-top: 1px solid #bbb5a8; border-bottom: 1px solid #bbb5a8; padding: 8px 0; margin-top: 16px; justify-content: center; }
+.contact { color: #555; font-size: 12px; letter-spacing: 0.02em; }
+.contact span + span::before { content: " — "; color: #9c968b; }
+section { margin-bottom: 22px; }
+h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #2b2b2b; border-bottom: 1px solid #cfc9bd; padding-bottom: 5px; margin: 0 0 12px; }
+.entry { margin-bottom: 15px; }
+.entry-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.entry-head > div:first-child { display: flex; flex-direction: column; }
+.entry-sub { order: 0; font-weight: 700; color: #1f1f1f; font-size: 13px; }
+.entry-title { order: 1; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 12px; color: #444; margin-top: 1px; }
+.entry-dates { color: #555; font-size: 12px; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.04em; }
+.entry p { margin: 6px 0 0; }
+.skills { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 24px; }
+.skills li { background: none; border-radius: 0; padding: 0; font-size: 13px; color: #333; }
+p { margin: 0 0 8px; }
+`.trim();
+
+// A two-column resume in the style of a modern professional template: a
+// centered, widely-tracked light name banner across the top, then a narrow left
+// sidebar (contact with line icons, education, skills) beside a wider main
+// column (profile, work experience) divided by a hairline rule. Uses the
+// "sidebar" document layout; the CSS below styles that structure. Self-contained
+// inline CSS only, so it passes validateCanonicalCvHtml by construction.
+const MODERN_STYLE = `
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+@page { size: A4; margin: 18mm; }
+body { margin: 0; padding: 48px 52px; font-family: "Helvetica Neue", Arial, sans-serif; color: #333; line-height: 1.5; font-size: 13px; background: #fff; }
+.cv { width: 100%; max-width: 210mm; margin: 0 auto; }
+@media print { body { padding: 0; } .cv { max-width: none; margin: 0; } }
+.cv-header { text-align: center; padding-bottom: 18px; border-bottom: 1px solid #d8d8d8; }
+.cv-header h1 { margin: 0; font-weight: 300; font-size: 32px; letter-spacing: 0.3em; text-transform: uppercase; color: #2a2a2a; padding-left: 0.3em; }
+.cv-columns { display: grid; grid-template-columns: 1fr 1.9fr; margin-top: 26px; }
+.cv-aside { padding-right: 32px; }
+.cv-main { border-left: 1px solid #e3e3e3; padding-left: 32px; }
+.cv-aside section, .cv-main section { margin-bottom: 24px; }
+h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em; color: #444; margin: 0 0 14px; }
+.contact-list { list-style: none; margin: 0; padding: 0; }
+.contact-list li { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; font-size: 12px; color: #4a4a4a; }
+.contact-list svg { width: 14px; height: 14px; flex: none; color: #8a8a8a; }
+.contact-list span { min-width: 0; overflow-wrap: anywhere; }
+.entry { margin-bottom: 16px; }
+.entry-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.entry-title { font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 12.5px; color: #2a2a2a; }
+.entry-sub { color: #666; font-size: 12px; }
+.entry-dates { color: #8a8a8a; font-size: 11.5px; white-space: nowrap; }
+.entry p { margin: 7px 0 0; color: #555; }
+.cv-aside .entry-head { flex-direction: column; align-items: flex-start; gap: 1px; }
+.cv-aside .entry-title { font-size: 12px; }
+.cv-aside .entry-sub { font-size: 11.5px; }
+.cv-aside .entry-dates { color: #999; }
+.skills { list-style: none; padding: 0; margin: 0; display: block; }
+.skills li { background: none; border: none; border-radius: 0; padding: 3px 0; font-size: 12.5px; color: #555; }
+p { margin: 0 0 8px; }
+`.trim();
+
+export const CV_TEMPLATES: CvTemplate[] = [
+  { id: "classic", name: "Classic", style: CLASSIC_STYLE },
+  { id: "elegant", name: "Elegant", style: ELEGANT_STYLE },
+  { id: "modern", name: "Modern", style: MODERN_STYLE, layout: "sidebar" },
+];
 
 export const DEFAULT_TEMPLATE_ID = CV_TEMPLATES[0].id;
 
@@ -358,6 +442,49 @@ function contactLine(cv: NormalizedCv) {
   return parts.length ? `<div class="contact">${parts.join("")}</div>` : "";
 }
 
+// Inline (self-contained) line icons for the sidebar contact block. Stroke-only
+// SVG using currentColor — no external references, no url(), no event handlers —
+// so they pass validateCanonicalCvHtml. Only used by the sidebar layout.
+const CONTACT_ICONS = {
+  phone:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/></svg>',
+  email:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>',
+  location:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
+} as const;
+
+// Stacked contact block for the sidebar layout (heading + one icon-led line per
+// detail), as distinct from the inline single-line `contactLine` used in the
+// single-column header.
+function contactSection(cv: NormalizedCv) {
+  const rows = ([
+    ["phone", cv.phone],
+    ["email", cv.email],
+    ["location", cv.location],
+  ] as const)
+    .filter(([, value]) => Boolean(value))
+    .map(([key, value]) => `<li>${CONTACT_ICONS[key]}<span>${safeText(value)}</span></li>`)
+    .join("");
+  if (!rows) return "";
+  return `<section><h2>Contact</h2><ul class="contact-list">${rows}</ul></section>`;
+}
+
+// Two-column body for the "sidebar" layout: a full-width name banner over a
+// grid whose left pane carries contact, education, and skills and whose right
+// pane carries the profile, experience, and referees. The two panes are
+// separate containers so they lay out as independent columns (each as tall as
+// its own content) rather than sharing grid rows.
+function sidebarBody(cv: NormalizedCv) {
+  const aside = [contactSection(cv), educationSection(cv.education), skillsSection(cv.skills)]
+    .filter(Boolean)
+    .join("");
+  const main = [summarySection(cv.summary), experienceSection(cv.experience), refereesSection(cv.referees)]
+    .filter(Boolean)
+    .join("");
+  return `<header class="cv-header"><h1>${safeText(cv.fullName)}</h1></header><div class="cv-columns"><aside class="cv-aside">${aside}</aside><div class="cv-main">${main}</div></div>`;
+}
+
 // Build a single self-contained HTML document from the create-cv form data in
 // the chosen template's style. All CSS is inlined and every value is escaped so
 // the result satisfies validateCanonicalCvHtml (no scripts, no external
@@ -366,16 +493,19 @@ function contactLine(cv: NormalizedCv) {
 export function renderCvHtml(input: CvInput, templateId?: string, opts: RenderCvOptions = {}): string {
   const cv = normalizeCvInput(input, opts);
   const template = resolveTemplate(templateId);
-  const body = [
-    `<header><h1>${safeText(cv.fullName)}</h1>${contactLine(cv)}</header>`,
-    summarySection(cv.summary),
-    skillsSection(cv.skills),
-    experienceSection(cv.experience),
-    educationSection(cv.education),
-    refereesSection(cv.referees),
-  ]
-    .filter(Boolean)
-    .join("");
+  const body =
+    (template.layout ?? "single") === "sidebar"
+      ? sidebarBody(cv)
+      : [
+          `<header><h1>${safeText(cv.fullName)}</h1>${contactLine(cv)}</header>`,
+          summarySection(cv.summary),
+          skillsSection(cv.skills),
+          experienceSection(cv.experience),
+          educationSection(cv.education),
+          refereesSection(cv.referees),
+        ]
+          .filter(Boolean)
+          .join("");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${safeText(
     cv.fullName,
   )} — CV</title><style>${template.style}</style></head><body><main class="cv">${body}</main></body></html>`;
