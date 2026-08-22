@@ -60,6 +60,28 @@ test("an approved user with a pending CV download lands on the download page", (
   );
 });
 
+test("the CV download nudge never eats an explicit next path", () => {
+  // The nudge is only for a bare sign-in. Someone who followed a real link asked
+  // to go somewhere specific, and silently swallowing that would strand them on
+  // the download page every time until they clicked through it.
+  const session = {
+    ok: true as const,
+    publicUserId: "usr_dl2",
+    onboardingRequired: false,
+    plan: "pro" as const,
+    planRequired: false,
+    cvDownloadReady: true,
+  };
+  assert.equal(destinationForSession(session, "/connect-gmail"), "/usr_dl2/connect-gmail");
+  assert.equal(destinationForSession(session, "/usr_dl2/job-scout"), "/usr_dl2/job-scout");
+  assert.equal(
+    destinationForSession(session, "/whatsapp?token=abc"),
+    "/usr_dl2/whatsapp?token=abc",
+  );
+  // ...but a bare sign-in still gets the nudge.
+  assert.equal(destinationForSession(session, "/"), "/usr_dl2/download-cv");
+});
+
 test("a WhatsApp-initiated sign-in returns to the user-scoped invite page", () => {
   // After sign-in, a /whatsapp?token=... next-path must resolve to the
   // publicUserId-scoped invite page (not stay generic), so the page can auto-link

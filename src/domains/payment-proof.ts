@@ -187,10 +187,12 @@ export function proofScreenshotFilename(contentType: ProofImageType): string {
   return `payment-proof.${proofExtension(contentType)}`;
 }
 
-// True once the user has at least one approved payment proof. This is the gate
-// for the CV download page — approval is what finalizes the canonical CV HTML,
-// and these users may have no `plan`, so approval (not a plan) is the right check.
-export async function hasApprovedPaymentProof(uidInput: string): Promise<boolean> {
+// True once the user has at least one approved payment proof. Approval is what
+// finalizes the canonical CV HTML, and manually-paid users may have no `plan`, so
+// approval (not a plan) is the access gate for everything CV-download related.
+// Deliberately module-private: callers want cvDownloadState(), which also accounts
+// for whether there is actually a CV to hand over.
+async function hasApprovedPaymentProof(uidInput: string): Promise<boolean> {
   const uid = validateFirebaseUid(uidInput);
   const snapshot = await getFirestoreDb()
     .collection("paymentProofs")
@@ -201,24 +203,68 @@ export async function hasApprovedPaymentProof(uidInput: string): Promise<boolean
   return !snapshot.empty;
 }
 
-// Records that the user has downloaded their CV PDF at least once. The timestamp
-// is what turns the one-time post-login redirect off (see isCvDownloadPending).
+type JobScoutProfileFields = {
+  cvConversionStatus?: unknown;
+  cvPdfDownloadedAt?: unknown;
+  cvDownloadPromptedAt?: unknown;
+};
+
+async function readJobScoutProfile(uid: string): Promise<JobScoutProfileFields> {
+  const doc = await getFirestoreDb().collection("jobScoutProfiles").doc(uid).get();
+  return doc.exists ? (doc.data() as JobScoutProfileFields) || {} : {};
+}
+
+// Matches the normalization job-scout.ts applies when it reads the same field.
+function isProfileCvReady(profile: JobScoutProfileFields): boolean {
+  return String(profile.cvConversionStatus ?? "").trim().toLowerCase() === "ready";
+}
+
+// Why a CV download is or isn't available. Callers need the distinction: an
+// unapproved user belongs on /payment, but an approved user whose CV went back to
+// `pending` (they uploaded a replacement PDF, which deletes the canonical HTML)
+// needs to be told to wait, not sent to pay again.
+export type CvDownloadState = "ready" | "not_approved" | "cv_not_ready";
+
+// The single gate for the download page and the PDF route. Both must agree, or a
+// user can reach a page whose download can only fail.
+export async function cvDownloadState(uidInput: string): Promise<CvDownloadState> {
+  const uid = validateFirebaseUid(uidInput);
+  if (!(await hasApprovedPaymentProof(uid))) return "not_approved";
+  return isProfileCvReady(await readJobScoutProfile(uid)) ? "ready" : "cv_not_ready";
+}
+
+// Records that the user has downloaded their CV PDF at least once.
 export async function markCvPdfDownloaded(uidInput: string): Promise<void> {
   const uid = validateFirebaseUid(uidInput);
   await getFirestoreDb()
     .collection("jobScoutProfiles")
     .doc(uid)
-    .set({ cvPdfDownloadedAt: FieldValue.serverTimestamp() }, { merge: true });
+    .set({ cvPdfDownloadedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 }
 
-// Drives the one-time post-login nudge to the download page: the user is approved,
-// their CV HTML is ready, and they have not yet downloaded the PDF. Once they do,
-// markCvPdfDownloaded() sets cvPdfDownloadedAt and this returns false thereafter.
+// Records that we have shown the user the download page. This is what actually
+// retires the one-time post-login nudge: keying it off the download alone would
+// re-hijack every future sign-in of anyone who opened the page and did not click,
+// or who hit a render failure, with no way to reach the rest of the app.
+export async function markCvDownloadPrompted(uidInput: string): Promise<void> {
+  const uid = validateFirebaseUid(uidInput);
+  const ref = getFirestoreDb().collection("jobScoutProfiles").doc(uid);
+  // The page re-renders on every visit and refresh; only the first one is news.
+  const doc = await ref.get();
+  if (doc.exists && (doc.data() || {}).cvDownloadPromptedAt) return;
+  await ref.set(
+    { cvDownloadPromptedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  );
+}
+
+// Drives the one-time post-login nudge to the download page. Runs on every single
+// sign-in, so it is ordered cheapest-first: one profile doc read rejects the vast
+// majority of users, and only a genuine candidate pays for the paymentProofs query.
 export async function isCvDownloadPending(uidInput: string): Promise<boolean> {
   const uid = validateFirebaseUid(uidInput);
-  if (!(await hasApprovedPaymentProof(uid))) return false;
-  const doc = await getFirestoreDb().collection("jobScoutProfiles").doc(uid).get();
-  const profile = doc.exists ? doc.data() || {} : {};
-  if (String(profile.cvConversionStatus || "") !== "ready") return false;
-  return !profile.cvPdfDownloadedAt;
+  const profile = await readJobScoutProfile(uid);
+  if (profile.cvPdfDownloadedAt || profile.cvDownloadPromptedAt) return false;
+  if (!isProfileCvReady(profile)) return false;
+  return hasApprovedPaymentProof(uid);
 }

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { getFirestoreDb } from "@/src/firebase/admin";
 import {
@@ -82,6 +83,20 @@ export function cvPendingObjectKey(uidInput: string) {
 
 export function cvHtmlObjectKey(uidInput: string) {
   return `${storageSafeUid(uidInput)}/cv/base/cv.html`;
+}
+
+// Rendered-PDF cache key for the canonical CV. The key embeds a digest of the
+// HTML it was rendered from, so a re-finalized CV lands on a different key and a
+// stale PDF can never be served — no explicit cache invalidation to keep in sync.
+export function cvPdfObjectKey(uidInput: string, htmlDigest: string) {
+  const digest = String(htmlDigest).toLowerCase();
+  if (!/^[0-9a-f]{16}$/.test(digest)) throw httpError(500, "Invalid CV PDF cache digest.");
+  return `${storageSafeUid(uidInput)}/cv/base/cv-${digest}.pdf`;
+}
+
+// The digest half of cvPdfObjectKey, kept next to it so the two stay in step.
+export function cvHtmlDigest(html: string) {
+  return crypto.createHash("sha256").update(html, "utf8").digest("hex").slice(0, 16);
 }
 
 function isUserCvObjectRef(value: unknown, uidInput: string) {
