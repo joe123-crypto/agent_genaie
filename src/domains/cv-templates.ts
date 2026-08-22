@@ -496,23 +496,300 @@ function sidebarBody(cv: NormalizedCv) {
 // the result satisfies validateCanonicalCvHtml (no scripts, no external
 // references) by construction. Pass { preview: true } for the live client
 // preview so an empty name renders a placeholder instead of throwing.
+// The inner markup of <main class="cv"> for a normalized CV in the given
+// template's layout. Shared by the saved document (renderCvHtml) and the
+// preview document (renderCvPreviewDocument) so both render identical content.
+function buildCvBody(cv: NormalizedCv, template: CvTemplate): string {
+  return (template.layout ?? "single") === "sidebar"
+    ? sidebarBody(cv)
+    : [
+        `<header><h1>${safeText(cv.fullName)}</h1>${contactLine(cv)}</header>`,
+        summarySection(cv.summary),
+        skillsSection(cv.skills),
+        experienceSection(cv.experience),
+        educationSection(cv.education),
+        refereesSection(cv.referees),
+      ]
+        .filter(Boolean)
+        .join("");
+}
+
 export function renderCvHtml(input: CvInput, templateId?: string, opts: RenderCvOptions = {}): string {
   const cv = normalizeCvInput(input, opts);
   const template = resolveTemplate(templateId);
-  const body =
-    (template.layout ?? "single") === "sidebar"
-      ? sidebarBody(cv)
-      : [
-          `<header><h1>${safeText(cv.fullName)}</h1>${contactLine(cv)}</header>`,
-          summarySection(cv.summary),
-          skillsSection(cv.skills),
-          experienceSection(cv.experience),
-          educationSection(cv.education),
-          refereesSection(cv.referees),
-        ]
-          .filter(Boolean)
-          .join("");
+  const body = buildCvBody(cv, template);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${safeText(
     cv.fullName,
   )} — CV</title><style>${template.style}</style></head><body><main class="cv">${body}</main></body></html>`;
+}
+
+// --- Paginated preview document -------------------------------------------
+//
+// The live create-cv preview shows the CV as real, fixed-size A4 pages that the
+// outer container scrolls through (rather than one internally-scrolling sheet).
+// This is PREVIEW-ONLY: renderCvHtml (the saved document) stays script-free and
+// self-contained so it keeps passing validateCanonicalCvHtml. The preview
+// document reuses the same buildCvBody markup + template.style, but adds a small
+// pagination stylesheet and an inline paginator script that lays the rendered
+// content into <div class="page"> boxes. The paginator posts the total document
+// height to the parent (postMessage) so the iframe can be sized and the wrap
+// scrolled. The preview iframe therefore runs with sandbox="allow-scripts".
+
+// Per-template page box metrics. These mirror the padding/background that each
+// *_STYLE body rule sets — kept here (rather than reused from the body rule)
+// because the paginated preview neutralizes the body box model. Keep in sync
+// with the body { padding / background } of each style constant above.
+const PREVIEW_PAGE_METRICS: Record<string, { pad: string; bg: string }> = {
+  classic: { pad: "48px", bg: "#fff" },
+  elegant: { pad: "48px 56px", bg: "#fbfaf6" },
+  modern: { pad: "52px 56px", bg: "#fff" },
+};
+
+// Overrides the template's on-screen one-page fill (min-height:100vh + flex
+// justify) so pages don't each stretch to full height, and styles the page
+// boxes (fixed A4, non-scrolling, gap + shadow between them).
+const PREVIEW_PAGINATION_CSS = `
+html, body { height: auto !important; }
+body { min-height: 0 !important; display: block !important; padding: 0 !important; margin: 0 !important; background: #ececea !important; }
+.cv-source { position: absolute !important; left: -10000px !important; top: 0 !important; width: 794px; visibility: hidden; }
+.cv { max-width: none !important; margin: 0 !important; flex: none !important; display: block !important; justify-content: flex-start !important; min-height: 0 !important; width: auto !important; }
+.cv-columns { flex: none !important; margin-top: 0 !important; }
+.cv-aside, .cv-main { justify-content: flex-start !important; }
+.pages { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 24px 0; }
+.page { position: relative; box-sizing: border-box; width: 794px; height: 1123px; overflow: hidden; background: var(--page-bg, #fff); padding: var(--page-pad, 48px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); border: 1px solid #d9d9d5; }
+.cv-scratch { position: absolute; left: -10000px; top: 0; }
+`.trim();
+
+// Greedy DOM paginator, run inside the preview iframe. Kept free of template
+// literals and optional chaining so it stays a plain, widely-supported string.
+const PAGINATOR_JS = `
+(function () {
+  var PAGE_W = 794;
+  var pagesEl = document.getElementById("pages");
+  var source = document.querySelector(".cv-source .cv");
+  if (!pagesEl || !source) return;
+
+  function el(tag, cls) { var n = document.createElement(tag); if (cls) n.className = cls; return n; }
+  function avail(page) {
+    var cs = getComputedStyle(page);
+    return page.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  }
+  function scratchPage() {
+    var p = el("div", "page");
+    p.classList.add("cv-scratch");
+    document.body.appendChild(p);
+    return p;
+  }
+
+  // A section's item-units: each .entry / <p> is one atomic unit; a
+  // <ul class="skills"> expands into one unit per <li> so skills lists break.
+  function sectionUnits(sec) {
+    var units = [];
+    var kids = sec.children;
+    for (var i = 0; i < kids.length; i++) {
+      var c = kids[i];
+      if (c.tagName === "H2") continue;
+      if (c.tagName === "UL" && c.classList.contains("skills")) {
+        var lis = c.children;
+        for (var j = 0; j < lis.length; j++) units.push({ kind: "li", node: lis[j] });
+      } else {
+        units.push({ kind: "block", node: c });
+      }
+    }
+    return units;
+  }
+
+  // Ordered flow blocks of a container: a header (atomic) and sections.
+  function blocksOf(root) {
+    var blocks = [];
+    var kids = root.children;
+    for (var i = 0; i < kids.length; i++) {
+      var c = kids[i];
+      if (c.tagName === "HEADER") { blocks.push({ type: "header", node: c }); continue; }
+      if (c.tagName === "SECTION") {
+        blocks.push({ type: "section", className: c.className, h2: c.querySelector(":scope > h2"), units: sectionUnits(c) });
+      }
+    }
+    return blocks;
+  }
+
+  // Lay blocks into a sequence of container elements (one per page). Returns the
+  // filled, detached containers. widthPx (optional) fixes the measuring width so
+  // a column wraps exactly as it will inside the real grid.
+  function paginate(blocks, containerTag, containerClass, widthPx, availFor, scratch) {
+    var result = [];
+    var pageIndex = 0;
+    var container, curAvail, curSection, curUl;
+
+    function open() {
+      container = el(containerTag, containerClass);
+      if (widthPx) container.style.width = widthPx + "px";
+      scratch.innerHTML = "";
+      scratch.appendChild(container);
+      curAvail = availFor(pageIndex);
+      curSection = null;
+      curUl = null;
+    }
+    function flush() {
+      scratch.removeChild(container);
+      if (widthPx) container.style.width = "";
+      result.push(container);
+      pageIndex++;
+    }
+    function over() { return container.scrollHeight > curAvail; }
+    function hasContent() { return container.childNodes.length > 0; }
+
+    function openSection(cls, h2) {
+      curSection = el("section", cls || "");
+      if (h2) curSection.appendChild(h2.cloneNode(true));
+      curUl = null;
+      container.appendChild(curSection);
+    }
+    // Append one unit to the current section; return a rollback function.
+    function placeUnit(unit) {
+      if (unit.kind === "li") {
+        if (!curUl) { curUl = el("ul", "skills"); curSection.appendChild(curUl); }
+        var ul = curUl;
+        var li = unit.node.cloneNode(true);
+        ul.appendChild(li);
+        return function () { ul.removeChild(li); if (!ul.children.length) { if (ul.parentNode) ul.parentNode.removeChild(ul); if (curUl === ul) curUl = null; } };
+      }
+      curUl = null;
+      var node = unit.node.cloneNode(true);
+      curSection.appendChild(node);
+      return function () { if (node.parentNode) node.parentNode.removeChild(node); };
+    }
+
+    open();
+
+    for (var b = 0; b < blocks.length; b++) {
+      var block = blocks[b];
+      if (block.type === "header") {
+        var h = block.node.cloneNode(true);
+        container.appendChild(h);
+        if (over() && container.childNodes.length > 1) {
+          container.removeChild(h);
+          flush(); open();
+          container.appendChild(h);
+        }
+        curSection = null; curUl = null;
+        continue;
+      }
+      // section: place its units, keeping the h2 with its first unit and never
+      // leaving an orphan h2 at the foot of a page.
+      openSection(block.className, block.h2);
+      var units = block.units;
+      for (var u = 0; u < units.length; u++) {
+        var rollback = placeUnit(units[u]);
+        if (!over()) continue;
+        var placedBefore = fragmentUnitCount(curSection) - 1; // exclude the one just added
+        rollback();
+        if (placedBefore > 0) {
+          // Earlier units already fit here: break the section and continue it on
+          // a fresh page under a repeated (headingless) fragment.
+          flush(); open();
+          openSection(block.className, null);
+          placeUnit(units[u]);
+        } else if (hasOtherBlocks(container, curSection)) {
+          // The h2 + first unit don't fit under existing page content: move the
+          // whole section start to a fresh page so the h2 isn't orphaned.
+          container.removeChild(curSection);
+          flush(); open();
+          openSection(block.className, block.h2);
+          placeUnit(units[u]);
+        } else {
+          // Fresh page, a single unit still overflows: accept it (clipped).
+          placeUnit(units[u]);
+        }
+      }
+    }
+    if (hasContent()) flush();
+    return result;
+  }
+
+  // Count of top-level item-units currently in a section fragment.
+  function fragmentUnitCount(sec) {
+    return sec.querySelectorAll(":scope > .entry, :scope > p, :scope > ul.skills > li").length;
+  }
+  function hasOtherBlocks(cont, sec) {
+    var kids = cont.children;
+    for (var i = 0; i < kids.length; i++) if (kids[i] !== sec) return true;
+    return false;
+  }
+
+  function buildSingle() {
+    var scratch = scratchPage();
+    var pageAvail = avail(scratch);
+    var cols = paginate(blocksOf(source), "main", "cv", 0, function () { return pageAvail; }, scratch);
+    document.body.removeChild(scratch);
+    for (var i = 0; i < cols.length; i++) {
+      var p = el("div", "page");
+      p.appendChild(cols[i]);
+      pagesEl.appendChild(p);
+    }
+  }
+
+  function buildSidebar() {
+    var headerSrc = source.querySelector(":scope > .cv-header") || source.querySelector(":scope > header");
+    var asideSrc = source.querySelector(".cv-aside");
+    var mainSrc = source.querySelector(".cv-main");
+
+    // Measure real column widths + header height inside a scratch grid page.
+    var sp = scratchPage();
+    var cv = el("main", "cv"); sp.appendChild(cv);
+    var headerH = 0;
+    if (headerSrc) { var hc = headerSrc.cloneNode(true); cv.appendChild(hc); headerH = hc.getBoundingClientRect().height; }
+    var grid = el("div", "cv-columns"); cv.appendChild(grid);
+    var aMeasure = el("aside", "cv-aside"); var mMeasure = el("div", "cv-main");
+    grid.appendChild(aMeasure); grid.appendChild(mMeasure);
+    var asideW = aMeasure.clientWidth;
+    var mainW = mMeasure.clientWidth;
+    var pageAvail = avail(sp);
+    document.body.removeChild(sp);
+
+    function availFor(i) { return i === 0 ? Math.max(0, pageAvail - headerH - 8) : pageAvail; }
+    var scratch = scratchPage();
+    var asideCols = asideSrc ? paginate(blocksOf(asideSrc), "aside", "cv-aside", asideW, availFor, scratch) : [];
+    var mainCols = mainSrc ? paginate(blocksOf(mainSrc), "div", "cv-main", mainW, availFor, scratch) : [];
+    document.body.removeChild(scratch);
+
+    var n = Math.max(asideCols.length, mainCols.length, 1);
+    for (var i = 0; i < n; i++) {
+      var p = el("div", "page");
+      var cvw = el("main", "cv"); p.appendChild(cvw);
+      if (i === 0 && headerSrc) cvw.appendChild(headerSrc.cloneNode(true));
+      var colw = el("div", "cv-columns"); cvw.appendChild(colw);
+      colw.appendChild(asideCols[i] || el("aside", "cv-aside"));
+      colw.appendChild(mainCols[i] || el("div", "cv-main"));
+      pagesEl.appendChild(p);
+    }
+  }
+
+  function postSize() {
+    var h = Math.ceil(document.documentElement.scrollHeight);
+    if (window.parent) window.parent.postMessage({ type: "cv-preview-size", height: h }, "*");
+  }
+
+  function build() {
+    pagesEl.innerHTML = "";
+    if (source.querySelector(".cv-columns")) buildSidebar(); else buildSingle();
+    postSize();
+  }
+
+  build();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(build);
+  window.addEventListener("load", postSize);
+})();
+`.trim();
+
+// Build the preview-only document (with the inline paginator). Never saved.
+export function renderCvPreviewDocument(input: CvInput, templateId?: string): string {
+  const cv = normalizeCvInput(input, { preview: true });
+  const template = resolveTemplate(templateId);
+  const body = buildCvBody(cv, template);
+  const metrics = PREVIEW_PAGE_METRICS[template.id] ?? { pad: "48px", bg: "#fff" };
+  const rootVars = `:root{--page-pad:${metrics.pad};--page-bg:${metrics.bg};}`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${safeText(
+    cv.fullName,
+  )} — CV preview</title><style>${template.style}</style><style>${PREVIEW_PAGINATION_CSS}</style><style>${rootVars}</style></head><body><div class="cv-source"><main class="cv">${body}</main></div><div class="pages" id="pages"></div><script>${PAGINATOR_JS}</script></body></html>`;
 }

@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { FieldLabel } from "@/app/_components/field-label";
 import { StatusNotice, type StatusKind } from "@/app/_components/status-ui";
-import { CV_TEMPLATES, DEFAULT_TEMPLATE_ID, renderCvHtml } from "@/src/domains/cv-templates";
+import { CV_TEMPLATES, DEFAULT_TEMPLATE_ID, renderCvPreviewDocument } from "@/src/domains/cv-templates";
 import { clearCvDraft, loadCvDraft, saveCvDraft, type CvDraft } from "./cv-draft";
 
 export type ExperienceRow = {
@@ -224,36 +224,41 @@ export function CreateCvForm({
     return { fullName, email, phone, location, summary, skills, experience, education, referees, template: templateId };
   }
 
-  // Live CV preview: rendered from the same code path that saves the CV, so the
-  // preview is exactly what "Use template" produces. Preview mode tolerates an
-  // empty name (shows a placeholder) so it renders while the form is still blank.
+  // Live CV preview: a paginated document built from the same content + template
+  // styles the saved CV uses (renderCvPreviewDocument reuses buildCvBody), so it
+  // shows exactly what "Use template" produces, laid out as fixed A4 pages.
+  // Preview mode tolerates an empty name (shows a placeholder) so it renders
+  // while the form is still blank.
   const previewHtml = useMemo(
-    () => renderCvHtml(currentDraft(), templateId, { preview: true }),
+    () => renderCvPreviewDocument(currentDraft(), templateId),
     // currentDraft is derived purely from these values.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [fullName, email, phone, location, summary, skills, experience, education, referees, templateId],
   );
 
-  // The preview iframe renders the resume at a fixed A4 pixel size (see
-  // .cv-preview-frame in globals.css); scale it as a whole so the entire sheet
-  // fits the box. Fitting both dimensions keeps the full page visible even when
-  // max-height caps the box, so it never clips the sheet edges.
+  // Reloading the preview iframe re-runs its paginator, so debounce it: only
+  // rebuild after typing pauses, keeping the form responsive.
+  const [debouncedPreview, setDebouncedPreview] = useState(previewHtml);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPreview(previewHtml), 275);
+    return () => clearTimeout(t);
+  }, [previewHtml]);
+
+  // The preview iframe paginates the CV into fixed A4 pages (794px wide) and
+  // reports its full pixel height via postMessage. The outer wrap scrolls
+  // through the stacked pages; we scale the pages to fit the wrap WIDTH and size
+  // the iframe to the reported height.
   const previewWrapRef = useRef<HTMLDivElement>(null);
+  const previewFrameRef = useRef<HTMLIFrameElement>(null);
+  const [previewHeight, setPreviewHeight] = useState(1123);
   useEffect(() => {
     const wrap = previewWrapRef.current;
     if (!wrap || typeof ResizeObserver === "undefined") return;
     const A4_WIDTH_PX = 794; // 210mm at 96dpi
-    const A4_HEIGHT_PX = 1123; // 297mm at 96dpi
     const fit = () => {
-      // Measure the content box (exclude padding) so the grey gutter around the
-      // page card is preserved rather than covered by the scaled sheet.
       const cs = getComputedStyle(wrap);
       const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-      const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-      const scale = Math.min(
-        (wrap.clientWidth - padX) / A4_WIDTH_PX,
-        (wrap.clientHeight - padY) / A4_HEIGHT_PX,
-      );
+      const scale = Math.min(1, (wrap.clientWidth - padX) / A4_WIDTH_PX);
       wrap.style.setProperty("--cv-preview-scale", String(scale));
     };
     fit();
@@ -261,6 +266,22 @@ export function CreateCvForm({
     observer.observe(wrap);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== previewFrameRef.current?.contentWindow) return;
+      const data = event.data as { type?: string; height?: number } | null;
+      if (data?.type === "cv-preview-size" && typeof data.height === "number") {
+        setPreviewHeight(Math.max(1, Math.round(data.height)));
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  useEffect(() => {
+    previewWrapRef.current?.style.setProperty("--cv-preview-content-h", `${previewHeight}px`);
+  }, [previewHeight]);
 
   const templateIndex = Math.max(
     0,
@@ -389,8 +410,9 @@ export function CreateCvForm({
             <iframe
               className="cv-preview-frame"
               title="CV preview"
-              sandbox=""
-              srcDoc={previewHtml}
+              ref={previewFrameRef}
+              sandbox="allow-scripts"
+              srcDoc={debouncedPreview}
             />
           </div>
         </div>

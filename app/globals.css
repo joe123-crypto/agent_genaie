@@ -4063,49 +4063,49 @@ button.landing-pricing-button {
   font-size: 0.85rem;
 }
 
-/* Grey matte the CV page sits on, so the white sheet reads as a distinct
-   document with a clear boundary from the app's preview area. */
+/* Grey matte the CV pages sit on. This is the scroll viewport: the iframe
+   paginates the CV into a vertical stack of fixed A4 pages (each with its own
+   border/shadow/gap, drawn inside the iframe), and this wrap scrolls through
+   them. --cv-preview-scale (width-fit) and --cv-preview-content-h (reported by
+   the iframe's paginator) are set by create-cv-form.tsx. */
 .cv-preview-frame-wrap {
   width: 100%;
-  aspect-ratio: 210 / 297;
-  max-height: 620px;
+  max-height: min(72vh, 760px);
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: #ececea;
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
 }
 
-/* The CV page card. Sized to the scaled A4 sheet so its border and shadow stay
-   crisp (drawn at real size) rather than shrunk by the frame's scale transform.
-   --cv-preview-scale is measured from the matte by a ResizeObserver in
-   create-cv-form.tsx. */
+/* Bounding box for the scaled page stack. The page chrome (white sheets,
+   borders, shadows, gaps) lives inside the iframe now, so this is transparent
+   and just reserves the scaled footprint so scrolling has the right extent. */
 .cv-preview-sheet {
   width: calc(794px * var(--cv-preview-scale, 0.5));
-  height: calc(1123px * var(--cv-preview-scale, 0.5));
+  height: calc(var(--cv-preview-content-h, 1123px) * var(--cv-preview-scale, 0.5));
   flex: 0 0 auto;
   position: relative;
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid #d9d9d5;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  overflow: visible;
+  background: transparent;
 }
 
-/* The iframe renders the resume at a fixed A4 pixel size (210mm x 297mm at
-   96dpi) and is scaled as a whole to fill the page card. */
+/* The iframe renders the paginated resume at a fixed A4 page width (794px @
+   96dpi) and its reported total height, scaled as a whole to fit the wrap. */
 .cv-preview-frame {
   position: absolute;
   top: 0;
   left: 0;
   width: 794px;
-  height: 1123px;
+  height: var(--cv-preview-content-h, 1123px);
   border: none;
   display: block;
-  background: #fff;
+  background: transparent;
   transform: scale(var(--cv-preview-scale, 0.5));
   transform-origin: top left;
 }
