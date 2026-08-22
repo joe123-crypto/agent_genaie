@@ -119,9 +119,33 @@ export async function POST(req: NextRequest) {
           },
         ],
       });
-    } catch {
-      // The proof is already persisted; the admin can be re-notified on retry.
-      throw httpError(502, "Proof saved but admin email failed; please retry.");
+    } catch (emailErr) {
+      // The proof is already persisted, so this only fails the admin
+      // notification. The underlying failure was previously swallowed, which
+      // made it impossible to tell a transient Gmail error from a broken owner
+      // Gmail connection (which "retry" can never fix). Surface the real cause
+      // to the logs and tailor the message so a config/auth failure is not
+      // presented as retryable.
+      const cause = emailErr as Error & { status?: number };
+      console.error("Payment proof saved but admin notification failed", {
+        proofId,
+        method,
+        status: cause?.status,
+        message: cause?.message,
+      });
+      // Every failure on this path throws httpError(status, …): a missing owner
+      // Gmail token (401), an unconfigured owner UID (500), a failed token
+      // refresh / invalid_grant (400), or an insufficient-scope send (403) are
+      // all setup problems that retrying will not clear; anything else (a Gmail
+      // 5xx, a network blip) may.
+      const status = cause?.status;
+      const setupProblem = status === 400 || status === 401 || status === 403 || status === 500;
+      throw httpError(
+        502,
+        setupProblem
+          ? "Your payment proof was saved, but we couldn't notify our team for review right now. Please contact support so we can approve it manually."
+          : "Your payment proof was saved, but sending it for review failed. Please try again in a moment.",
+      );
     }
 
     return NextResponse.json({ ok: true });

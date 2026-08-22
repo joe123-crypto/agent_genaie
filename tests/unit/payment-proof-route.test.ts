@@ -63,6 +63,9 @@ const calls = {
 };
 let verifyUser: { uid: string; email?: string; name?: string } = { uid: "user-1", email: "u@example.com", name: "Jane User" };
 let gmailShouldThrow = false;
+// When set, the gmail mock throws an httpError-shaped error carrying this status
+// so the route's transient-vs-setup message branch can be exercised.
+let gmailThrowStatus: number | undefined;
 // Bytes returned by the R2 GetObject used during approval (the stored CV HTML).
 let storedCvBytes = Buffer.from("<html><body>cv</body></html>", "utf8");
 
@@ -92,7 +95,9 @@ function installMocks() {
   injectMock("@/src/domains/gmail", {
     resolveOwnerTokenStoreKey: () => "owner-token-store-key",
     sendGmailForTokenStoreKey: async (tokenStoreKey: string, body: any) => {
-      if (gmailShouldThrow) throw new Error("gmail boom");
+      if (gmailShouldThrow) {
+        throw Object.assign(new Error("gmail boom"), { status: gmailThrowStatus });
+      }
       calls.gmail.push({ tokenStoreKey, body });
       return { id: "sent" };
     },
@@ -116,6 +121,7 @@ beforeEach(() => {
   calls.presigned = [];
   verifyUser = { uid: "user-1", email: "u@example.com", name: "Jane User" };
   gmailShouldThrow = false;
+  gmailThrowStatus = undefined;
   storedCvBytes = Buffer.from("<html><body>cv</body></html>", "utf8");
   installMocks();
 });
@@ -247,6 +253,32 @@ test("proof route returns 502 when the admin email fails but keeps the proof", a
   assert.equal((await res.json()).ok, false);
   // Proof was persisted before the email attempt.
   assert.equal([...fakeDb._store.keys()].some((k) => k.startsWith("paymentProofs/")), true);
+});
+
+test("proof route treats an auth/config email failure as non-retryable (contact support)", async () => {
+  // 401 = no owner Gmail token, etc. — retrying will never clear it.
+  gmailShouldThrow = true;
+  gmailThrowStatus = 401;
+  const res = await postProof(buildForm({ method: "EcoCash", cv: VALID_CV, screenshot: { bytes: PNG_BYTES } }));
+  assert.equal(res.status, 502);
+  const body = await res.json();
+  assert.equal(body.ok, false);
+  assert.match(body.error, /contact support/i);
+  assert.doesNotMatch(body.error, /try again/i);
+  // Proof still persisted.
+  assert.equal([...fakeDb._store.keys()].some((k) => k.startsWith("paymentProofs/")), true);
+});
+
+test("proof route treats a transient email failure as retryable", async () => {
+  // 503 = a Gmail server hiccup — retrying may succeed.
+  gmailShouldThrow = true;
+  gmailThrowStatus = 503;
+  const res = await postProof(buildForm({ method: "Poste", cv: VALID_CV, screenshot: { bytes: PNG_BYTES } }));
+  assert.equal(res.status, 502);
+  const body = await res.json();
+  assert.equal(body.ok, false);
+  assert.match(body.error, /try again/i);
+  assert.doesNotMatch(body.error, /contact support/i);
 });
 
 // --- GET/POST /payment/proof/decision ----------------------------------------
