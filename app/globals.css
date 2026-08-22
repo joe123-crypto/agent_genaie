@@ -4070,7 +4070,7 @@ button.landing-pricing-button {
    the iframe's paginator) are set by create-cv-form.tsx. */
 .cv-preview-frame-wrap {
   width: 100%;
-  max-height: min(72vh, 760px);
+  height: min(72vh, 760px);
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);

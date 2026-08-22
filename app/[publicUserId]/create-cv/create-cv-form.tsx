@@ -255,10 +255,20 @@ export function CreateCvForm({
     const wrap = previewWrapRef.current;
     if (!wrap || typeof ResizeObserver === "undefined") return;
     const A4_WIDTH_PX = 794; // 210mm at 96dpi
+    // One page's block inside the iframe: the 1123px A4 page plus the .pages
+    // container's 24px top + 24px bottom padding. This equals the reported
+    // height of a one-page CV, so fitting it makes a single page fill the box
+    // exactly (no scroll); longer CVs overflow and the wrap scrolls.
+    const ONE_PAGE_BLOCK = 1171;
     const fit = () => {
       const cs = getComputedStyle(wrap);
       const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-      const scale = Math.min(1, (wrap.clientWidth - padX) / A4_WIDTH_PX);
+      const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      const scale = Math.min(
+        (wrap.clientWidth - padX) / A4_WIDTH_PX,
+        (wrap.clientHeight - padY) / ONE_PAGE_BLOCK,
+        1,
+      );
       wrap.style.setProperty("--cv-preview-scale", String(scale));
     };
     fit();

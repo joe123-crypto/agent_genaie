@@ -549,7 +549,7 @@ const PREVIEW_PAGE_METRICS: Record<string, { pad: string; bg: string }> = {
 // justify) so pages don't each stretch to full height, and styles the page
 // boxes (fixed A4, non-scrolling, gap + shadow between them).
 const PREVIEW_PAGINATION_CSS = `
-html, body { height: auto !important; }
+html, body { height: auto !important; overflow: hidden !important; }
 body { min-height: 0 !important; display: block !important; padding: 0 !important; margin: 0 !important; background: #ececea !important; }
 .cv-source { position: absolute !important; left: -10000px !important; top: 0 !important; width: 794px; visibility: hidden; }
 .cv { max-width: none !important; margin: 0 !important; flex: none !important; display: block !important; justify-content: flex-start !important; min-height: 0 !important; width: auto !important; }
@@ -558,6 +558,11 @@ body { min-height: 0 !important; display: block !important; padding: 0 !importan
 .pages { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 24px 0; }
 .page { position: relative; box-sizing: border-box; width: 794px; height: 1123px; overflow: hidden; background: var(--page-bg, #fff); padding: var(--page-pad, 48px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); border: 1px solid #d9d9d5; }
 .cv-scratch { position: absolute; left: -10000px; top: 0; }
+/* A one-page CV fills its single page (restoring the fill the saved one-page
+   layout uses); multi-page CVs keep the top-aligned flow of a real document. */
+.pages.solo .page > .cv { display: flex !important; flex-direction: column !important; justify-content: space-between !important; min-height: 100% !important; }
+.pages.solo .page .cv-columns { flex: 1 0 auto !important; grid-template-rows: minmax(min-content, 1fr) !important; }
+.pages.solo .page .cv-aside, .pages.solo .page .cv-main { justify-content: space-between !important; }
 `.trim();
 
 // Greedy DOM paginator, run inside the preview iframe. Kept free of template
@@ -772,7 +777,10 @@ const PAGINATOR_JS = `
 
   function build() {
     pagesEl.innerHTML = "";
+    pagesEl.classList.remove("solo");
     if (source.querySelector(".cv-columns")) buildSidebar(); else buildSingle();
+    // A single page fills itself; multiple pages flow top-aligned.
+    if (pagesEl.querySelectorAll(".page").length === 1) pagesEl.classList.add("solo");
     postSize();
   }
 
