@@ -52,6 +52,25 @@ export async function getObjectBytes(key: string): Promise<Buffer> {
   return Buffer.from(await body.transformToByteArray());
 }
 
+// The S3 SDK reports a missing key as a NoSuchKey/NotFound exception rather than
+// setting `status` the way httpError does, so callers that need to tell "gone"
+// apart from "storage is broken" have to look at the SDK's own shape.
+export function isObjectNotFoundError(err: unknown): boolean {
+  const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+  return e?.name === "NoSuchKey" || e?.name === "NotFound" || e?.$metadata?.httpStatusCode === 404;
+}
+
+// Same as getObjectBytes but returns null when the key simply is not there. Any
+// other failure still throws, so a broken bucket never masquerades as a miss.
+export async function getObjectBytesOrNull(key: string): Promise<Buffer | null> {
+  try {
+    return await getObjectBytes(key);
+  } catch (err) {
+    if (isObjectNotFoundError(err)) return null;
+    throw err;
+  }
+}
+
 export async function getPresignedGetUrl(key: string, expiresInSeconds = 300) {
   return getSignedUrl(
     getR2Client(),

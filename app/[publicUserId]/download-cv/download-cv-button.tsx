@@ -30,7 +30,9 @@ export function DownloadCvButton({ href }: { href: string }) {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(url);
+      // Revoking synchronously after click() cancels the download outright in
+      // Firefox and Safari, which read the blob after the click handler returns.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch {
       // fetch itself threw (network/offline) — retrying may help.
       setError("Could not download your CV. Please try again.");

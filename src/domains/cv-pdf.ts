@@ -7,8 +7,13 @@ import { httpError } from "@/src/lib/utils";
 export type BrowserLauncher = () => Promise<Browser>;
 
 async function launchBrowser(): Promise<Browser> {
-  const serverless = Boolean(process.env.VERCEL) || process.env.NODE_ENV === "production";
-  if (serverless) {
+  // Only Vercel gets the bundled serverless Chromium. Keying this off NODE_ENV
+  // too would break `next build && next start` on a dev machine and any
+  // self-hosted deploy, since that binary only runs on Amazon-Linux-like hosts.
+  if (process.env.VERCEL) {
+    // A CV is text on a white page — no WebGL. Disabling the graphics stack skips
+    // inflating swiftshader.tar.br (~3.5MB) on every cold start.
+    chromium.setGraphicsMode = false;
     return puppeteer.launch({
       args: chromium.args,
       executablePath: await chromium.executablePath(),

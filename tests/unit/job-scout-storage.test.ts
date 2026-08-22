@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applicationArtifactObjectKey,
+  cvHtmlDigest,
   cvHtmlObjectKey,
+  cvPdfObjectKey,
   cvPendingObjectKey,
   listJobApplicationsByStatus,
   validateCanonicalCvHtml,
@@ -12,6 +14,18 @@ test("CV keys use per-user pending and canonical folders", () => {
   assert.equal(cvPendingObjectKey("uid-1"), "uid-1/cv/pending/original.pdf");
   assert.equal(cvHtmlObjectKey("uid-1"), "uid-1/cv/base/cv.html");
   assert.throws(() => cvHtmlObjectKey("../other-user"));
+});
+
+test("the rendered-PDF cache key is content-addressed, so it self-invalidates", () => {
+  const digest = cvHtmlDigest("<html><body>a</body></html>");
+  assert.match(digest, /^[0-9a-f]{16}$/);
+  assert.equal(cvPdfObjectKey("uid-1", digest), `uid-1/cv/base/cv-${digest}.pdf`);
+  // Same HTML always lands on the same key (a cache hit)...
+  assert.equal(cvHtmlDigest("<html><body>a</body></html>"), digest);
+  // ...and changed HTML never can, so a re-finalized CV cannot serve a stale PDF.
+  assert.notEqual(cvHtmlDigest("<html><body>b</body></html>"), digest);
+  assert.throws(() => cvPdfObjectKey("../other-user", digest));
+  assert.throws(() => cvPdfObjectKey("uid-1", "not-a-digest"));
 });
 
 test("canonical CV HTML accepts styled documents and rejects executable content", () => {
