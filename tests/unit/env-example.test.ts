@@ -9,6 +9,7 @@ import path from "node:path";
 // platform-injected / runtime-only vars listed below.
 const ALLOW_LIST = new Set([
   "NODE_ENV",
+  "VERCEL",
   "VERCEL_URL",
   "VERCEL_PROJECT_PRODUCTION_URL",
   "FIRESTORE_EMULATOR_HOST",

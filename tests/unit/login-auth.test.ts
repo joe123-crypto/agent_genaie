@@ -38,6 +38,50 @@ test("destinationForSession routes onboarding and user-scoped pages", () => {
   assert.equal(destinationForSession(session, "/create-cv"), "/usr_123/create-cv");
 });
 
+test("an approved user with a pending CV download lands on the download page", () => {
+  // cvDownloadReady must win over the plan/onboarding gates: manual-payment users
+  // approved via proof may have no plan, so gating on a plan would trap them at
+  // /pricing and they could never reach their finished CV.
+  const session = {
+    ok: true as const,
+    publicUserId: "usr_dl1",
+    onboardingRequired: true,
+    plan: null,
+    planRequired: true,
+    cvDownloadReady: true,
+  };
+  assert.equal(destinationForSession(session, "/"), "/usr_dl1/download-cv");
+  // An in-progress payment handoff still wins, so a user mid-upload is not diverted.
+  assert.equal(destinationForSession(session, "/payment"), "/payment");
+  // Once downloaded (flag off), routing falls back to the normal gates.
+  assert.equal(
+    destinationForSession({ ...session, cvDownloadReady: false }, "/"),
+    "/pricing?next=%2Fusr_dl1%2Fonboarding",
+  );
+});
+
+test("the CV download nudge never eats an explicit next path", () => {
+  // The nudge is only for a bare sign-in. Someone who followed a real link asked
+  // to go somewhere specific, and silently swallowing that would strand them on
+  // the download page every time until they clicked through it.
+  const session = {
+    ok: true as const,
+    publicUserId: "usr_dl2",
+    onboardingRequired: false,
+    plan: "pro" as const,
+    planRequired: false,
+    cvDownloadReady: true,
+  };
+  assert.equal(destinationForSession(session, "/connect-gmail"), "/usr_dl2/connect-gmail");
+  assert.equal(destinationForSession(session, "/usr_dl2/job-scout"), "/usr_dl2/job-scout");
+  assert.equal(
+    destinationForSession(session, "/whatsapp?token=abc"),
+    "/usr_dl2/whatsapp?token=abc",
+  );
+  // ...but a bare sign-in still gets the nudge.
+  assert.equal(destinationForSession(session, "/"), "/usr_dl2/download-cv");
+});
+
 test("a WhatsApp-initiated sign-in returns to the user-scoped invite page", () => {
   // After sign-in, a /whatsapp?token=... next-path must resolve to the
   // publicUserId-scoped invite page (not stay generic), so the page can auto-link

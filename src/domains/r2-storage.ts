@@ -7,6 +7,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { config, requireConfig } from "@/src/config";
+import { httpError } from "@/src/lib/utils";
 
 let cachedClient: S3Client | null = null;
 
@@ -38,6 +39,36 @@ export async function putObject(key: string, body: Buffer | Uint8Array, contentT
       ContentType: contentType,
     }),
   );
+}
+
+export async function getObjectBytes(key: string): Promise<Buffer> {
+  const result = await getR2Client().send(
+    new GetObjectCommand({ Bucket: config.r2Bucket, Key: key }),
+  );
+  const body = result.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
+  if (!body || typeof body.transformToByteArray !== "function") {
+    throw httpError(500, "Stored object could not be read.");
+  }
+  return Buffer.from(await body.transformToByteArray());
+}
+
+// The S3 SDK reports a missing key as a NoSuchKey/NotFound exception rather than
+// setting `status` the way httpError does, so callers that need to tell "gone"
+// apart from "storage is broken" have to look at the SDK's own shape.
+export function isObjectNotFoundError(err: unknown): boolean {
+  const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+  return e?.name === "NoSuchKey" || e?.name === "NotFound" || e?.$metadata?.httpStatusCode === 404;
+}
+
+// Same as getObjectBytes but returns null when the key simply is not there. Any
+// other failure still throws, so a broken bucket never masquerades as a miss.
+export async function getObjectBytesOrNull(key: string): Promise<Buffer | null> {
+  try {
+    return await getObjectBytes(key);
+  } catch (err) {
+    if (isObjectNotFoundError(err)) return null;
+    throw err;
+  }
 }
 
 export async function getPresignedGetUrl(key: string, expiresInSeconds = 300) {

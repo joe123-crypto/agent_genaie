@@ -16,7 +16,7 @@ Public routes:
 - `/auth/firebase/finish` completes Firebase email-link sign-in and creates the server session cookie.
 - `POST /auth/google/signin` starts the combined sign-in + Gmail consent. Unauthenticated: no Firebase user exists yet.
 - `/auth/google/finish` trades Google's identity token for a Firebase session, then claims the Gmail tokens parked during the callback.
-- `/auth/session` creates or checks the Firebase-backed server session. `POST` also returns `publicUserId`, `isNewUser`, and `onboardingRequired`.
+- `/auth/session` creates or checks the Firebase-backed server session. `POST` also returns `publicUserId`, `isNewUser`, `onboardingRequired`, `plan`, `planRequired`, and `cvDownloadReady` (a one-time post-login nudge to the CV download page for an approved user whose CV is ready and who has not been shown that page yet).
 - `/auth/session/logout` clears the server session cookie.
 - `/config/firebase` exposes the non-secret Firebase browser config.
 - `/auth/google/callback` receives the Google OAuth callback.
@@ -32,6 +32,8 @@ Protected routes require the `agent_genaie_session` cookie or a Firebase bearer 
 - `/{publicUserId}/job-scout` signed-in Job Scout setup page for CV, target role, target location, and acknowledgements.
 - `/{publicUserId}/onboarding` one-time signup onboarding controller; auto-selects Job Scout and forwards to the next required step. Job Scout signup requires connecting Gmail and then setting up the Job Scout profile (CV, target role, target location); WhatsApp linking is not part of onboarding and is offered later from the dashboard.
 - `/{publicUserId}/whatsapp` is the canonical WhatsApp linking page. Invite mode shows the originating masked number and confirmation; direct-web mode accepts a number and starts bot verification.
+- `/{publicUserId}/download-cv` is where a user whose manual payment was approved downloads their finished CV. Access is gated on an approved payment proof, not on a `plan`, because manual payers may have no plan. If the CV is not `ready` (they replaced it and it is reconverting) the page says so instead of offering a download.
+- `GET /{publicUserId}/download-cv/pdf` renders the canonical CV HTML to an A4 PDF with headless Chromium and returns it as an attachment. Owner-only: any other caller gets a 404 rather than a 403, so the route reveals nothing. Renders are cached in R2 under `<uid>/cv/base/cv-<html-digest>.pdf`, so re-downloads skip Chromium and a re-finalized CV renders to a new key instead of needing invalidation.
 - `/connect-gmail` and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail-only OAuth for an already signed-in Firebase user (the Connect Gmail page).
 - `POST /auth/google/claim` persists the Gmail tokens parked by the combined sign-in flow, once the caller has a session.
@@ -120,8 +122,9 @@ Enable Firestore for the same Firebase project. Agent Genaie writes central reco
 - `phoneLinksByUser` — active WhatsApp-to-user links keyed by Firebase UID
 - `phoneLinksByPhone` — active WhatsApp-to-user links keyed by phone hash
 - `accountLinkInvites` — short-lived account link setup tokens
-- `jobScoutProfiles` — Job Scout preferences and CV state. Ready profiles store the same canonical `<uid>/cv/base/cv.html` key in `cvFileRef` and `cvHtmlRef`, with `cvConversionStatus: ready`, `cvSourceVersion`, and `cvConvertedAt`. Pending profiles store `<uid>/cv/pending/original.pdf` in `cvPendingRef` and cannot be dispatched.
+- `jobScoutProfiles` — Job Scout preferences and CV state. Ready profiles store the same canonical `<uid>/cv/base/cv.html` key in `cvFileRef` and `cvHtmlRef`, with `cvConversionStatus: ready`, `cvSourceVersion`, and `cvConvertedAt`. `cvDownloadPromptedAt` and `cvPdfDownloadedAt` track the one-time post-login CV download nudge. Pending profiles store `<uid>/cv/pending/original.pdf` in `cvPendingRef` and cannot be dispatched.
 - `jobScoutDeliveryByPhone` — Job Scout delivery records keyed by phone hash
+- `paymentProofs` — manual-transfer payment records: payer details, the R2 keys of the uploaded screenshot and the CV built at upload time, and `status` (`pending` / `approved` / `denied`). Approval is what finalizes the user's canonical CV HTML and unlocks the CV download.
 - `jobApplications` — recorded Job Scout application outcomes. Private exact-sent files are referenced in `artifactRefs` for the latest attempt and `artifacts.<attempt>` for retained attempts; files remain in R2 and are not exposed by the dashboard.
 - `webetuDeliveryByPhone` — Webetu delivery records keyed by phone hash
 - `dashboardTaskStatus` — live agent schedule/run snapshots keyed by `<uid>_<taskId>` for the signed-in dashboard

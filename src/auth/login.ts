@@ -41,6 +41,9 @@ export type SessionResult = {
   onboardingRequired?: boolean;
   plan?: "free" | "pro" | "ultra" | null;
   planRequired?: boolean;
+  // Set when the user has an approved payment proof and a ready CV they have not
+  // yet downloaded. Routes them to the CV download page once (see destinationForSession).
+  cvDownloadReady?: boolean;
 };
 
 type ErrorPayload = {
@@ -91,6 +94,15 @@ export function destinationForSession(session: SessionResult, nextPath: string) 
   // instead of finishing the payment they were already sent to make.
   if (safePath === "/payment") {
     return "/payment";
+  }
+  // A freshly approved user's next login lands on the CV download page. This must
+  // win over the plan/onboarding gates below, since manual-payment users may have
+  // no plan and would otherwise be parked at /pricing, unable to reach the CV they
+  // already paid for. It is deliberately limited to a bare "/" sign-in: a user who
+  // followed a real link asked to go somewhere, and a nudge must not eat that.
+  // isCvDownloadPending flips off once the page has been shown, so this fires once.
+  if (session.cvDownloadReady && publicUserId && safePath === "/") {
+    return `/${publicUserId}/download-cv`;
   }
   if (session.planRequired && publicUserId) {
     const scoped = scopedDestination(safePath, publicUserId);

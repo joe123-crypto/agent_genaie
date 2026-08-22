@@ -87,9 +87,7 @@ function installMocks() {
       calls.presigned.push(url);
       return url;
     },
-    getR2Client: () => ({
-      send: async () => ({ Body: { transformToByteArray: async () => new Uint8Array(storedCvBytes) } }),
-    }),
+    getObjectBytes: async () => Buffer.from(storedCvBytes),
   });
   injectMock("@/src/domains/gmail", {
     resolveOwnerTokenStoreKey: () => "owner-token-store-key",
