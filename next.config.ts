@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // All route handlers that use Firebase Admin or Node crypto need the Node runtime
-  serverExternalPackages: ["firebase-admin"],
+  serverExternalPackages: ["firebase-admin", "@sparticuz/chromium", "puppeteer-core"],
   async rewrites() {
     const projectId = process.env.FIREBASE_PROJECT_ID?.trim();
     if (!projectId) return [];
