@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
       throw httpError(400, "Safety constraint: confirm=true required.");
     }
     
-    const senderKey = resolveInternalSender(body);
+    const senderKey = await resolveInternalSender(body);
     const result = await sendGmailForTokenStoreKey(senderKey, body);
     
     return NextResponse.json(result);

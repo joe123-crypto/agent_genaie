@@ -1,6 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { config, CALENDAR_SCOPE, GMAIL_SEND_URL, TOKEN_URL } from "@/src/config";
-import { getFirestoreDb } from "@/src/firebase/admin";
+import { getFirestoreDb, getFirebaseAdminAuth } from "@/src/firebase/admin";
 import { encryptCentralSecret, decryptCentralSecret } from "@/src/security/crypto";
 import { tokenStoreKeyForUid, encodeGmailRawMessage, httpError, validateFirebaseUid, credentialRefId } from "@/src/lib/utils";
 import { loadUserTokens, saveUserTokens, readStore } from "./local-store";
@@ -262,10 +262,38 @@ export function resolveOwnerTokenStoreKey() {
   return tokenStoreKeyForUid(config.ownerFirebaseUid);
 }
 
-export function resolveInternalSender(body: any) {
+// Resolve a plain email address to its Firebase UID. Lets internal callers name
+// a sender by email (e.g. genaie-mail's `--from`) instead of the opaque UID.
+export async function resolveUidForEmail(email: string): Promise<string> {
+  const normalized = String(email ?? "").trim().toLowerCase();
+  if (!normalized) throw httpError(400, "fromEmail is empty.");
+  try {
+    const user = await getFirebaseAdminAuth().getUserByEmail(normalized);
+    return user.uid;
+  } catch (err: unknown) {
+    if ((err as { code?: string })?.code === "auth/user-not-found") {
+      throw httpError(404, `No Agent Genaie account found for ${normalized}.`);
+    }
+    throw err;
+  }
+}
+
+// Resolve an email to the sender token-store key, verifying that account has a
+// live Gmail connection so callers get a clear 409 instead of a downstream 401.
+export async function resolveSenderKeyForEmail(email: string): Promise<string> {
+  const uid = await resolveUidForEmail(email);
+  const { connected, tokenStoreKey } = await getSendableGmailConnection(uid);
+  if (!connected) {
+    throw httpError(409, `Gmail is not connected for ${email}. Reconnect at /connect-gmail.`);
+  }
+  return tokenStoreKey;
+}
+
+export async function resolveInternalSender(body: any): Promise<string> {
   let senderKey = body.senderKey;
   if (!senderKey && body.senderUid) senderKey = tokenStoreKeyForUid(body.senderUid);
+  if (!senderKey && body.fromEmail) senderKey = await resolveSenderKeyForEmail(body.fromEmail);
   if (!senderKey && body.useOwnerAuth === true) senderKey = resolveOwnerTokenStoreKey();
-  if (!senderKey) throw httpError(400, "Must specify senderKey, senderUid, or useOwnerAuth=true.");
+  if (!senderKey) throw httpError(400, "Must specify senderKey, senderUid, fromEmail, or useOwnerAuth=true.");
   return senderKey;
 }
