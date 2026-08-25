@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { httpError } from "@/src/lib/utils";
 import { buildCvHtml } from "@/src/domains/cv-html";
 import { renderCvHtmlToPdf } from "@/src/domains/cv-pdf";
+import { checkRateLimit, clientIpFromRequest, rateLimitKey } from "@/src/lib/rate-limit";
 import type { CvInput } from "@/src/domains/cv-html";
 
 export const runtime = "nodejs";
@@ -10,6 +11,13 @@ export const runtime = "nodejs";
 // generous headroom for the launch + render on a cold invocation.
 export const maxDuration = 60;
 
+// This endpoint is deliberately open (no sign-in, no payment approval), and every
+// request launches a headless Chromium to render the PDF. Without a cap that is an
+// open door to an expensive renderer, so anonymous callers are rate limited per
+// client IP — the same guard the signed-out CV interview uses for the paid model.
+const DOWNLOADS_PER_HOUR = 20;
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
 // Owner decision: the CV is handed over directly from the draft, with no payment
 // proof, admin approval, or download gate. The payer builds their CV, then the
 // "Send payment proof" button posts the draft here and immediately downloads the
@@ -17,6 +25,18 @@ export const maxDuration = 60;
 // app/payment/proof/route.ts and the gate in cvDownloadState().
 export async function POST(req: NextRequest) {
   try {
+    const limit = await checkRateLimit(
+      rateLimitKey("cv-download-anon", clientIpFromRequest(req)),
+      DOWNLOADS_PER_HOUR,
+      ONE_HOUR_MS,
+    );
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { ok: false, error: "Too many downloads. Please try again shortly." },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+      );
+    }
+
     const body = (await req.json().catch(() => null)) as { cv?: unknown; template?: unknown } | null;
     if (!body || typeof body !== "object") {
       throw httpError(400, "A CV is required to build your download.");

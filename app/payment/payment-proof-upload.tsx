@@ -5,14 +5,7 @@ import { ImageUp } from "lucide-react";
 import { StatusNotice, type StatusKind } from "@/app/_components/status-ui";
 import { loadCvDraft } from "@/app/[publicUserId]/create-cv/cv-draft";
 
-const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
-const MAX_BYTES = 5 * 1024 * 1024;
-
-type PaymentProofUploadProps = {
-  method: string;
-};
-
-export function PaymentProofUpload({ method }: PaymentProofUploadProps) {
+export function PaymentProofUpload() {
   const [busy, setBusy] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ kind: StatusKind; message: string } | null>(null);
@@ -61,7 +54,9 @@ export function PaymentProofUpload({ method }: PaymentProofUploadProps) {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(url);
+      // Revoking synchronously after click() cancels the download outright in
+      // Firefox and Safari, which read the blob after the click handler returns.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
 
       setNotice({ kind: "complete", message: "Your CV is downloading now." });
       setFileName(null);

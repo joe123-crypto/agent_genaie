@@ -63,17 +63,15 @@ describe("PaymentProofUpload", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders a submit button for each method", () => {
-    render(createElement(PaymentProofUpload, { method: "EcoCash" }));
+  it("renders the submit button and the (optional) file input", () => {
+    const { container } = render(createElement(PaymentProofUpload));
     expect(screen.getByRole("button", { name: /send payment proof/i })).toBeInTheDocument();
-
-    const { container } = render(createElement(PaymentProofUpload, { method: "Poste" }));
     expect(container.querySelector('input[type="file"]')).not.toBeNull();
   });
 
   it("posts the CV draft to /payment/download and triggers a PDF download", async () => {
     saveCvDraft(draft({ template: "classic" }));
-    render(createElement(PaymentProofUpload, { method: "EcoCash" }));
+    render(createElement(PaymentProofUpload));
 
     fireEvent.click(screen.getByRole("button", { name: /send payment proof/i }));
 
@@ -88,8 +86,29 @@ describe("PaymentProofUpload", () => {
     expect(clickSpy).toHaveBeenCalledTimes(1);
   });
 
+  // Regression: revoking the blob URL synchronously after click() cancels the
+  // download outright in Firefox and Safari, which read the blob after the click
+  // handler returns. The revoke must be deferred, never immediate.
+  it("does not revoke the blob URL until well after the click", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      saveCvDraft(draft());
+      render(createElement(PaymentProofUpload));
+
+      fireEvent.click(screen.getByRole("button", { name: /send payment proof/i }));
+
+      await waitFor(() => expect(clickSpy).toHaveBeenCalledTimes(1));
+      expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:cv");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows an error and does not submit when no CV draft exists", async () => {
-    render(createElement(PaymentProofUpload, { method: "Poste" }));
+    render(createElement(PaymentProofUpload));
 
     fireEvent.click(screen.getByRole("button", { name: /send payment proof/i }));
 
@@ -100,7 +119,7 @@ describe("PaymentProofUpload", () => {
   it("surfaces a server error without triggering a download", async () => {
     saveCvDraft(draft());
     fetchMock.mockResolvedValueOnce(errorResponse(400, "A CV is required to build your download."));
-    render(createElement(PaymentProofUpload, { method: "EcoCash" }));
+    render(createElement(PaymentProofUpload));
 
     fireEvent.click(screen.getByRole("button", { name: /send payment proof/i }));
 
