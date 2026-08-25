@@ -79,7 +79,7 @@ export default function PaymentPage() {
               ))}
             </dl>
 
-            <PaymentProofUpload method={method.name} />
+            <PaymentProofUpload />
           </article>
         ))}
       </section>

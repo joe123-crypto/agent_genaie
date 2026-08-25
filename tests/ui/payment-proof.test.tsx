@@ -19,65 +19,96 @@ function draft(overrides: Partial<CvDraft> = {}): CvDraft {
   };
 }
 
-function pngFile(name = "receipt.png") {
-  return new File(["fake-image-bytes"], name, { type: "image/png" });
+// The component only reads response.ok / response.blob() / response.json(), so a
+// plain stub avoids jsdom's Response<->Blob incompatibility.
+function pdfResponse() {
+  return {
+    ok: true,
+    status: 200,
+    blob: async () => new Blob(["%PDF-1.4 fake"], { type: "application/pdf" }),
+    json: async () => ({}),
+  };
 }
 
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
+function errorResponse(status: number, error: string) {
+  return {
+    ok: false,
     status,
-    headers: { "content-type": "application/json" },
-  });
+    blob: async () => new Blob([]),
+    json: async () => ({ ok: false, error }),
+  };
 }
 
 describe("PaymentProofUpload", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
+  let clickSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     window.sessionStorage.clear();
-    fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    fetchMock = vi.fn().mockResolvedValue(pdfResponse());
     vi.stubGlobal("fetch", fetchMock);
+    // jsdom lacks object-URL helpers used to trigger the download.
+    vi.stubGlobal("URL", Object.assign(URL, {
+      createObjectURL: vi.fn(() => "blob:cv"),
+      revokeObjectURL: vi.fn(),
+    }));
+    // Don't let the temporary <a download> actually navigate in jsdom.
+    clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   });
 
   afterEach(() => {
     cleanup();
     window.sessionStorage.clear();
+    clickSpy.mockRestore();
     vi.unstubAllGlobals();
   });
 
-  it("renders a file input and submit button for each method", () => {
-    render(createElement(PaymentProofUpload, { method: "EcoCash" }));
+  it("renders the submit button and the (optional) file input", () => {
+    const { container } = render(createElement(PaymentProofUpload));
     expect(screen.getByRole("button", { name: /send payment proof/i })).toBeInTheDocument();
-
-    const { container } = render(createElement(PaymentProofUpload, { method: "Poste" }));
     expect(container.querySelector('input[type="file"]')).not.toBeNull();
   });
 
-  it("posts the screenshot, method, and CV draft to /payment/proof", async () => {
-    saveCvDraft(draft());
-    const { container } = render(createElement(PaymentProofUpload, { method: "EcoCash" }));
-
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    fireEvent.change(input, { target: { files: [pngFile()] } });
+  it("posts the CV draft to /payment/download and triggers a PDF download", async () => {
+    saveCvDraft(draft({ template: "classic" }));
+    render(createElement(PaymentProofUpload));
 
     fireEvent.click(screen.getByRole("button", { name: /send payment proof/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/payment/proof");
+    expect(url).toBe("/payment/download");
     expect(init?.method).toBe("POST");
     expect(init?.credentials).toBe("same-origin");
+    expect(JSON.parse(String(init?.body))).toEqual({ cv: draft({ template: "classic" }), template: "classic" });
 
-    const body = init?.body as FormData;
-    expect(body.get("method")).toBe("EcoCash");
-    expect(body.get("screenshot")).toBeInstanceOf(File);
-    expect(JSON.parse(String(body.get("cv")))).toEqual(draft());
+    await screen.findByText(/downloading/i);
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+  });
 
-    await screen.findByText(/proof received/i);
+  // Regression: revoking the blob URL synchronously after click() cancels the
+  // download outright in Firefox and Safari, which read the blob after the click
+  // handler returns. The revoke must be deferred, never immediate.
+  it("does not revoke the blob URL until well after the click", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      saveCvDraft(draft());
+      render(createElement(PaymentProofUpload));
+
+      fireEvent.click(screen.getByRole("button", { name: /send payment proof/i }));
+
+      await waitFor(() => expect(clickSpy).toHaveBeenCalledTimes(1));
+      expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:cv");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows an error and does not submit when no CV draft exists", async () => {
-    render(createElement(PaymentProofUpload, { method: "Poste" }));
+    render(createElement(PaymentProofUpload));
 
     fireEvent.click(screen.getByRole("button", { name: /send payment proof/i }));
 
@@ -85,18 +116,14 @@ describe("PaymentProofUpload", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("rejects an oversized file client-side without calling fetch", async () => {
+  it("surfaces a server error without triggering a download", async () => {
     saveCvDraft(draft());
-    const { container } = render(createElement(PaymentProofUpload, { method: "EcoCash" }));
-
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const big = pngFile("big.png");
-    Object.defineProperty(big, "size", { value: 6 * 1024 * 1024 });
-    fireEvent.change(input, { target: { files: [big] } });
+    fetchMock.mockResolvedValueOnce(errorResponse(400, "A CV is required to build your download."));
+    render(createElement(PaymentProofUpload));
 
     fireEvent.click(screen.getByRole("button", { name: /send payment proof/i }));
 
-    await screen.findByText(/too large/i);
-    expect(fetchMock).not.toHaveBeenCalled();
+    await screen.findByText(/a cv is required/i);
+    expect(clickSpy).not.toHaveBeenCalled();
   });
 });
