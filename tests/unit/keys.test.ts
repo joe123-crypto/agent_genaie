@@ -4,9 +4,7 @@ import crypto from "node:crypto";
 
 import {
   credentialRefId,
-  webetuCredentialRefId,
   serviceSubscriptionId,
-  webetuRestaurantOverrideId,
   jobApplicationId,
   whatsappPhoneHash,
   tokenStoreKeyForUid,
@@ -29,18 +27,9 @@ test("credentialRefId builds {service}_{purpose}_{uid} and sanitizes chars", () 
   assert.equal(credentialRefId("uid1", "gm ail", "oauth/2"), "gm_ail_oauth_2_uid1");
 });
 
-test("webetuCredentialRefId is the webetu username_password ref", () => {
-  assert.equal(webetuCredentialRefId("uid1"), "webetu_username_password_uid1");
-});
-
 test("serviceSubscriptionId builds {uid}_{service}", () => {
   assert.equal(serviceSubscriptionId("uid1", "jobs"), "uid1_jobs");
   assert.equal(serviceSubscriptionId("uid1", "we betu"), "uid1_we_betu");
-});
-
-test("webetuRestaurantOverrideId builds {uid}_{YYYY-MM-DD} and validates the date", () => {
-  assert.equal(webetuRestaurantOverrideId("uid1", "2026-07-03"), "uid1_2026-07-03");
-  assert.throws(() => webetuRestaurantOverrideId("uid1", "2026-13-40"));
 });
 
 test("jobApplicationId is a stable sha256 of uid\\ncompany\\nrole, case-insensitive", () => {

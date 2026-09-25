@@ -218,7 +218,6 @@ export async function mirrorGmailConnectionToCentralData(uid: string, tokens: an
           gmail: "connected",
           calendar: hasCalendarScope(tokens) ? "connected" : "not_connected",
           jobs: "not_subscribed",
-          webetu: "not_subscribed",
           news: "not_subscribed",
         },
         createdAt: FieldValue.serverTimestamp(),

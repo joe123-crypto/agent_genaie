@@ -240,8 +240,6 @@ const footerColumns = [
   {
     title: "App",
     links: [
-      { label: "Dashboard", href: "/vault" },
-      { label: "CV vault", href: "/vault" },
       { label: "Connect Gmail", href: "/connect-gmail" },
       { label: "WhatsApp setup", href: "/whatsapp" },
     ],

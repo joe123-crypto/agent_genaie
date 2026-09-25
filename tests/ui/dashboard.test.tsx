@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { endDashboardSession } from "@/app/_components/dashboard-account-menu";
-import { buildDashboardViewModel, webetuService, type DashboardModelInput } from "@/app/_components/dashboard-model";
+import { buildDashboardViewModel, type DashboardModelInput } from "@/app/_components/dashboard-model";
 import { DashboardOverview } from "@/app/_components/dashboard-overview";
 import { DashboardSettings } from "@/app/_components/dashboard-settings";
 import { DashboardShell } from "@/app/_components/dashboard-shell";
@@ -32,7 +32,6 @@ function readyInput(overrides: Partial<DashboardModelInput> = {}): DashboardMode
           calendar: "connected",
           gmail: "connected",
           jobs: "subscribed",
-          webetu: "connected",
         },
         whatsappLinked: true,
       },
@@ -52,14 +51,6 @@ function readyInput(overrides: Partial<DashboardModelInput> = {}): DashboardMode
     telemetry: {
       available: true,
       data: { tasks: [] },
-    },
-    webetu: {
-      available: true,
-      data: {
-        configured: true,
-        status: "active",
-        whatsappLinked: true,
-      },
     },
     ...overrides,
   };
@@ -115,7 +106,6 @@ describe("signed-in dashboard UI", () => {
     expect(screen.getAllByText(/whatsapp linked/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Gmail connected").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Job Scout").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Webetu Reservations")).not.toBeInTheDocument();
     expect(screen.getAllByText("No live schedule reported yet").length).toBeGreaterThan(0);
     expect(screen.queryByText("Reserve Meals")).not.toBeInTheDocument();
     expect(screen.queryByText("Search & Apply Jobs")).not.toBeInTheDocument();
@@ -177,19 +167,6 @@ describe("signed-in dashboard UI", () => {
                   timezone: "Africa/Algiers",
                   updatedAt: "2026-07-16T08:20:00.000Z",
                 },
-                {
-                  enabled: true,
-                  lastRunAt: null,
-                  lastRunStatus: null,
-                  lastRunSummary: null,
-                  nextRunAt: "2026-07-17T08:00:00.000Z",
-                  scheduleLabel: "Daily - 9:00 AM",
-                  service: "webetu",
-                  status: "active",
-                  taskId: "reserve_meals",
-                  timezone: "Africa/Algiers",
-                  updatedAt: null,
-                },
               ],
             },
           },
@@ -208,20 +185,16 @@ describe("signed-in dashboard UI", () => {
     expect(screen.queryByText("Reserve Meals")).not.toBeInTheDocument();
   });
 
-  it("reports Gmail access and hides Webetu from the dashboard services", () => {
+  it("reports Gmail access and shows no services when job scout is not configured", () => {
     const input = readyInput({
       account: {
         available: true,
         data: {
-          services: { gmail: "connected", webetu: "connected" },
+          services: { gmail: "connected" },
           whatsappLinked: false,
         },
       },
       jobScout: { available: true, data: { configured: false } },
-      webetu: {
-        available: true,
-        data: { configured: true, status: "active", whatsappLinked: false },
-      },
     });
     const model = buildDashboardViewModel(input);
 
@@ -230,28 +203,6 @@ describe("signed-in dashboard UI", () => {
     expect(model.services).toEqual([]);
     expect(model.cronRows).toEqual([]);
     expect(model.nextRunLabel).toBe("No run scheduled");
-    expect(webetuService(input)).toEqual(
-      expect.objectContaining({ name: "Webetu Reservations", ready: false, state: "setup_needed" }),
-    );
-  });
-
-  it("keeps revoked Webetu status logic intact while hiding it from the dashboard", () => {
-    const input = readyInput({
-      account: {
-        available: true,
-        data: { services: { webetu: "not_connected" }, whatsappLinked: true },
-      },
-      jobScout: { available: true, data: { configured: false } },
-      webetu: {
-        available: true,
-        data: { configured: false, status: "revoked", whatsappLinked: true },
-      },
-    });
-
-    expect(buildDashboardViewModel(input).services).toEqual([]);
-    expect(webetuService(input)).toEqual(
-      expect.objectContaining({ name: "Webetu Reservations", state: "revoked", status: "Credentials revoked" }),
-    );
   });
 
   it("treats an uploaded PDF awaiting backend conversion as processing, not missing setup", () => {
@@ -286,7 +237,6 @@ describe("signed-in dashboard UI", () => {
 
   it("only schedules rows from ready services and valid enabled telemetry", () => {
     const model = dashboardModel({
-      webetu: { available: true, data: { configured: false, status: "not_saved" } },
       telemetry: {
         available: true,
         data: {
@@ -303,19 +253,6 @@ describe("signed-in dashboard UI", () => {
               taskId: "search_apply_jobs",
               timezone: "Africa/Algiers",
               updatedAt: "2026-07-16T08:20:00.000Z",
-            },
-            {
-              enabled: true,
-              lastRunAt: null,
-              lastRunStatus: null,
-              lastRunSummary: null,
-              nextRunAt: "2026-07-17T09:00:00.000Z",
-              scheduleLabel: "Daily - 10:00 AM",
-              service: "webetu",
-              status: "active",
-              taskId: "reserve_meals",
-              timezone: "Africa/Algiers",
-              updatedAt: null,
             },
             {
               enabled: false,
@@ -352,7 +289,7 @@ describe("signed-in dashboard UI", () => {
               lastRunSummary: null,
               nextRunAt: "2026-07-16T08:00:00.000Z",
               scheduleLabel: "Bad task",
-              service: "webetu",
+              service: "job_scout",
               status: "active",
               taskId: "unknown" as any,
               timezone: "Africa/Algiers",
@@ -373,7 +310,6 @@ describe("signed-in dashboard UI", () => {
         data: { services: { jobs: "subscribed" }, whatsappLinked: false },
       },
       jobScout: { available: false, data: null },
-      webetu: { available: false, data: null },
     });
 
     expect(model.hasStatusError).toBe(true);
