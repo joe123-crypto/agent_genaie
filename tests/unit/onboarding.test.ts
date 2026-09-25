@@ -8,7 +8,6 @@ test("Job Scout onboarding requires Gmail then the Job Scout profile", () => {
     whatsappLinked: false,
     gmailConnected: false,
     jobScoutReady: false,
-    webetuConfigured: false,
   }), "service_selection");
 
   // Connecting Gmail is the first required step, regardless of WhatsApp
@@ -18,7 +17,6 @@ test("Job Scout onboarding requires Gmail then the Job Scout profile", () => {
     whatsappLinked: false,
     gmailConnected: false,
     jobScoutReady: false,
-    webetuConfigured: false,
   }), "connect_google");
 
   assert.equal(calculateOnboardingNextStep({
@@ -26,7 +24,6 @@ test("Job Scout onboarding requires Gmail then the Job Scout profile", () => {
     whatsappLinked: true,
     gmailConnected: false,
     jobScoutReady: false,
-    webetuConfigured: false,
   }), "connect_google");
 
   // Once Gmail is connected, the Job Scout profile is still required, and an
@@ -36,7 +33,6 @@ test("Job Scout onboarding requires Gmail then the Job Scout profile", () => {
     whatsappLinked: false,
     gmailConnected: true,
     jobScoutReady: false,
-    webetuConfigured: false,
   }), "job_scout");
 
   assert.equal(calculateOnboardingNextStep({
@@ -44,7 +40,6 @@ test("Job Scout onboarding requires Gmail then the Job Scout profile", () => {
     whatsappLinked: false,
     gmailConnected: true,
     jobScoutReady: true,
-    webetuConfigured: false,
   }), "dashboard");
 
   assert.equal(calculateOnboardingNextStep({
@@ -52,7 +47,6 @@ test("Job Scout onboarding requires Gmail then the Job Scout profile", () => {
     whatsappLinked: true,
     gmailConnected: true,
     jobScoutReady: true,
-    webetuConfigured: false,
   }), "dashboard");
 });
 
@@ -67,7 +61,6 @@ test("connect_google is an inert fallback once Gmail is connected at sign-in", (
     whatsappLinked: false,
     gmailConnected: true,
     jobScoutReady: false,
-    webetuConfigured: false,
   }), "job_scout");
 
   assert.equal(calculateOnboardingNextStep({
@@ -75,7 +68,6 @@ test("connect_google is an inert fallback once Gmail is connected at sign-in", (
     whatsappLinked: false,
     gmailConnected: false,
     jobScoutReady: false,
-    webetuConfigured: false,
   }), "connect_google");
 });
 
@@ -86,7 +78,6 @@ test("Chat-originated Job Scout onboarding still hands off to WhatsApp for CV se
     whatsappLinked: true,
     gmailConnected: true,
     jobScoutReady: false,
-    webetuConfigured: false,
   }), "whatsapp_chat");
 
   assert.equal(calculateOnboardingNextStep({
@@ -95,32 +86,5 @@ test("Chat-originated Job Scout onboarding still hands off to WhatsApp for CV se
     whatsappLinked: true,
     gmailConnected: true,
     jobScoutReady: true,
-    webetuConfigured: false,
-  }), "dashboard");
-});
-
-test("Webetu onboarding chooses WhatsApp before credentials vault", () => {
-  assert.equal(calculateOnboardingNextStep({
-    selectedService: "webetu",
-    whatsappLinked: false,
-    gmailConnected: false,
-    jobScoutReady: false,
-    webetuConfigured: false,
-  }), "whatsapp");
-
-  assert.equal(calculateOnboardingNextStep({
-    selectedService: "webetu",
-    whatsappLinked: true,
-    gmailConnected: false,
-    jobScoutReady: false,
-    webetuConfigured: false,
-  }), "vault");
-
-  assert.equal(calculateOnboardingNextStep({
-    selectedService: "webetu",
-    whatsappLinked: true,
-    gmailConnected: false,
-    jobScoutReady: false,
-    webetuConfigured: true,
   }), "dashboard");
 });

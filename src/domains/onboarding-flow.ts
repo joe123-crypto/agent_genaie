@@ -1,6 +1,6 @@
 import { httpError, validatePublicUserId } from "@/src/lib/utils";
 
-export type OnboardingService = "jobs" | "webetu";
+export type OnboardingService = "jobs";
 export type OnboardingChannel = "web" | "chat";
 export type OnboardingStep =
   | "service_selection"
@@ -8,13 +8,12 @@ export type OnboardingStep =
   | "connect_google"
   | "job_scout"
   | "whatsapp_chat"
-  | "vault"
   | "dashboard";
 
 export function normalizeOnboardingService(value: unknown): OnboardingService {
   const service = String(value ?? "").trim().toLowerCase();
-  if (service === "jobs" || service === "webetu") return service;
-  throw httpError(400, "service must be jobs or webetu.");
+  if (service === "jobs") return service;
+  throw httpError(400, "service must be jobs.");
 }
 
 export function normalizeOnboardingChannel(value: unknown): OnboardingChannel {
@@ -34,19 +33,13 @@ export function calculateOnboardingNextStep(input: {
   whatsappSkipped?: boolean;
   gmailConnected: boolean;
   jobScoutReady: boolean;
-  webetuConfigured: boolean;
 }): OnboardingStep {
   if (!input.selectedService) return "service_selection";
-  if (input.selectedService === "jobs") {
-    // WhatsApp linking is no longer part of Job Scout signup: it is optional and
-    // offered later from the dashboard. Connecting Gmail and setting up the Job
-    // Scout profile (CV, target role, location) remain required.
-    if (!input.gmailConnected) return "connect_google";
-    if (!input.jobScoutReady) return input.channel === "chat" ? "whatsapp_chat" : "job_scout";
-    return "dashboard";
-  }
-  if (!input.whatsappLinked) return "whatsapp";
-  if (!input.webetuConfigured) return "vault";
+  // WhatsApp linking is no longer part of Job Scout signup: it is optional and
+  // offered later from the dashboard. Connecting Gmail and setting up the Job
+  // Scout profile (CV, target role, location) remain required.
+  if (!input.gmailConnected) return "connect_google";
+  if (!input.jobScoutReady) return input.channel === "chat" ? "whatsapp_chat" : "job_scout";
   return "dashboard";
 }
 
@@ -56,7 +49,6 @@ export function scopedPathForOnboardingStep(publicUserIdInput: string, step: Onb
   if (step === "connect_google") return `/${publicUserId}/connect-gmail?onboarding=1`;
   if (step === "job_scout") return `/${publicUserId}/job-scout?onboarding=1`;
   if (step === "whatsapp_chat") return `/${publicUserId}/whatsapp?onboarding=1&handoff=1`;
-  if (step === "vault") return `/${publicUserId}/vault?onboarding=1`;
   if (step === "service_selection") return `/${publicUserId}/onboarding`;
   return `/${publicUserId}`;
 }

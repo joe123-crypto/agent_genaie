@@ -5,8 +5,6 @@ import {
   normalizeJobPreferences,
   normalizeStringList,
   normalizeCvFileRef,
-  normalizeWebetuCredentials,
-  normalizeRestaurantDate,
   normalizePhone,
   storedRestaurantFields,
   publicRestaurantFields,
@@ -78,24 +76,6 @@ test("normalizeCvFileRef rejects empty, oversized, and null bytes", () => {
   assert.throws(() => normalizeCvFileRef("bad\0key"));
 });
 
-test("normalizeWebetuCredentials validates presence, length, and injection", () => {
-  assert.deepEqual(normalizeWebetuCredentials({ username: "u", password: "p" }), {
-    username: "u",
-    password: "p",
-  });
-  assert.throws(() => normalizeWebetuCredentials({ username: "", password: "p" }));
-  assert.throws(() => normalizeWebetuCredentials({ username: "u", password: "" }));
-  assert.throws(() => normalizeWebetuCredentials({ username: "u\r\nx", password: "p" }));
-  assert.throws(() => normalizeWebetuCredentials({ username: "u", password: "p\0" }));
-});
-
-test("normalizeRestaurantDate accepts valid YYYY-MM-DD and rejects bad dates", () => {
-  assert.equal(normalizeRestaurantDate("2026-07-03"), "2026-07-03");
-  assert.throws(() => normalizeRestaurantDate("2026-13-40"));
-  assert.throws(() => normalizeRestaurantDate("2026-2-3"));
-  assert.throws(() => normalizeRestaurantDate("not-a-date"));
-});
-
 test("normalizePhone normalizes to +digits and enforces 9..16 length", () => {
   assert.equal(normalizePhone("+213 600 000 000"), "+213600000000");
   assert.throws(() => normalizePhone(""));
@@ -150,7 +130,6 @@ test("serviceStatusWith applies defaults and override precedence", () => {
   assert.deepEqual(base, {
     gmail: "not_connected",
     jobs: "not_subscribed",
-    webetu: "not_subscribed",
     news: "not_subscribed",
   });
   assert.equal(serviceStatusWith({ jobs: "subscribed" }).jobs, "subscribed");
@@ -176,7 +155,7 @@ test("userProfileFromRecord builds the profile/identities shape", () => {
 
 test("normalizeAccountLinkNextPath enforces the redirect allow-list", () => {
   assert.equal(normalizeAccountLinkNextPath("/"), "/");
-  assert.equal(normalizeAccountLinkNextPath("/vault"), "/vault");
+  assert.equal(normalizeAccountLinkNextPath("/vault"), "/");
   assert.equal(normalizeAccountLinkNextPath("/connect-gmail"), "/connect-gmail");
   assert.equal(normalizeAccountLinkNextPath("/onboarding"), "/onboarding");
   assert.equal(normalizeAccountLinkNextPath("/payment"), "/payment");

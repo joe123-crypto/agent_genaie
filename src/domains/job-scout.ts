@@ -738,7 +738,6 @@ async function buildJobScoutSubscriber(
           whatsappSkipped: Boolean((userData.onboarding as any)?.whatsappSkippedAt),
           gmailConnected,
           jobScoutReady: readiness.ready,
-          webetuConfigured: false,
         })
       : "channel_selection";
 

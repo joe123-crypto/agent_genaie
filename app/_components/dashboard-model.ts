@@ -2,8 +2,8 @@ import type { StatusKind } from "@/app/_components/status-ui";
 
 export type ConnectionState = "connected" | "partial" | "disconnected" | "unavailable";
 export type ServiceState = "ready" | "processing" | "setup_needed" | "revoked" | "unavailable";
-export type DashboardTaskId = "reserve_meals" | "search_apply_jobs" | "deliver_results";
-export type DashboardTaskService = "webetu" | "job_scout" | "delivery";
+export type DashboardTaskId = "search_apply_jobs" | "deliver_results";
+export type DashboardTaskService = "job_scout" | "delivery";
 export type DashboardTaskStatus = "active" | "running" | "paused" | "failed" | "disabled";
 
 export type DashboardSource<T> = {
@@ -17,7 +17,6 @@ type AccountStatusSnapshot = {
     calendar?: unknown;
     gmail?: unknown;
     jobs?: unknown;
-    webetu?: unknown;
   };
   whatsappLinked?: boolean;
 };
@@ -31,13 +30,6 @@ type JobScoutStatusSnapshot = {
   linked?: boolean;
   missingRequirements?: unknown;
   ready?: boolean;
-};
-
-type WebetuStatusSnapshot = {
-  configured?: boolean;
-  maskedPhone?: string | null;
-  status?: unknown;
-  whatsappLinked?: boolean;
 };
 
 export type DashboardTelemetryTask = {
@@ -73,7 +65,7 @@ export type DashboardService = {
   ready: boolean;
   state: ServiceState;
   status: string;
-  type: "job-scout" | "webetu";
+  type: "job-scout";
 };
 
 export type DashboardCronRow = {
@@ -114,7 +106,6 @@ export type DashboardModelInput = {
   jobScout: DashboardSource<JobScoutStatusSnapshot>;
   publicUserId: string;
   telemetry?: DashboardSource<DashboardTelemetrySnapshot>;
-  webetu: DashboardSource<WebetuStatusSnapshot>;
 };
 
 const missingLabels: Record<string, string> = {
@@ -135,12 +126,6 @@ const taskMeta: Record<DashboardTaskId, {
   task: string;
   type: string;
 }> = {
-  reserve_meals: {
-    icon: "utensils",
-    service: "Webetu Reservations",
-    task: "Reserve Meals",
-    type: "Reservation",
-  },
   search_apply_jobs: {
     icon: "briefcase",
     service: "Job Applications",
@@ -258,59 +243,6 @@ function jobScoutService(input: DashboardModelInput): DashboardService | null {
   };
 }
 
-// Webetu is hidden from the dashboard (pending extraction into its own project).
-// Exported so its status logic stays covered by tests until the extraction.
-export function webetuService(input: DashboardModelInput): DashboardService | null {
-  const statusValue = String(input.webetu.data?.status ?? "");
-  const registered = isRegisteredService(input.account.data?.services?.webetu)
-    || Boolean(input.webetu.data?.configured)
-    || statusValue === "revoked";
-  if (!registered) return null;
-
-  const base = {
-    actionHref: `/${input.publicUserId}/vault`,
-    actionLabel: "Manage Webetu Reservations",
-    name: "Webetu Reservations",
-    type: "webetu" as const,
-  };
-  if (!input.webetu.available || !input.webetu.data) {
-    return {
-      ...base,
-      details: ["Service setup status could not be loaded."],
-      kind: "error",
-      ready: false,
-      state: "unavailable",
-      status: "Status unavailable",
-    };
-  }
-
-  const status = input.webetu.data;
-  const whatsappLinked = status.whatsappLinked ?? input.account.data?.whatsappLinked ?? false;
-  if (status.status === "revoked") {
-    return {
-      ...base,
-      details: ["Credentials revoked", whatsappLinked ? "WhatsApp delivery linked" : "WhatsApp delivery not linked"],
-      kind: "revoked",
-      ready: false,
-      state: "revoked",
-      status: "Credentials revoked",
-    };
-  }
-
-  const ready = Boolean(status.configured && whatsappLinked);
-  return {
-    ...base,
-    details: [
-      status.configured ? "Credentials saved" : "Credentials not saved",
-      whatsappLinked ? "WhatsApp delivery linked" : "WhatsApp delivery not linked",
-    ],
-    kind: ready ? "complete" : "warning",
-    ready,
-    state: ready ? "ready" : "setup_needed",
-    status: ready ? "Ready" : "Setup needed",
-  };
-}
-
 function formatDateTimeLabel(value: string | null, timezone?: string | null) {
   if (!value) return "Not reported";
   const date = new Date(value);
@@ -343,9 +275,6 @@ function taskStatusKind(status: DashboardTaskStatus): DashboardCronRow["statusKi
 }
 
 function serviceIsReadyForTask(taskId: DashboardTaskId, services: DashboardService[]) {
-  if (taskId === "reserve_meals") {
-    return services.some((service) => service.type === "webetu" && service.ready);
-  }
   if (taskId === "search_apply_jobs") {
     return services.some((service) => service.type === "job-scout" && service.ready);
   }

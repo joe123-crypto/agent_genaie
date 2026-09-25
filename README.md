@@ -2,10 +2,6 @@
 
 Agent Genaie is the Genaie Scout web app: Job Scout is the product — an AI agent that searches and applies for jobs on a user's behalf and reports every application over WhatsApp. The Next.js app handles user onboarding, Firebase-backed login, Gmail OAuth connection, CV storage, and the internal service calls used by the agent workers.
 
-## Hidden Legacy Service: Webetu Reservations
-
-The product is Job Scout only. The Webetu meal-reservation service is hidden from every public-facing surface (landing page, onboarding, dashboard navigation and services) pending extraction into its own project. Its code remains functional: `/{publicUserId}/vault` still works by direct URL for existing users, and the `/webetu/*` and `/internal/webetu/*` routes and Webetu Firestore collections listed below stay live for the agent workers.
-
 ## Routes
 
 Public routes:
@@ -27,28 +23,24 @@ Public routes:
 Protected routes require the `agent_genaie_session` cookie or a Firebase bearer token:
 
 - `/{publicUserId}` signed-in dashboard launcher with service tabs.
-- `/{publicUserId}/vault` signed-in Webetu credential vault (legacy; reachable by direct URL only, not linked in navigation).
 - `/{publicUserId}/connect-gmail` authenticated Gmail connect/disconnect page.
 - `/{publicUserId}/job-scout` signed-in Job Scout setup page for CV, target role, target location, and acknowledgements.
 - `/{publicUserId}/onboarding` one-time signup onboarding controller; auto-selects Job Scout and forwards to the next required step. Job Scout signup requires connecting Gmail and then setting up the Job Scout profile (CV, target role, target location); WhatsApp linking is not part of onboarding and is offered later from the dashboard.
 - `/{publicUserId}/whatsapp` is the canonical WhatsApp linking page. Invite mode shows the originating masked number and confirmation; direct-web mode accepts a number and starts bot verification.
 - `/{publicUserId}/download-cv` is where a user whose manual payment was approved downloads their finished CV. Access is gated on an approved payment proof, not on a `plan`, because manual payers may have no plan. If the CV is not `ready` (they replaced it and it is reconverting) the page says so instead of offering a download.
 - `GET /{publicUserId}/download-cv/pdf` renders the canonical CV HTML to an A4 PDF with headless Chromium and returns it as an attachment. Owner-only: any other caller gets a 404 rather than a 403, so the route reveals nothing. Renders are cached in R2 under `<uid>/cv/base/cv-<html-digest>.pdf`, so re-downloads skip Chromium and a re-finalized CV renders to a new key instead of needing invalidation.
-- `/connect-gmail` and `/vault` redirect signed-in users to their scoped `/{publicUserId}` route.
+- `/connect-gmail` redirects signed-in users to their scoped `/{publicUserId}` route.
 - `POST /auth/google/start` starts Gmail-only OAuth for an already signed-in Firebase user (the Connect Gmail page).
 - `POST /auth/google/claim` persists the Gmail tokens parked by the combined sign-in flow, once the caller has a session.
 - `GET /auth/google/status` checks Gmail connection for the signed-in Firebase user.
 - `POST /auth/google/revoke` revokes and removes stored Gmail tokens for the signed-in Firebase user.
 - `GET /account/status` returns the signed-in user's WhatsApp link and service status.
 - `GET /account/onboarding/status` returns the signed-in user's onboarding selection, state, and next required step.
-- `POST /account/onboarding/select` starts onboarding for `jobs` or `webetu` (the web flow auto-selects `jobs`; `webetu` is accepted for legacy compatibility).
+- `POST /account/onboarding/select` starts onboarding for `jobs` (the web flow auto-selects `jobs`).
 - `POST /account/onboarding/skip` marks onboarding skipped.
 - `POST /account/onboarding/complete` marks onboarding complete once the selected service requirements are satisfied.
 - `POST /account/whatsapp/link-request` is the canonical linking handler: it confirms a WhatsApp-originated token or creates a direct-web phone verification request.
 - `POST /account/whatsapp/revoke` revokes the signed-in user's active WhatsApp link.
-- `GET /webetu/credentials/status` checks whether the signed-in user has saved Webetu credentials.
-- `POST /webetu/credentials` encrypts and saves the signed-in user's Webetu username/password.
-- `POST /webetu/credentials/revoke` revokes the signed-in user's stored Webetu credentials.
 - `POST /gmail/send` sends Gmail for the signed-in Firebase user only when `confirm` is `true`.
 - `GET /job-scout/profile/status` returns the signed-in user's Job Scout readiness.
 - `POST /job-scout/profile` uploads or reuses the signed-in user's CV and saves Job Scout preferences. A new PDF is staged for conversion, so scouting remains paused until canonical HTML is finalized.
@@ -70,10 +62,6 @@ Internal routes require `Authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY`:
 - `POST /internal/job-scout/applications` records an applied, skipped, physical-submission, or failed Job Scout outcome.
 - `POST /internal/job-scout/application-artifact` uploads an exact-sent private artifact after the application record exists. Multipart fields are `userId`, `applicationId`, `attempt` (1–3), `kind` (`cv`, `cover_letter_text`, or `cover_letter_pdf`), and `file`; fixed paths are `<uid>/applications/<applicationId>/<attempt>/cv.pdf`, `cover-letter.txt`, or `cover-letter.pdf`.
 - `POST /internal/dashboard/tasks` upserts one live dashboard task status snapshot for a user. Pass `userId`, or pass `phone` to resolve the active linked user.
-- `GET /internal/webetu/restaurants` lists supported Webetu restaurant names.
-- `GET /internal/webetu/preferences?phone=...` reads a linked user's Webetu restaurant preference.
-- `POST /internal/webetu/preferences/default` saves a confirmed default restaurant for a linked WhatsApp phone.
-- `POST /internal/webetu/preferences/override` saves a confirmed one-day restaurant override.
 - `GET /internal/central-data/status` checks the Firestore central database connection.
 - `POST /internal/central-data/backfill` syncs existing Firebase users and connected Gmail records into Firestore.
 
@@ -118,7 +106,7 @@ https://your-agent-genaie-domain.example/__/auth/handler
 Enable Firestore for the same Firebase project. Agent Genaie writes central records to these collections:
 
 - `users` — Firebase user profiles and service status
-- `credentialRefs` — encrypted Gmail OAuth tokens and Webetu credentials
+- `credentialRefs` — encrypted Gmail OAuth tokens
 - `phoneLinksByUser` — active WhatsApp-to-user links keyed by Firebase UID
 - `phoneLinksByPhone` — active WhatsApp-to-user links keyed by phone hash
 - `accountLinkInvites` — short-lived account link setup tokens
@@ -126,14 +114,9 @@ Enable Firestore for the same Firebase project. Agent Genaie writes central reco
 - `jobScoutDeliveryByPhone` — Job Scout delivery records keyed by phone hash
 - `paymentProofs` — manual-transfer payment records: payer details, the R2 keys of the uploaded screenshot and the CV built at upload time, and `status` (`pending` / `approved` / `denied`). Approval is what finalizes the user's canonical CV HTML and unlocks the CV download.
 - `jobApplications` — recorded Job Scout application outcomes. Private exact-sent files are referenced in `artifactRefs` for the latest attempt and `artifacts.<attempt>` for retained attempts; files remain in R2 and are not exposed by the dashboard.
-- `webetuDeliveryByPhone` — Webetu delivery records keyed by phone hash
 - `dashboardTaskStatus` — live agent schedule/run snapshots keyed by `<uid>_<taskId>` for the signed-in dashboard
-- `webetuPreferences` — per-user default restaurant and date overrides
-- `webetuOverrides` — per-user single-day restaurant override records
-- `webetuRestaurants` — restaurant catalog
-- `webetuCatalogMeta` — catalog bootstrap status
 
-Gmail OAuth tokens are stored in the local encrypted token store for the live send path and mirrored into Firestore as encrypted `credentialRefs` records. Webetu credentials saved through the dashboard are stored only as encrypted `credentialRefs` records. Firestore encrypted blobs use `CENTRAL_DATA_ENCRYPTION_SECRET`, which must be treated as a production secret and kept stable.
+Gmail OAuth tokens are stored in the local encrypted token store for the live send path and mirrored into Firestore as encrypted `credentialRefs` records. Firestore encrypted blobs use `CENTRAL_DATA_ENCRYPTION_SECRET`, which must be treated as a production secret and kept stable.
 
 ## Environment
 
@@ -228,22 +211,21 @@ curl -X POST http://127.0.0.1:3010/internal/dashboard/tasks \
   -H "authorization: Bearer $AGENT_GENAI_INTERNAL_API_KEY" \
   -d '{
     "userId": "firebase-uid",
-    "taskId": "reserve_meals",
-    "service": "webetu",
+    "taskId": "search_apply_jobs",
+    "service": "job_scout",
     "enabled": true,
     "status": "active",
     "scheduleLabel": "Daily - 10:00 AM",
-    "timezone": "Africa/Algiers",
+    "timezone": "Africa/Harare",
     "nextRunAt": "2026-07-17T09:00:00.000Z",
     "lastRunAt": "2026-07-16T06:45:00.000Z",
     "lastRunStatus": "success",
-    "lastRunSummary": "Meals reserved"
+    "lastRunSummary": "3 jobs applied"
   }'
 ```
 
 Accepted `taskId` and `service` pairs:
 
-- `reserve_meals` with `webetu`
 - `search_apply_jobs` with `job_scout`
 - `deliver_results` with `delivery`
 

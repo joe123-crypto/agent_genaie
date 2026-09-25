@@ -53,7 +53,6 @@ export async function syncUserToCentralData(uid: string) {
           gmail: "not_connected",
           calendar: "not_connected",
           jobs: "not_subscribed",
-          webetu: "not_subscribed",
           news: "not_subscribed",
         },
       });
@@ -155,7 +154,6 @@ export async function getSignedInAccountStatus(uid: string) {
       gmail: "not_connected",
       calendar: "not_connected",
       jobs: "not_subscribed",
-      webetu: "not_subscribed",
       news: "not_subscribed",
       ...(data.services ?? {}),
     },

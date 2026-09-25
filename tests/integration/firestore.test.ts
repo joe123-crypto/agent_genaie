@@ -292,7 +292,7 @@ test("account-link confirmation selects the requested onboarding branch without 
   await db.collection("users").doc(uid).set({
     profile: { email: "finished@example.com" },
     publicUserId: "usr_finished00000000",
-    onboarding: { selectedService: "webetu", status: "completed" },
+    onboarding: { selectedService: "jobs", status: "completed" },
     services: { jobs: "not_subscribed" },
   });
   const { token } = await createAccountLinkInvite({
@@ -480,8 +480,8 @@ test("dashboard telemetry upsert writes the live task status shape", opts, async
 
   const result = await upsertDashboardTaskStatus({
     userId: uid,
-    taskId: "reserve_meals",
-    service: "webetu",
+    taskId: "search_apply_jobs",
+    service: "job_scout",
     enabled: true,
     status: "active",
     scheduleLabel: "Daily - 10:00 AM",
@@ -489,7 +489,7 @@ test("dashboard telemetry upsert writes the live task status shape", opts, async
     nextRunAt: "2026-07-17T09:00:00.000Z",
     lastRunAt: "2026-07-16T06:45:00.000Z",
     lastRunStatus: "success",
-    lastRunSummary: "Meals reserved",
+    lastRunSummary: "Jobs applied",
   });
   assert.equal(result.ok, true);
 
@@ -499,12 +499,12 @@ test("dashboard telemetry upsert writes the live task status shape", opts, async
     enabled: true,
     lastRunAt: "2026-07-16T06:45:00.000Z",
     lastRunStatus: "success",
-    lastRunSummary: "Meals reserved",
+    lastRunSummary: "Jobs applied",
     nextRunAt: "2026-07-17T09:00:00.000Z",
     scheduleLabel: "Daily - 10:00 AM",
-    service: "webetu",
+    service: "job_scout",
     status: "active",
-    taskId: "reserve_meals",
+    taskId: "search_apply_jobs",
     timezone: "Africa/Algiers",
     updatedAt: telemetry.tasks[0].updatedAt,
   });
@@ -860,12 +860,6 @@ test("revokeSignedInWhatsAppLink marks active link and delivery records revoked"
       phoneHash: hash,
       status: "active",
     }),
-    db.collection("webetuDeliveryByPhone").doc(hash).set({
-      userId: uid,
-      phone,
-      phoneHash: hash,
-      status: "active",
-    }),
     db.collection("jobScoutDeliveryByPhone").doc(hash).set({
       userId: uid,
       phone,
@@ -878,6 +872,5 @@ test("revokeSignedInWhatsAppLink marks active link and delivery records revoked"
   assert.equal(result.revoked, true);
   assert.equal((await db.collection("phoneLinksByUser").doc(uid).get()).data()!.status, "revoked");
   assert.equal((await db.collection("phoneLinksByPhone").doc(hash).get()).data()!.status, "revoked");
-  assert.equal((await db.collection("webetuDeliveryByPhone").doc(hash).get()).data()!.status, "revoked");
   assert.equal((await db.collection("jobScoutDeliveryByPhone").doc(hash).get()).data()!.status, "revoked");
 });
