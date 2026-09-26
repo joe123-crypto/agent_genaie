@@ -76,15 +76,15 @@ jobs:
         run: npx --yes firebase-tools emulators:exec --only firestore --project demo-genaie "npm run test:integration:firestore"
 
   r2:
-    name: R2 / S3 integration (MinIO)
+    name: R2 / S3 integration (s3mock)
     runs-on: ubuntu-latest
     env:
-      # getR2Client() requires R2_ACCOUNT_ID even though MinIO ignores it (the
-      # explicit R2_ENDPOINT is what's actually used).
-      R2_ACCOUNT_ID: minio
-      R2_ENDPOINT: http://127.0.0.1:9000
-      R2_ACCESS_KEY_ID: minioadmin
-      R2_SECRET_ACCESS_KEY: minioadmin
+      # getR2Client() requires R2_ACCOUNT_ID even though the local S3 endpoint
+      # ignores it (the explicit R2_ENDPOINT is what's actually used).
+      R2_ACCOUNT_ID: test
+      R2_ENDPOINT: http://127.0.0.1:9090
+      R2_ACCESS_KEY_ID: test
+      R2_SECRET_ACCESS_KEY: test
       R2_BUCKET: cv-test
     steps:
       - uses: actions/checkout@v4
@@ -93,24 +93,31 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      # Run MinIO as a background container. Service containers can't override the
-      # entrypoint `command`, so `docker run` is used instead.
-      - name: Start MinIO
+      # adobe/s3mock: a freely pullable, Apache-licensed in-memory S3 mock on
+      # :9090. It replaces MinIO (community images now gated behind auth). The
+      # `initialBuckets` env creates the test bucket at startup, so no client is
+      # needed to make it. The S3 client uses forcePathStyle, so presigned GET
+      # URLs resolve against 127.0.0.1:9090.
+      - name: Start s3mock
         run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin \
-            -e MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio server /data
-      - name: Wait for MinIO and create bucket
+          docker run -d --name s3mock -p 9090:9090 \
+            -e initialBuckets=${R2_BUCKET} \
+            adobe/s3mock
+      - name: Wait for S3 and create bucket
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
         run: |
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:9000/minio/health/live; then break; fi
-            sleep 1
+            if curl -sf http://127.0.0.1:9090/ >/dev/null; then break; fi
+            sleep 2
           done
-          docker run --rm --network host --entrypoint sh minio/mc -c "
-            mc alias set local http://127.0.0.1:9000 minioadmin minioadmin &&
-            mc mb --ignore-existing local/${R2_BUCKET}"
+          # Create the bucket explicitly (the initialBuckets env did not bind in
+          # this image); tolerate "already exists" if it did.
+          aws --endpoint-url http://127.0.0.1:9090 s3 mb "s3://${R2_BUCKET}" || true
       - run: npm run test:integration:r2
-      - name: MinIO logs on failure
+      - name: s3mock logs on failure
         if: failure()
-        run: docker logs minio
+        continue-on-error: true
+        run: docker logs s3mock || true
