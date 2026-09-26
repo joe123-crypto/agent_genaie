@@ -100,18 +100,17 @@ jobs:
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
-            quay.io/minio/minio server /data
+            minio/minio server /data
       - name: Wait for MinIO and create bucket
         run: |
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:9000/minio/health/live; then break; fi
             sleep 1
           done
-          docker run --rm --network host --entrypoint sh quay.io/minio/mc -c "
+          docker run --rm --network host --entrypoint sh minio/mc -c "
             mc alias set local http://127.0.0.1:9000 minioadmin minioadmin &&
             mc mb --ignore-existing local/${R2_BUCKET}"
       - run: npm run test:integration:r2
       - name: MinIO logs on failure
         if: failure()
-        continue-on-error: true
-        run: docker logs minio || true
+        run: docker logs minio
