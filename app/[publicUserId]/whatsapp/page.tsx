@@ -201,7 +201,7 @@ export default async function WhatsAppLinkingPage({
 
   // Job Scout onboarding is Connect Gmail then the Job Scout profile (the chat
   // handoff stands in for that second step); WhatsApp linking is no longer a step.
-  const onboardingTotal = onboardingStatus?.selectedService === "webetu" ? 3 : 2;
+  const onboardingTotal = 2;
   const whatsappLinked = !!accountStatus?.whatsappLinked;
   const email = accountStatus?.profile?.email
     ?? (routeUser as { profile?: { email?: string } }).profile?.email

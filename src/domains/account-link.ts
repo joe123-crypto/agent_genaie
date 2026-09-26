@@ -59,7 +59,7 @@ export async function createAccountLinkInvite(body: any) {
   const token = docRef.id;
   const hashedToken = accountLinkTokenHash(token);
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
-  const onboardingService = body.onboardingService === "jobs" || body.onboardingService === "webetu"
+  const onboardingService = body.onboardingService === "jobs"
     ? body.onboardingService
     : null;
   const onboardingChannel = body.onboardingChannel === "web" || body.onboardingChannel === "chat"
@@ -240,7 +240,6 @@ export async function bindAccountLinkInviteToUser(
       verifiedAt: now,
       status: "active",
       services: {
-        webetu: userData.services?.webetu === "subscribed",
         jobs: userData.services?.jobs === "subscribed",
       },
     };
@@ -250,7 +249,7 @@ export async function bindAccountLinkInviteToUser(
       usedBy: safeUid,
       usedAt: now,
     });
-    const onboardingService = invite.onboardingService === "jobs" || invite.onboardingService === "webetu"
+    const onboardingService = invite.onboardingService === "jobs"
       ? invite.onboardingService
       : null;
     const onboardingChannel = invite.onboardingChannel === "web" || invite.onboardingChannel === "chat"
@@ -270,15 +269,7 @@ export async function bindAccountLinkInviteToUser(
         updatedAt: now,
       }, { merge: true });
     }
-    if (invite.purpose === "webetu") {
-      if (userData.services?.webetu !== "subscribed") {
-        t.set(centralRef, {
-          services: { webetu: "subscribed" },
-          updatedAt: now,
-        }, { merge: true });
-      }
-      queueWebetuPhoneDeliveryUpdate(t as any, db, phoneLink);
-    } else if (invite.purpose === "jobs") {
+    if (invite.purpose === "jobs") {
       if (userData.services?.jobs !== "subscribed") {
         t.set(centralRef, {
           services: { jobs: "subscribed" },
@@ -328,17 +319,6 @@ export function queuePhoneLinkCoreWrites(batch: any, db: any, userId: string, ph
   return record;
 }
 
-export function queueWebetuPhoneDeliveryUpdate(batch: any, db: any, phoneLink: any) {
-  const docRef = db.collection("webetuDeliveryByPhone").doc(phoneLink.phoneHash);
-  batch.set(docRef, {
-    userId: phoneLink.userId,
-    phoneHash: phoneLink.phoneHash,
-    phone: phoneLink.phone,
-    status: phoneLink.status,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
-}
-
 export function queueJobScoutPhoneDeliveryUpdate(batch: any, db: any, phoneLink: any) {
   const docRef = db.collection("jobScoutDeliveryByPhone").doc(phoneLink.phoneHash);
   batch.set(docRef, {
@@ -366,7 +346,6 @@ export async function writePhoneLinkForUser(db: any, user: any, phoneInput: stri
     verifiedAt: options.verifiedAt ?? now,
   };
   queuePhoneLinkCoreWrites(batch, db, safeUid, phoneLink, now);
-  if (options.updateWebetuDelivery) queueWebetuPhoneDeliveryUpdate(batch, db, phoneLink);
   if (options.updateJobScoutDelivery) queueJobScoutPhoneDeliveryUpdate(batch, db, phoneLink);
   await batch.commit();
   return phoneLink;
@@ -448,11 +427,9 @@ export async function revokeSignedInWhatsAppLink(uid: string) {
     const phone = data.phone ? normalizePhone(data.phone) : null;
     phoneHash = data.phoneHash || (phone ? whatsappPhoneHash(phone) : null);
     const byPhoneRef = phoneHash ? db.collection("phoneLinksByPhone").doc(phoneHash) : null;
-    const webetuRef = phoneHash ? db.collection("webetuDeliveryByPhone").doc(phoneHash) : null;
     const jobScoutRef = phoneHash ? db.collection("jobScoutDeliveryByPhone").doc(phoneHash) : null;
-    const [byPhoneDoc, webetuDoc, jobScoutDoc] = await Promise.all([
+    const [byPhoneDoc, jobScoutDoc] = await Promise.all([
       byPhoneRef ? t.get(byPhoneRef) : Promise.resolve(null),
-      webetuRef ? t.get(webetuRef) : Promise.resolve(null),
       jobScoutRef ? t.get(jobScoutRef) : Promise.resolve(null),
     ]);
     const update = {
@@ -469,7 +446,6 @@ export async function revokeSignedInWhatsAppLink(uid: string) {
     // phone look linked, blocking a clean re-link.
     const ownedByUser = (docData: any) => !docData?.userId || docData.userId === safeUid;
     if (byPhoneRef && byPhoneDoc?.exists && ownedByUser(byPhoneDoc.data())) t.set(byPhoneRef, update, { merge: true });
-    if (webetuRef && webetuDoc?.exists && ownedByUser(webetuDoc.data())) t.set(webetuRef, update, { merge: true });
     if (jobScoutRef && jobScoutDoc?.exists && ownedByUser(jobScoutDoc.data())) t.set(jobScoutRef, update, { merge: true });
   });
   if (phoneHash) {
@@ -542,13 +518,3 @@ export async function getAccountLinkStatusForPhone(phoneInput: string) {
   };
 }
 
-export async function getLinkedUserForWebetuPhone(phoneInput: string) {
-  const phone = normalizePhone(phoneInput);
-  const hash = whatsappPhoneHash(phone);
-  const db = getFirestoreDb();
-  const deliveryDoc = await db.collection("webetuDeliveryByPhone").doc(hash).get();
-  if (!deliveryDoc.exists || !isActivePhoneLink(deliveryDoc.data())) {
-    throw httpError(404, "No active Webetu subscription found for this phone number.");
-  }
-  return deliveryDoc.data()!.userId;
-}

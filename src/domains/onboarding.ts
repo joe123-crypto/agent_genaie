@@ -3,7 +3,6 @@ import { getFirestoreDb } from "@/src/firebase/admin";
 import { httpError, validateFirebaseUid } from "@/src/lib/utils";
 import { ensurePublicUserId, getSignedInAccountStatus } from "./users";
 import { getJobScoutStatusForUser } from "./job-scout";
-import { getWebetuCredentialStatus } from "./webetu";
 import {
   calculateOnboardingNextStep,
   normalizeOnboardingChannel,
@@ -33,10 +32,9 @@ function onboardingRequiresAttention(onboarding: any) {
 }
 
 async function loadOnboardingDependencies(uid: string, selectedService: OnboardingService | null) {
-  const [accountStatus, jobScoutStatus, webetuStatus] = await Promise.all([
+  const [accountStatus, jobScoutStatus] = await Promise.all([
     getSignedInAccountStatus(uid).catch(() => null),
     selectedService === "jobs" ? getJobScoutStatusForUser(uid).catch(() => null) : Promise.resolve(null),
-    selectedService === "webetu" ? getWebetuCredentialStatus(uid).catch(() => null) : Promise.resolve(null),
   ]);
 
   return {
@@ -44,10 +42,8 @@ async function loadOnboardingDependencies(uid: string, selectedService: Onboardi
     whatsappLinked: !!accountStatus?.whatsappLinked,
     gmailConnected: !!jobScoutStatus?.gmailConnected,
     jobScoutReady: !!jobScoutStatus?.ready,
-    webetuConfigured: !!webetuStatus?.configured,
     plan: accountStatus?.plan ?? null,
     jobScoutStatus,
-    webetuStatus,
   };
 }
 
@@ -60,7 +56,7 @@ export async function getOnboardingStatus(uidInput: string) {
   const user = userDoc.data() || {};
   const onboarding = user.onboarding || {};
   const rawService = onboarding.selectedService ?? null;
-  const selectedService = rawService === "jobs" || rawService === "webetu" ? rawService : null;
+  const selectedService = rawService === "jobs" ? rawService : null;
   const channel = storedOnboardingChannel(onboarding.channel);
   const whatsappSkipped = Boolean(onboarding.whatsappSkippedAt);
   const dependencies = await loadOnboardingDependencies(uid, selectedService);
@@ -71,7 +67,6 @@ export async function getOnboardingStatus(uidInput: string) {
     whatsappSkipped,
     gmailConnected: dependencies.gmailConnected,
     jobScoutReady: dependencies.jobScoutReady,
-    webetuConfigured: dependencies.webetuConfigured,
   });
   const status = String(onboarding.status ?? "not_required");
 
@@ -90,10 +85,8 @@ export async function getOnboardingStatus(uidInput: string) {
       whatsappLinked: dependencies.whatsappLinked,
       gmailConnected: dependencies.gmailConnected,
       jobScoutReady: dependencies.jobScoutReady,
-      webetuConfigured: dependencies.webetuConfigured,
     },
     jobScout: dependencies.jobScoutStatus,
-    webetu: dependencies.webetuStatus,
   };
 }
 
@@ -213,7 +206,6 @@ export async function startOrResumeOnboardingForPhone(
     whatsappSkipped: status.whatsappSkipped,
     gmailConnected: status.requirements.gmailConnected,
     jobScoutReady: status.requirements.jobScoutReady,
-    webetuConfigured: status.requirements.webetuConfigured,
   });
 
   return {

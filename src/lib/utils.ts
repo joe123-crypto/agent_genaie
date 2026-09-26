@@ -1,15 +1,6 @@
 import crypto from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
-export const WEBETU_FALLBACK_RESTAURANT = Object.freeze({
-  catalogId: "bab-ezzouar-03",
-  name: "الإقامة الجامعية 03 باب الزوار",
-  idDepot: 190,
-  residence: 5185801,
-  wilaya: null,
-  active: true,
-});
-
 export function httpError(status: number, message: string) {
   const err = new Error(message) as Error & { status?: number };
   err.status = status;
@@ -91,10 +82,6 @@ export function credentialRefId(userId: string, service: string, purpose: string
   return `${String(service).replace(/[^A-Za-z0-9_.-]/g, "_")}_${String(purpose).replace(/[^A-Za-z0-9_.-]/g, "_")}_${validateFirebaseUid(userId)}`;
 }
 
-export function webetuCredentialRefId(userId: string) {
-  return credentialRefId(userId, "webetu", "username_password");
-}
-
 export function jobApplicationId(userId: string, company: string, role: string) {
   const key = [validateFirebaseUid(userId), String(company ?? "").trim().toLowerCase(), String(role ?? "").trim().toLowerCase()].join("\n");
   return crypto.createHash("sha256").update(key).digest("hex");
@@ -147,39 +134,6 @@ export function normalizeCvFileRef(value: unknown) {
   return text;
 }
 
-export function normalizeWebetuCredentials(input: any = {}) {
-  const username = rejectHeaderInjection(input.username, "username");
-  const password = String(input.password ?? "");
-  if (!username) throw httpError(400, "username is required.");
-  if (username.length > 120) throw httpError(400, "username is too long.");
-  if (!password) throw httpError(400, "password is required.");
-  if (password.length > 256) throw httpError(400, "password is too long.");
-  if (password.includes("\0")) throw httpError(400, "password is invalid.");
-  return { username, password };
-}
-
-export function normalizeRestaurantLookup(value: unknown) {
-  return String(value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-}
-
-export function normalizeRestaurantDate(value: unknown) {
-  const text = String(value ?? "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw httpError(400, "date must be YYYY-MM-DD.");
-  const date = new Date(`${text}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text) {
-    throw httpError(400, "date must be a valid calendar date.");
-  }
-  return text;
-}
-
-export function webetuRestaurantOverrideId(userId: string, date: string) {
-  return `${validateFirebaseUid(userId)}_${normalizeRestaurantDate(date)}`;
-}
-
-export function builtInWebetuRestaurants() {
-  return [WEBETU_FALLBACK_RESTAURANT];
-}
-
 export function publicRestaurantFields(entry: any) {
   if (!entry) return null;
   const name = entry.name ?? entry.nameAR ?? entry.nameFR ?? "";
@@ -211,33 +165,6 @@ export function storedRestaurantFields(entry: any, source = "catalog") {
     selectedAt: FieldValue.serverTimestamp(),
     lastVerifiedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  };
-}
-
-export function liveWebetuRestaurantFromPayload(input: any) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw httpError(400, "restaurant must be a supported restaurant object.");
-  }
-  const idDepot = Number(input.idDepot ?? input.id_depot ?? input.id);
-  if (!Number.isInteger(idDepot) || idDepot <= 0) {
-    throw httpError(400, "restaurant idDepot is required.");
-  }
-  const nameAR = String(input.nameAR ?? input.nameAr ?? input.name_ar ?? "").trim();
-  const nameFR = String(input.nameFR ?? input.nameFr ?? input.name_fr ?? input.nameEN ?? "").trim();
-  const name = String(input.name ?? (nameAR || nameFR)).trim();
-  if (!name) throw httpError(400, "restaurant name is required.");
-  return {
-    catalogId: String(input.catalogId ?? input.catalog_id ?? `onou-depot-${idDepot}`),
-    name,
-    nameAR: nameAR || name,
-    nameFR: nameFR || name,
-    idDepot,
-    residence: input.residence == null || input.residence === "" ? null : Number(input.residence),
-    wilaya: input.wilaya == null || input.wilaya === "" ? null : String(input.wilaya),
-    breakfast: input.breakfast == null ? null : Boolean(input.breakfast),
-    lunch: input.lunch == null ? null : Boolean(input.lunch),
-    dinner: input.dinner == null ? null : Boolean(input.dinner),
-    source: String(input.source ?? "onou_getdepotres"),
   };
 }
 
@@ -282,7 +209,6 @@ export function serviceStatusWith(existing: any, overrides: any = {}) {
   return {
     gmail: overrides.gmail ?? existing?.gmail ?? "not_connected",
     jobs: overrides.jobs ?? existing?.jobs ?? "not_subscribed",
-    webetu: overrides.webetu ?? existing?.webetu ?? "not_subscribed",
     news: overrides.news ?? existing?.news ?? "not_subscribed",
   };
 }
@@ -325,8 +251,8 @@ export function normalizeAccountLinkPurpose(value: unknown) {
 export function normalizeAccountLinkNextPath(value: unknown) {
   const text = String(value ?? "/").trim();
   if (!text || !text.startsWith("/") || text.startsWith("//")) return "/";
-  if (text === "/" || text === "/connect-gmail" || text === "/vault" || text === "/whatsapp" || text === "/onboarding" || text === "/payment") return text;
-  const match = text.match(/^\/(connect-gmail|vault|whatsapp|onboarding|payment)\/?(\?.*)?$/);
+  if (text === "/" || text === "/connect-gmail" || text === "/whatsapp" || text === "/onboarding" || text === "/payment") return text;
+  const match = text.match(/^\/(connect-gmail|whatsapp|onboarding|payment)\/?(\?.*)?$/);
   if (match) return `/${match[1]}${match[2] ?? ""}`;
   return "/";
 }
@@ -336,7 +262,6 @@ export function scopedPathForAccountLink(nextPath: string, publicUserId: string)
   const normalized = normalizeAccountLinkNextPath(nextPath);
   if (normalized === "/") return `/${id}`;
   if (normalized === "/connect-gmail") return `/${id}/connect-gmail`;
-  if (normalized === "/vault") return `/${id}/vault`;
   if (normalized === "/whatsapp") return `/${id}/whatsapp`;
   if (normalized === "/onboarding") return `/${id}/onboarding`;
   // /payment is a top-level, non-user-scoped page, so it is returned unscoped.
@@ -350,7 +275,6 @@ export function isActivePhoneLink(data: any) {
 
 export function setupPurposeLabel(purpose: string) {
   const normalized = normalizeAccountLinkPurpose(purpose);
-  if (normalized === "webetu") return "Webetu meal reservations";
   if (normalized === "jobs") return "Job Scout";
   if (normalized === "news") return "Personalized news";
   if (normalized === "account") return "Account link";

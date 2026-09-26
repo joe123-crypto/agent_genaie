@@ -15,7 +15,6 @@ import { listDashboardTasksForUser } from "@/src/domains/dashboard";
 import { getJobScoutStatusForUser, listJobApplications } from "@/src/domains/job-scout";
 import { verifyFirebaseSessionCookie } from "@/src/security/session";
 import { syncUserToCentralData, resolvePublicUser, getSignedInAccountStatus, pricingGatePath } from "@/src/domains/users";
-import { getWebetuCredentialStatus } from "@/src/domains/webetu";
 
 export const runtime = "nodejs";
 
@@ -46,17 +45,15 @@ export default async function DashboardPage({ params }: { params: Promise<{ publ
     redirect("/login");
   }
 
-  const [accountResult, jobScoutResult, webetuResult, telemetryResult, applicationsResult] = await Promise.allSettled([
+  const [accountResult, jobScoutResult, telemetryResult, applicationsResult] = await Promise.allSettled([
     getSignedInAccountStatus(uid),
     getJobScoutStatusForUser(uid),
-    getWebetuCredentialStatus(uid),
     listDashboardTasksForUser(uid),
     listJobApplications(uid),
   ]);
   const accountStatus = accountResult.status === "fulfilled" ? accountResult.value : null;
   if (!accountStatus?.plan) redirect(pricingGatePath(`/${publicUserId}`));
   const jobScoutStatus = jobScoutResult.status === "fulfilled" ? jobScoutResult.value : null;
-  const webetuStatus = webetuResult.status === "fulfilled" ? webetuResult.value : null;
   const telemetry = telemetryResult.status === "fulfilled" ? telemetryResult.value : null;
   const applicationStats = summarizeApplications(applicationsResult.status === "fulfilled" ? applicationsResult.value : []);
   const dashboard = buildDashboardViewModel({
@@ -64,7 +61,6 @@ export default async function DashboardPage({ params }: { params: Promise<{ publ
     jobScout: { available: jobScoutResult.status === "fulfilled", data: jobScoutStatus },
     publicUserId,
     telemetry: { available: telemetryResult.status === "fulfilled", data: telemetry },
-    webetu: { available: webetuResult.status === "fulfilled", data: webetuStatus },
   });
 
   const userLabel =

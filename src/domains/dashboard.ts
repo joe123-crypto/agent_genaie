@@ -8,8 +8,8 @@ import {
   whatsappPhoneHash,
 } from "@/src/lib/utils";
 
-export type DashboardTaskId = "reserve_meals" | "search_apply_jobs" | "deliver_results";
-export type DashboardTaskService = "webetu" | "job_scout" | "delivery";
+export type DashboardTaskId = "search_apply_jobs" | "deliver_results";
+export type DashboardTaskService = "job_scout" | "delivery";
 export type DashboardTaskStatus = "active" | "running" | "paused" | "failed" | "disabled";
 export type DashboardLastRunStatus = "success" | "partial" | "failed" | "skipped" | "action_required";
 
@@ -27,8 +27,8 @@ export type DashboardTaskSnapshot = {
   updatedAt: string | null;
 };
 
-const taskIds = new Set(["reserve_meals", "search_apply_jobs", "deliver_results"]);
-const services = new Set(["webetu", "job_scout", "delivery"]);
+const taskIds = new Set(["search_apply_jobs", "deliver_results"]);
+const services = new Set(["job_scout", "delivery"]);
 const statuses = new Set(["active", "running", "paused", "failed", "disabled"]);
 const lastRunStatuses = new Set(["success", "partial", "failed", "skipped", "action_required"]);
 
@@ -67,8 +67,7 @@ function dateToIso(value: any) {
 
 function taskMatchesService(taskId: DashboardTaskId, service: DashboardTaskService) {
   return (
-    (taskId === "reserve_meals" && service === "webetu")
-    || (taskId === "search_apply_jobs" && service === "job_scout")
+    (taskId === "search_apply_jobs" && service === "job_scout")
     || (taskId === "deliver_results" && service === "delivery")
   );
 }
@@ -80,13 +79,12 @@ async function resolveDashboardUser(body: any) {
   const phone = normalizePhone(body.phone);
   const hash = whatsappPhoneHash(phone);
   const db = getFirestoreDb();
-  const [phoneDoc, webetuDeliveryDoc, jobScoutDeliveryDoc] = await Promise.all([
+  const [phoneDoc, jobScoutDeliveryDoc] = await Promise.all([
     db.collection("phoneLinksByPhone").doc(hash).get(),
-    db.collection("webetuDeliveryByPhone").doc(hash).get(),
     db.collection("jobScoutDeliveryByPhone").doc(hash).get(),
   ]);
 
-  for (const doc of [phoneDoc, webetuDeliveryDoc, jobScoutDeliveryDoc]) {
+  for (const doc of [phoneDoc, jobScoutDeliveryDoc]) {
     const data = doc.exists ? doc.data() || {} : {};
     if (isActivePhoneLink(data) && data.userId) return validateFirebaseUid(data.userId);
     if (data.status === "active" && data.userId) return validateFirebaseUid(data.userId);

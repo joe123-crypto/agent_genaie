@@ -41,7 +41,7 @@ test("POST /auth/google/signin returns a Google consent URL with the combined sc
 
 test("the signed state round-trips to a signin flow with a non-empty nonce and the requested next path", async () => {
   const { verifyState } = await import("@/src/security/crypto");
-  const res = await postSignin({ next: "/vault" });
+  const res = await postSignin({ next: "/connect-gmail" });
   const { url } = await res.json();
 
   const state = new URL(url).searchParams.get("state");
@@ -51,7 +51,7 @@ test("the signed state round-trips to a signin flow with a non-empty nonce and t
   assert.equal(payload.flow, "signin");
   assert.equal(typeof payload.nonce, "string");
   assert.ok(payload.nonce && payload.nonce.length > 0);
-  assert.equal(payload.next, "/vault");
+  assert.equal(payload.next, "/connect-gmail");
   assert.equal(typeof payload.ts, "number");
 });
 

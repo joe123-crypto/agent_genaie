@@ -17,7 +17,6 @@ export type DashboardSection =
   | "job-scout"
   | "create-cv"
   | "applications"
-  | "webetu"
   | "settings";
 
 type DashboardNavMenuProps = {
@@ -25,7 +24,6 @@ type DashboardNavMenuProps = {
   basePath: string;
 };
 
-// Webetu is hidden from navigation pending extraction into its own project.
 const navItems: ReadonlyArray<{
   key: DashboardSection;
   label: string;
