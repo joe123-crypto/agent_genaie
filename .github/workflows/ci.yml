@@ -76,15 +76,15 @@ jobs:
         run: npx --yes firebase-tools emulators:exec --only firestore --project demo-genaie "npm run test:integration:firestore"
 
   r2:
-    name: R2 / S3 integration (MinIO)
+    name: R2 / S3 integration (LocalStack)
     runs-on: ubuntu-latest
     env:
-      # getR2Client() requires R2_ACCOUNT_ID even though MinIO ignores it (the
-      # explicit R2_ENDPOINT is what's actually used).
-      R2_ACCOUNT_ID: minio
-      R2_ENDPOINT: http://127.0.0.1:9000
-      R2_ACCESS_KEY_ID: minioadmin
-      R2_SECRET_ACCESS_KEY: minioadmin
+      # getR2Client() requires R2_ACCOUNT_ID even though the local S3 endpoint
+      # ignores it (the explicit R2_ENDPOINT is what's actually used).
+      R2_ACCOUNT_ID: test
+      R2_ENDPOINT: http://127.0.0.1:4566
+      R2_ACCESS_KEY_ID: test
+      R2_SECRET_ACCESS_KEY: test
       R2_BUCKET: cv-test
     steps:
       - uses: actions/checkout@v4
@@ -93,24 +93,27 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      # Run MinIO as a background container. Service containers can't override the
-      # entrypoint `command`, so `docker run` is used instead.
-      - name: Start MinIO
+      # LocalStack provides a freely pullable S3-compatible endpoint on :4566.
+      # It replaces MinIO, whose community images are now gated behind auth on
+      # both Docker Hub and quay.io.
+      - name: Start LocalStack (S3)
         run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin \
-            -e MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio server /data
-      - name: Wait for MinIO and create bucket
+          docker run -d --name localstack -p 4566:4566 \
+            -e SERVICES=s3 \
+            localstack/localstack
+      - name: Wait for S3 and create bucket
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
         run: |
-          for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:9000/minio/health/live; then break; fi
-            sleep 1
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:4566/_localstack/health | grep -Eq '"s3": *"(available|running)"'; then break; fi
+            sleep 2
           done
-          docker run --rm --network host --entrypoint sh minio/mc -c "
-            mc alias set local http://127.0.0.1:9000 minioadmin minioadmin &&
-            mc mb --ignore-existing local/${R2_BUCKET}"
+          aws --endpoint-url http://127.0.0.1:4566 s3 mb "s3://${R2_BUCKET}"
       - run: npm run test:integration:r2
-      - name: MinIO logs on failure
+      - name: LocalStack logs on failure
         if: failure()
-        run: docker logs minio
+        continue-on-error: true
+        run: docker logs localstack || true
