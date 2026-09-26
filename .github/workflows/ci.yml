@@ -103,12 +103,19 @@ jobs:
           docker run -d --name s3mock -p 9090:9090 \
             -e initialBuckets=${R2_BUCKET} \
             adobe/s3mock
-      - name: Wait for S3
+      - name: Wait for S3 and create bucket
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
         run: |
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:9090/ >/dev/null; then break; fi
             sleep 2
           done
+          # Create the bucket explicitly (the initialBuckets env did not bind in
+          # this image); tolerate "already exists" if it did.
+          aws --endpoint-url http://127.0.0.1:9090 s3 mb "s3://${R2_BUCKET}" || true
       - run: npm run test:integration:r2
       - name: s3mock logs on failure
         if: failure()
