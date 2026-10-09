@@ -41,9 +41,6 @@ export type SessionResult = {
   onboardingRequired?: boolean;
   plan?: "free" | "pro" | "ultra" | null;
   planRequired?: boolean;
-  // Set when the user has an approved payment proof and a ready CV they have not
-  // yet downloaded. Routes them to the CV download page once (see destinationForSession).
-  cvDownloadReady?: boolean;
 };
 
 type ErrorPayload = {
@@ -72,10 +69,6 @@ function scopedDestination(safePath: string, publicUserId: string): string | nul
   if (singleSegment) {
     return `/${publicUserId}/${singleSegment[1]}${singleSegment[2] || ""}`;
   }
-  const createCvMatch = safePath.match(/^\/create-cv(\/interview)?\/?(\?.*)?$/);
-  if (createCvMatch) {
-    return `/${publicUserId}/create-cv${createCvMatch[1] || ""}${createCvMatch[2] || ""}`;
-  }
   return null;
 }
 
@@ -87,30 +80,8 @@ export function destinationForSession(session: SessionResult, nextPath: string) 
   if (publicUserId && whatsappInviteMatch) {
     return `/${publicUserId}/whatsapp${whatsappInviteMatch[1]}`;
   }
-  // The deferred Create-CV handoff sends a signed-out visitor to sign in with
-  // ?next=/payment so they land back on /payment to upload payment proof. This
-  // must win over the plan/onboarding gates below, or a planless or
-  // onboarding-required user would be diverted to /pricing or onboarding
-  // instead of finishing the payment they were already sent to make.
-  if (safePath === "/payment") {
-    return "/payment";
-  }
-  // A freshly approved user's next login lands on the CV download page. This must
-  // win over the plan/onboarding gates below, since manual-payment users may have
-  // no plan and would otherwise be parked at /pricing, unable to reach the CV they
-  // already paid for. It is deliberately limited to a bare "/" sign-in: a user who
-  // followed a real link asked to go somewhere, and a nudge must not eat that.
-  // isCvDownloadPending flips off once the page has been shown, so this fires once.
-  if (session.cvDownloadReady && publicUserId && safePath === "/") {
-    return `/${publicUserId}/download-cv`;
-  }
   if (session.planRequired && publicUserId) {
     const scoped = scopedDestination(safePath, publicUserId);
-    // The Create-CV flow collects the CV first and only routes to pricing after
-    // it is built, so a planless user heading there is sent straight in, not
-    // gated at login.
-    const isCreateCv = /^\/create-cv(\/interview)?\/?(\?.*)?$/.test(safePath);
-    if (isCreateCv && scoped) return scoped;
     const gatedNext = session.onboardingRequired || safePath === "/"
       ? `/${publicUserId}/onboarding`
       : scoped ?? safePath;
