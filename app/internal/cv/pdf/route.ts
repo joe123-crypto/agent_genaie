@@ -1,60 +1,62 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyInternalApiKey } from "@/src/security/session";
-import { httpError } from "@/src/lib/utils";
-import { renderCvHtmlToPdf } from "@/src/domains/cv-pdf";
+import { config } from "@/src/config";
+import { CV_APP_URL } from "@/src/lib/cv-app";
 
 export const runtime = "nodejs";
-// Serverless Chromium (@sparticuz/chromium) has a real cold-start cost — the
-// binary must decompress and launch before rendering — so give the function
-// generous headroom for the launch + render on a cold invocation.
+// The CV app may cold-start Chromium before rendering.
 export const maxDuration = 60;
 
-// The calling WhatsApp service (Railway: Poppler + Tesseract, no Chromium)
-// enforces this same cap before it ever sends the HTML here — keep the number
-// identical so a request it considers valid is never rejected on this end.
-const MAX_HTML_BYTES = 512 * 1024;
+const UPSTREAM_TIMEOUT_MS = 55_000;
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
 }
 
-function pdfResponse(pdf: Buffer) {
-  return new NextResponse(new Uint8Array(pdf), {
-    status: 200,
-    headers: {
-      "content-type": "application/pdf",
-      "cache-control": "no-store",
-    },
-  });
-}
-
+// DEPRECATED compatibility proxy. CV PDF rendering moved to the CV app
+// (genaie-cv: POST /internal/cv/pdf). Agent workers that still call this app
+// are forwarded there with the same internal API key, so they keep working
+// until they are repointed. A redirect would not do: fetch drops the
+// Authorization header when following a cross-origin redirect.
 export async function POST(req: NextRequest) {
   try {
     verifyInternalApiKey(req);
-
-    const bytes = Buffer.from(await req.arrayBuffer());
-    if (bytes.length > MAX_HTML_BYTES) {
-      throw httpError(413, `CV HTML is too large (max ${MAX_HTML_BYTES} bytes).`);
-    }
-    if (bytes.length === 0) {
-      throw httpError(400, "Request body must be non-empty HTML.");
-    }
-    const html = bytes.toString("utf8");
-
-    const pdf = await renderCvHtmlToPdf(html);
-    return pdfResponse(pdf);
   } catch (err: unknown) {
     const error = err as Error & { status?: number };
-    const status = error.status;
-    if (status === 502) {
-      // renderCvHtmlToPdf already logs the underlying Chromium/launch cause
-      // server-side; never let its message or a stack trace reach the caller.
-      // Same flattened shape as the existing download-cv PDF route.
-      return jsonError(502, "Could not generate the CV PDF.");
-    }
-    return NextResponse.json(
-      { ok: false, error: error.message ?? "Internal server error" },
-      { status: Number.isInteger(status) && status! >= 400 && status! <= 599 ? status! : 500 },
-    );
+    return jsonError(error.status ?? 403, error.message ?? "Forbidden");
   }
+
+  if (!process.env.NEXT_PUBLIC_CV_APP_URL?.trim() && process.env.NODE_ENV === "production") {
+    console.error("CV PDF proxy: NEXT_PUBLIC_CV_APP_URL is not set");
+    return jsonError(503, "CV PDF rendering has moved to the CV app, which is not configured.");
+  }
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${CV_APP_URL}/internal/cv/pdf`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${config.internalApiKey}`,
+        "content-type": req.headers.get("content-type") ?? "text/html",
+      },
+      body: Buffer.from(await req.arrayBuffer()),
+      cache: "no-store",
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const name = (err as Error)?.name;
+    console.error("CV PDF proxy: upstream request failed", { name });
+    return name === "TimeoutError" || name === "AbortError"
+      ? jsonError(504, "The CV app did not respond.")
+      : jsonError(502, "Could not reach the CV app.");
+  }
+
+  // Pass the CV app's response (PDF or JSON error) through unchanged.
+  return new NextResponse(new Uint8Array(await upstream.arrayBuffer()), {
+    status: upstream.status,
+    headers: {
+      "content-type": upstream.headers.get("content-type") ?? "application/octet-stream",
+      "cache-control": "no-store",
+    },
+  });
 }

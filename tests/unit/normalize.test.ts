@@ -158,7 +158,8 @@ test("normalizeAccountLinkNextPath enforces the redirect allow-list", () => {
   assert.equal(normalizeAccountLinkNextPath("/vault"), "/");
   assert.equal(normalizeAccountLinkNextPath("/connect-gmail"), "/connect-gmail");
   assert.equal(normalizeAccountLinkNextPath("/onboarding"), "/onboarding");
-  assert.equal(normalizeAccountLinkNextPath("/payment"), "/payment");
+  // /payment moved to the CV app (genaie-cv), so it is no longer a valid next path here.
+  assert.equal(normalizeAccountLinkNextPath("/payment"), "/");
   assert.equal(normalizeAccountLinkNextPath("//evil.com"), "/");
   assert.equal(normalizeAccountLinkNextPath("/somewhere-else"), "/");
 });

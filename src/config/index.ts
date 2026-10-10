@@ -72,7 +72,6 @@ export const config = {
   firebaseServiceAccountJsonBase64: process.env.FIREBASE_SERVICE_ACCOUNT_JSON_BASE64 ?? "",
   internalApiKey: process.env.AGENT_GENAI_INTERNAL_API_KEY ?? "",
   ownerFirebaseUid: process.env.OWNER_FIREBASE_UID ?? "",
-  paymentProofAdminEmail: process.env.PAYMENT_PROOF_ADMIN_EMAIL ?? "munemojoseph332@gmail.com",
   centralDataEncryptionSecret: process.env.CENTRAL_DATA_ENCRYPTION_SECRET ?? process.env.TOKEN_ENCRYPTION_SECRET ?? "",
   centralDataKeyVersion: process.env.CENTRAL_DATA_KEY_VERSION ?? "v1",
   accountLinkSetupSecret:
@@ -90,10 +89,6 @@ export const config = {
   r2Endpoint:
     process.env.R2_ENDPOINT?.trim().replace(/\/+$/, "") ||
     (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : ""),
-  // OpenRouter backs the AI-driven CV interview (see app/job-scout/cv/interview).
-  // When the key is absent the interview silently falls back to its scripted flow.
-  openRouterApiKey: process.env.OPENROUTER_API_KEY ?? "",
-  openRouterModel: process.env.OPENROUTER_MODEL ?? "deepseek/deepseek-v4-pro",
 };
 
 export function assertPublicBaseUrl() {

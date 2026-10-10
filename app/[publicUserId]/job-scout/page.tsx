@@ -26,6 +26,7 @@ import { FieldLabel } from "@/app/_components/field-label";
 import { OnboardingProgress } from "@/app/_components/onboarding-progress";
 import { StatusNotice, StatusPill } from "@/app/_components/status-ui";
 import { COUNTRIES } from "@/app/_data/countries";
+import { cvAppHref } from "@/src/lib/cv-app";
 
 export const runtime = "nodejs";
 
@@ -384,7 +385,7 @@ if (wizard) {
         </label>
         <div className="actions">
           <span className="file-note">No PDF? Build one by filling in your details instead.</span>
-          <a className="button secondary" href={`/${publicUserId}/create-cv`}>
+          <a className="button secondary" href={cvAppHref(`/${publicUserId}/create-cv`)}>
             <FilePlus2 aria-hidden="true" />
             Create CV
           </a>

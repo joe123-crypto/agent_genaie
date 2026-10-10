@@ -31,55 +31,6 @@ test("destinationForSession routes onboarding and user-scoped pages", () => {
     destinationForSession({ ...session, onboardingRequired: true }, "/vault"),
     "/usr_123/onboarding",
   );
-  assert.equal(
-    destinationForSession(session, "/create-cv/interview"),
-    "/usr_123/create-cv/interview",
-  );
-  assert.equal(destinationForSession(session, "/create-cv"), "/usr_123/create-cv");
-});
-
-test("an approved user with a pending CV download lands on the download page", () => {
-  // cvDownloadReady must win over the plan/onboarding gates: manual-payment users
-  // approved via proof may have no plan, so gating on a plan would trap them at
-  // /pricing and they could never reach their finished CV.
-  const session = {
-    ok: true as const,
-    publicUserId: "usr_dl1",
-    onboardingRequired: true,
-    plan: null,
-    planRequired: true,
-    cvDownloadReady: true,
-  };
-  assert.equal(destinationForSession(session, "/"), "/usr_dl1/download-cv");
-  // An in-progress payment handoff still wins, so a user mid-upload is not diverted.
-  assert.equal(destinationForSession(session, "/payment"), "/payment");
-  // Once downloaded (flag off), routing falls back to the normal gates.
-  assert.equal(
-    destinationForSession({ ...session, cvDownloadReady: false }, "/"),
-    "/pricing?next=%2Fusr_dl1%2Fonboarding",
-  );
-});
-
-test("the CV download nudge never eats an explicit next path", () => {
-  // The nudge is only for a bare sign-in. Someone who followed a real link asked
-  // to go somewhere specific, and silently swallowing that would strand them on
-  // the download page every time until they clicked through it.
-  const session = {
-    ok: true as const,
-    publicUserId: "usr_dl2",
-    onboardingRequired: false,
-    plan: "pro" as const,
-    planRequired: false,
-    cvDownloadReady: true,
-  };
-  assert.equal(destinationForSession(session, "/connect-gmail"), "/usr_dl2/connect-gmail");
-  assert.equal(destinationForSession(session, "/usr_dl2/job-scout"), "/usr_dl2/job-scout");
-  assert.equal(
-    destinationForSession(session, "/whatsapp?token=abc"),
-    "/usr_dl2/whatsapp?token=abc",
-  );
-  // ...but a bare sign-in still gets the nudge.
-  assert.equal(destinationForSession(session, "/"), "/usr_dl2/download-cv");
 });
 
 test("a WhatsApp-initiated sign-in returns to the user-scoped invite page", () => {
@@ -116,49 +67,6 @@ test("destinationForSession sends users without a plan to pricing first", () => 
     destinationForSession(session, "/whatsapp?token=abc"),
     "/usr_123/whatsapp?token=abc",
   );
-  // The Create-CV flow collects the CV first and routes to pricing only at the
-  // end, so a planless user heading there is let straight in — not gated here.
-  assert.equal(
-    destinationForSession({ ...session, onboardingRequired: false }, "/create-cv/interview"),
-    "/usr_123/create-cv/interview",
-  );
-  assert.equal(
-    destinationForSession({ ...session, onboardingRequired: false }, "/create-cv"),
-    "/usr_123/create-cv",
-  );
-});
-
-test("destinationForSession sends a signed-in user straight to /payment, bypassing plan and onboarding gates", () => {
-  // The deferred Create-CV handoff sends signed-out visitors to
-  // /login?next=/payment so they land on /payment already signed in to upload
-  // payment proof. This must not be diverted to /pricing or onboarding even
-  // for a brand-new, planless, onboarding-required account.
-  const planlessOnboardingSession = {
-    ok: true as const,
-    publicUserId: "usr_123",
-    onboardingRequired: true,
-    plan: null,
-    planRequired: true,
-  };
-  assert.equal(destinationForSession(planlessOnboardingSession, "/payment"), "/payment");
-
-  const onboardingOnlySession = {
-    ok: true as const,
-    publicUserId: "usr_123",
-    onboardingRequired: true,
-    plan: "free" as const,
-    planRequired: false,
-  };
-  assert.equal(destinationForSession(onboardingOnlySession, "/payment"), "/payment");
-
-  const readySession = {
-    ok: true as const,
-    publicUserId: "usr_123",
-    onboardingRequired: false,
-    plan: "free" as const,
-    planRequired: false,
-  };
-  assert.equal(destinationForSession(readySession, "/payment"), "/payment");
 });
 
 test("mobile detection supports userAgentData, common mobile agents, and iPad desktop mode", () => {

@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyFirebaseIdToken, verifyFirebaseRequest, sessionCookieHeader } from "@/src/security/session";
 import { assertNoDuplicateCentralEmail, syncUserToCentralData } from "@/src/domains/users";
-import { isCvDownloadPending } from "@/src/domains/payment-proof";
 import { getFirebaseAdminAuth } from "@/src/firebase/admin";
 import { SESSION_COOKIE_MAX_AGE_SECONDS } from "@/src/config";
 import { httpError } from "@/src/lib/utils";
@@ -47,10 +46,6 @@ export async function POST(req: NextRequest) {
     stage = "sync_central_user";
     const syncResult = await syncUserToCentralData(decoded.uid);
 
-    stage = "check_cv_download";
-    // Best-effort: a hiccup here must never block sign-in, so fall back to false.
-    const cvDownloadReady = await isCvDownloadPending(decoded.uid).catch(() => false);
-
     const response = NextResponse.json({
       ok: true,
       publicUserId: syncResult.publicUserId,
@@ -58,7 +53,6 @@ export async function POST(req: NextRequest) {
       onboardingRequired: syncResult.onboardingRequired,
       plan: syncResult.plan,
       planRequired: syncResult.planRequired,
-      cvDownloadReady,
     });
     response.headers.set("Set-Cookie", sessionCookieHeader(sessionCookie));
     return response;

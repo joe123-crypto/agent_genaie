@@ -14,6 +14,7 @@ vi.mock("next/image", () => ({
 }));
 
 import RootPage from "@/app/page";
+import { cvAppHref } from "@/src/lib/cv-app";
 
 describe("Genaie Scout landing page", () => {
   afterEach(cleanup);
@@ -38,7 +39,7 @@ describe("Genaie Scout landing page", () => {
     ).toBeVisible();
     expect(
       screen.getByRole("link", { name: /create your cv/i }),
-    ).toHaveAttribute("href", "/create-cv/interview");
+    ).toHaveAttribute("href", cvAppHref("/create-cv/interview"));
   });
 
   it("includes the expected navigation and animation-ready artwork", () => {

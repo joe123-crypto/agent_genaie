@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { pageMetadata } from "@/src/lib/site-metadata";
 import Image from "next/image";
 import { Pricing } from "@/app/_components/pricing";
+import { cvAppHref } from "@/src/lib/cv-app";
 
 export const metadata: Metadata = pageMetadata({
   title: "Genaie | Your AI job scout",
@@ -206,7 +207,7 @@ function CvPromo() {
       <p className="landing-cvpromo-subheading">
         Don&apos;t worry, you can create one in seconds.
       </p>
-      <a className="button landing-cta" href="/create-cv/interview">
+      <a className="button landing-cta" href={cvAppHref("/create-cv/interview")}>
         Create your CV
       </a>
       <div className="landing-cvpromo-marquee" aria-hidden="true">

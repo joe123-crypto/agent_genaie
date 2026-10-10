@@ -11,11 +11,11 @@ import {
   Settings,
   X,
 } from "lucide-react";
+import { cvAppHref } from "@/src/lib/cv-app";
 
 export type DashboardSection =
   | "overview"
   | "job-scout"
-  | "create-cv"
   | "applications"
   | "settings";
 
@@ -25,14 +25,16 @@ type DashboardNavMenuProps = {
 };
 
 const navItems: ReadonlyArray<{
-  key: DashboardSection;
+  key: DashboardSection | "create-cv";
   label: string;
   href: string;
   icon: LucideIcon;
+  // Lives in the separate CV app (genaie-cv) rather than under basePath here.
+  external?: boolean;
 }> = [
   { key: "overview", label: "Overview", href: "", icon: Home },
   { key: "job-scout", label: "Job Scout", href: "/job-scout", icon: BriefcaseBusiness },
-  { key: "create-cv", label: "Create CV", href: "/create-cv/interview", icon: FileUser },
+  { key: "create-cv", label: "Create CV", href: "/create-cv/interview", icon: FileUser, external: true },
   { key: "applications", label: "Applications", href: "/applications", icon: ClipboardList },
   { key: "settings", label: "Settings", href: "/settings", icon: Settings },
 ];
@@ -93,7 +95,7 @@ export function DashboardNavMenu({ active, basePath }: DashboardNavMenuProps) {
             <a
               key={item.key}
               className={isActive ? "dashboard-nav-link is-active" : "dashboard-nav-link"}
-              href={`${basePath}${item.href}`}
+              href={item.external ? cvAppHref(`${basePath}${item.href}`) : `${basePath}${item.href}`}
               aria-current={isActive ? "page" : undefined}
             >
               <Icon aria-hidden="true" />
