@@ -13,6 +13,8 @@ genaie-cv shares this app's Firebase project, Firestore and R2 bucket, and calls
 
 `NEXT_PUBLIC_CV_APP_URL` points this app at it. The dashboard's "Create CV" link, the landing-page CTA and the Job Scout "Create CV" button all go there. Old `/create-cv`, `/payment` and `/{publicUserId}/{create-cv,download-cv}` URLs redirect there too.
 
+`POST /internal/cv/pdf` still exists here as a deprecated proxy. It checks the internal API key, then forwards the request to the CV app's `/internal/cv/pdf` and returns that response, PDF or error, unchanged. Existing agent workers keep working through it until they are pointed at the CV app directly.
+
 ## Routes
 
 Public routes:
